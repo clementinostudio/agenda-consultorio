@@ -1,0 +1,122 @@
+# Agenda do Consultório
+
+App para profissionais da saúde mental (pensado para quem tem TDAH): agenda que se repete sozinha, cálculo de sublocação, cobrança automática por pacote, lembretes, modo Pessoal para os gastos da casa e muito mais. Feito com **Vite + React** e pronto para virar **PWA** (instala na tela inicial do celular e abre sem internet).
+
+---
+
+## 1. Rodar no seu computador
+
+Precisa ter o **Node.js 20 ou mais novo** instalado ([nodejs.org](https://nodejs.org)).
+
+```bash
+npm install      # instala as dependências (só na primeira vez)
+npm run dev      # abre o app em http://localhost:5173
+```
+
+O comando `npm run dev` também mostra um endereço de rede (algo como `http://192.168.0.10:5173`). Abrindo esse endereço no celular, **na mesma rede Wi-Fi**, você testa direto no aparelho.
+
+Para gerar a versão final:
+
+```bash
+npm run build    # cria a pasta dist/ com o app pronto
+npm run preview  # abre essa versão final para conferir (com o modo offline funcionando)
+```
+
+> O modo offline e a instalação só funcionam na versão final (`build` + `preview`) ou publicada. No `npm run dev` o service worker fica desligado de propósito, para não atrapalhar enquanto você edita.
+
+---
+
+## 2. Colocar no GitHub e publicar (GitHub Pages, de graça)
+
+1. Crie um repositório novo no GitHub (por exemplo `agenda-consultorio`).
+2. No terminal, dentro desta pasta:
+   ```bash
+   git init
+   git add .
+   git commit -m "Primeira versão"
+   git branch -M main
+   git remote add origin https://github.com/SEU-USUARIO/agenda-consultorio.git
+   git push -u origin main
+   ```
+3. No GitHub, abra o repositório → **Settings → Pages** → em **Build and deployment**, escolha **Source: GitHub Actions**.
+4. Pronto. A cada `git push` na branch `main`, o arquivo `.github/workflows/deploy.yml` gera e publica o app sozinho. O endereço fica assim:
+   `https://SEU-USUARIO.github.io/agenda-consultorio/`
+
+Acompanhe a publicação na aba **Actions** do repositório (leva uns 2 minutos).
+
+### Prefere Vercel ou Netlify?
+Importe o repositório no site deles. Configuração: comando de build `npm run build`, pasta de saída `dist`. Não precisa mudar mais nada.
+
+---
+
+## 3. Instalar no celular
+
+- **Android (Chrome):** abra o endereço do app → aparece "Instalar app" (ou menu ⋮ → **Instalar app**). Também há um botão **Instalar na tela inicial** em Ajustes, dentro do app.
+- **iPhone (Safari):** abra o endereço → botão **Compartilhar** → **Adicionar à Tela de Início**. No iPhone, as notificações do sistema só funcionam com o app instalado assim (iOS 16.4 ou mais novo).
+
+Segurando o ícone do app no Android aparecem atalhos: **Anotar gasto falando**, **Só o agora** e **Fechar o dia**. Os mesmos atalhos funcionam por link: `…/#gasto`, `…/#agora`, `…/#fechar`, `…/#livres` (dá para usar na Siri ou no Atalhos do iPhone).
+
+---
+
+## 4. Onde mexer
+
+```
+agenda-consultorio/
+├── index.html               ← título, cor da barra do celular
+├── vite.config.js           ← nome do app, ícones, atalhos e regras do modo offline (PWA)
+├── public/
+│   ├── icons/               ← ícones do app (troque pelos seus, mesmos nomes e tamanhos)
+│   └── fundos/              ← imagens de fundo (cada uma tem a versão "-mini" para a miniatura)
+└── src/
+    ├── main.jsx             ← liga o app, as fontes e o service worker
+    ├── styles.css           ← todas as cores, tamanhos e o visual (claro, escuro e vidro)
+    └── App.jsx              ← o app inteiro, separado em seções numeradas
+```
+
+Dentro do `src/App.jsx`, procure por `====` para pular entre as seções. As mais úteis:
+
+| Seção | O que tem |
+|---|---|
+| **1. CONFIGURAÇÃO** | duração padrão da sessão, frequências, cores dos pacientes, categorias de gastos, profissões |
+| **3. REGRAS DO CONSULTÓRIO** | cálculo da sublocação, cobrança por pacote, texto da mensagem de cobrança, frases do resumo |
+| **4. REGRAS DO MODO PESSOAL** | contas fixas, resumo do mês |
+| **4b. FERIADOS, CLIMA, VOZ E AVISOS** | feriados, Open-Meteo, frases que viram gasto ("gastei 32 na padaria"), som dos avisos |
+| **5. DADOS DE EXEMPLO** | o que aparece no botão "Só quero ver como funciona" |
+
+As cores ficam no topo do `src/styles.css`, em variáveis como `--accent` (azul principal), `--mint`, `--amber` e `--rose`. Mudando ali, muda o app todo, nos dois temas.
+
+Para adicionar um fundo novo: coloque `meu-fundo.jpg` e `meu-fundo-mini.jpg` em `public/fundos/` e acrescente `["meu-fundo", "Nome que aparece"]` na lista `FUNDOS` do `App.jsx`.
+
+---
+
+## 5. O que já funciona e o que é demonstração
+
+**Funciona de verdade:**
+- Tudo do app: agenda, cobranças, modo Pessoal, perguntas iniciais, fundos com vidro, temas claro e escuro.
+- Abrir sem internet depois de instalado.
+- Clima pela [Open-Meteo](https://open-meteo.com) e feriados pela [BrasilAPI](https://brasilapi.com.br), ambas gratuitas e sem chave. Sem internet, os feriados são calculados no próprio app.
+- Gasto por voz no Chrome/Android. No iPhone, use o microfone do teclado no mesmo campo.
+- Avisos dentro do app (banner, som e vibração) e notificação do sistema **enquanto o app estiver aberto ou em segundo plano recente**.
+- Planilha .csv do mês para o contador.
+
+**Ainda é demonstração:**
+- **Login e dados ficam só no aparelho** (no `localStorage` do navegador). Trocar de celular ou limpar os dados do navegador apaga tudo, e a senha não tem proteção de verdade.
+- **Avisos com o app totalmente fechado** precisam de um servidor que mande a notificação na hora certa (Web Push).
+
+### Próximo passo recomendado: Supabase (plano gratuito)
+1. **Login de verdade** com e-mail e senha (Supabase Auth).
+2. **Dados na nuvem**, sincronizados entre celular e computador, com cada conta vendo só os próprios dados (Row Level Security).
+3. **Avisos com o app fechado**: uma função agendada do Supabase manda o Web Push ("Sessão com Felipe em 15 min", "A luz vence amanhã").
+
+Nomes de pacientes, frequência de terapia e pagamentos são **dados pessoais sensíveis** pela LGPD. Antes de outras pessoas usarem o app, vale ter o login de verdade, os dados protegidos e uma política de privacidade simples.
+
+---
+
+## 6. Comandos úteis
+
+| Comando | Para quê |
+|---|---|
+| `npm install` | instala as dependências |
+| `npm run dev` | modo de desenvolvimento, recarrega a cada alteração |
+| `npm run build` | gera a versão final em `dist/` |
+| `npm run preview` | abre a versão final localmente |
