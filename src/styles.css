@@ -668,3 +668,36 @@ button:disabled{cursor:default}
 }
 @media (max-width:360px){.pend-actions{grid-template-columns:1fr 1fr}.pend-actions .ghost{grid-column:1/-1}.bal-amt{font-size:36px}.tl-row{grid-template-columns:38px 28px minmax(0,1fr)}.tl::before{left:62px}.cats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (prefers-reduced-motion:reduce){.sheet,.scrim,.toast,.menu,.push,.focus,.focus-body{animation:none}.mic.on::after{animation:none}.nv{transition:none}}
+
+/* Rolagem dentro do app: a página não "pula" e a barra de baixo fica sempre no mesmo lugar */
+html, body { height: 100%; }
+body.travado { overflow: hidden; overscroll-behavior: none; }
+.rolagem { position: fixed; inset: 0; z-index: 1; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding-top: env(safe-area-inset-top, 0px); }
+
+/* Recortar foto e fundo */
+.crop { position: fixed; inset: 0; z-index: 80; background: rgba(5, 6, 9, .94); color: #F2F4F8; display: flex; flex-direction: column; padding: calc(12px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); animation: fade .18s ease; }
+.crop-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; max-width: 520px; width: 100%; margin: 0 auto; }
+.crop-top b { font-family: var(--f-display); font-weight: 600; font-size: 17px; }
+.crop .icon-btn { background: rgba(255, 255, 255, .1); border-color: rgba(255, 255, 255, .14); color: #F2F4F8; }
+.crop-mid { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 0; }
+.crop-frame { position: relative; overflow: hidden; border-radius: 24px; background: #000; touch-action: none; cursor: grab; box-shadow: 0 0 0 2px rgba(255, 255, 255, .85), 0 20px 60px rgba(0, 0, 0, .6); user-select: none; -webkit-user-select: none; }
+.crop-frame:active { cursor: grabbing; }
+.crop-frame.circ { border-radius: 50%; }
+.crop-frame img { position: absolute; max-width: none; pointer-events: none; -webkit-user-drag: none; }
+.crop-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,.22) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.22) 1px, transparent 1px); background-size: 33.333% 33.333%; background-position: -1px -1px; }
+.crop-dica { margin: 0; font-size: 14px; font-weight: 600; color: rgba(242, 244, 248, .7); text-align: center; }
+.crop-bot { display: flex; flex-direction: column; gap: 14px; max-width: 520px; width: 100%; margin: 0 auto; }
+.crop-zoom { display: flex; align-items: center; gap: 12px; }
+.crop-zoom button { width: 40px; height: 40px; border-radius: 12px; background: rgba(255, 255, 255, .1); color: #F2F4F8; display: grid; place-items: center; flex: none; }
+.crop-zoom button svg { width: 18px; height: 18px; }
+.crop-zoom input { flex: 1; accent-color: #4A62FF; height: 28px; }
+.crop .btn.ghost { background: rgba(255, 255, 255, .1); color: #F2F4F8; }
+
+/* Vários fundos */
+.fundo { position: relative; }
+.fundo > button.fundo-img { padding: 0; cursor: pointer; }
+.fundo-img.add { border-style: dashed; }
+.fundo-del { position: absolute; top: -6px; right: -6px; min-width: 26px; height: 26px; border-radius: 13px; display: grid; place-items: center; background: var(--surface-3); color: var(--fg); border: 2px solid var(--surface); font-size: 11px; font-weight: 800; padding: 0 6px; z-index: 2; }
+.fundo-del svg { width: 13px; height: 13px; }
+.fundo-del.armado { background: var(--rose); color: #fff; }
+@media (max-width: 420px) { .fundos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

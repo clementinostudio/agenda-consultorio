@@ -4,6 +4,22 @@ App para profissionais da saúde mental (pensado para quem tem TDAH): agenda que
 
 ---
 
+## Jeito mais fácil: só pelo terminal (Linux)
+
+Não precisa de VS Code nem de outro editor. Abra o terminal dentro desta pasta e rode:
+
+```bash
+bash instalar.sh     # instala o Node (se faltar), as dependências e abre o app
+bash publicar.sh     # sobe para o seu GitHub e publica no GitHub Pages
+```
+
+- O `instalar.sh` deixa o app rodando em `http://localhost:5173`. Para parar, aperte `Ctrl + C`.
+- O `publicar.sh` pede para você entrar no GitHub uma vez (mostra um código para colar no navegador). Depois cria o repositório, liga o GitHub Pages e mostra o endereço final. Quando mudar alguma coisa no app, é só rodar `bash publicar.sh` de novo.
+
+Para editar sem abrir nada pesado no computador, abra o repositório no GitHub e aperte a tecla **.** (ponto). Isso abre um editor no próprio navegador (github.dev). Edite, salve com "Commit" e o app se publica sozinho. Pelo terminal, `nano src/App.jsx` também serve para mudanças rápidas.
+
+---
+
 ## 1. Rodar no seu computador
 
 Precisa ter o **Node.js 20 ou mais novo** instalado ([nodejs.org](https://nodejs.org)).
@@ -96,7 +112,9 @@ Para adicionar um fundo novo: coloque `meu-fundo.jpg` e `meu-fundo-mini.jpg` em 
 - Abrir sem internet depois de instalado.
 - Clima pela [Open-Meteo](https://open-meteo.com) e feriados pela [BrasilAPI](https://brasilapi.com.br), ambas gratuitas e sem chave. Sem internet, os feriados são calculados no próprio app.
 - Gasto por voz no Chrome/Android. No iPhone, use o microfone do teclado no mesmo campo.
-- Avisos dentro do app (banner, som e vibração) e notificação do sistema **enquanto o app estiver aberto ou em segundo plano recente**.
+- Notificações do celular ("Sessão com Felipe em 15 min", "A luz vence amanhã") **enquanto o app estiver aberto ou em segundo plano recente**. Teste em Ajustes → Avisos → Testar notificação.
+- Foto de perfil e até 10 fundos próprios, com recorte (arrastar e zoom). Os fundos ficam guardados no aparelho.
+- Vibração nos toques (só Android: o iPhone não deixa sites vibrarem).
 - Planilha .csv do mês para o contador.
 
 **Ainda é demonstração:**

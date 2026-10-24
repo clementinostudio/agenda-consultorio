@@ -6,6 +6,7 @@
   Os estilos ficam em src/styles.css e as imagens de fundo em public/fundos/.
 */
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
 const BASE = import.meta.env.BASE_URL;
@@ -102,7 +103,16 @@ let PERFIL = {};          // respostas do perfil, lidas por várias partes do ap
 // Fundos que já vêm no app (arquivos em public/fundos/). Para adicionar um, coloque a imagem lá e inclua uma linha aqui.
 const FUNDOS = [["floresta", "Floresta"], ["mar", "Mar à noite"], ["estrada", "Entardecer"]]
   .map(([id, nome]) => ({ id, nome, img: `${BASE}fundos/${id}.jpg`, thumb: `${BASE}fundos/${id}-mini.jpg` }));
-const imagemFundo = f => !f ? null : f.id === "meu" ? f.img : (FUNDOS.find(x => x.id === f.id) || {}).img;
+const imagemFundo = (f, meus = []) => !f ? null : f.id === "meu" ? f.img : f.id.startsWith("u:") ? (meus.find(m => "u:" + m.id === f.id) || {}).img : (FUNDOS.find(x => x.id === f.id) || {}).img;
+
+// Vibração do celular (Android; o iPhone não deixa sites vibrarem)
+let VIBRAR = true;
+const VIB = { toque: 8, ok: [14, 50, 14], aviso: [28, 40, 28], erro: [60, 40, 60] };
+const vibrar = (tipo = "toque") => { if (!VIBRAR) return; try { navigator.vibrate && navigator.vibrate(VIB[tipo] || 8); } catch (e) {} };
+
+// A área que rola fica dentro do app (assim a barra de baixo nunca sai do lugar)
+let ROLAGEM = null;
+const rolarTopo = () => { if (ROLAGEM) ROLAGEM.scrollTop = 0; else window.scrollTo(0, 0); };
 const brlReal = v => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brl = v => ESCONDER ? "R$ •••" : brlReal(v);
 const num = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
@@ -691,20 +701,6 @@ function WeatherChip({ cidade, act, sessao }) {
   );
 }
 
-// Banner de aviso igual ao do celular
-function PushBanner({ push, onClose }) {
-  useEffect(() => { const t = setTimeout(onClose, 7000); return () => clearTimeout(t); }, [push.id]);
-  return (
-    <div className="push" role="alert">
-      <button className="push-main" onClick={() => { push.acao && push.acao(); onClose(); }}>
-        <span className="push-ic"><I.logo /></span>
-        <span className="push-tx"><span className="push-top"><span>AGENDA</span><span>agora</span></span><b className="push-t">{push.titulo}</b><span className="push-b">{push.corpo}</span></span>
-      </button>
-      <button className="push-x" onClick={onClose} aria-label="Fechar aviso"><I.x /></button>
-    </div>
-  );
-}
-
 // Foto do perfil (ou iniciais) em círculo
 function Avatar({ conta, onClick, label = "Sua conta e ajustes" }) {
   const inner = conta.foto ? <img src={conta.foto} alt="" /> : iniciais(conta.nome);
@@ -727,13 +723,88 @@ function lerFoto(file) {
     r.onerror = rej; r.readAsDataURL(file);
   });
 }
+// Lê um arquivo de imagem do aparelho
+const lerArquivo = file => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+
+// Recortar imagem: arraste para mover, pinça (dois dedos), rodinha do mouse ou a barra para dar zoom.
+// forma "circulo" = foto de perfil; forma "tela" = fundo no formato da tela deste aparelho.
+function Cropper({ src, forma = "circulo", titulo, onDone, onCancel }) {
+  const imgRef = useRef(null), frameRef = useRef(null);
+  const ptrs = useRef(new Map()), pinca = useRef(null);
+  const [nat, setNat] = useState(null);
+  const [z, setZ] = useState(1);
+  const [o, setO] = useState({ x: 0, y: 0 });
+  const [erro, setErro] = useState("");
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let W, H;
+  if (forma === "circulo") { W = H = Math.min(300, vw - 64); }
+  else { const r = vh / vw; H = Math.min(vh * 0.56, 480); W = H / r; if (W > vw - 48) { W = vw - 48; H = W * r; } }
+  useEffect(() => { const im = new Image(); im.onload = () => { imgRef.current = im; setNat({ w: im.naturalWidth, h: im.naturalHeight }); }; im.onerror = () => setErro("Não consegui abrir essa imagem."); im.src = src; }, [src]);
+  const cover = nat ? Math.max(W / nat.w, H / nat.h) : 1;
+  const prender = (x, y, zz) => { if (!nat) return { x, y }; const s = cover * zz, mx = (nat.w * s - W) / 2, my = (nat.h * s - H) / 2; return { x: Math.max(-mx, Math.min(mx, x)), y: Math.max(-my, Math.min(my, y)) }; };
+  const mudarZoom = nz => { nz = Math.max(1, Math.min(5, nz)); setZ(nz); setO(c => prender(c.x, c.y, nz)); };
+  // rodinha do mouse (no computador)
+  useEffect(() => {
+    const el = frameRef.current; if (!el) return;
+    const f = e => { e.preventDefault(); setZ(zz => { const nz = Math.max(1, Math.min(5, zz * (e.deltaY < 0 ? 1.08 : 1 / 1.08))); setO(c => prender(c.x, c.y, nz)); return nz; }); };
+    el.addEventListener("wheel", f, { passive: false });
+    return () => el.removeEventListener("wheel", f);
+  });
+  const dist = () => { const [a, b] = [...ptrs.current.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  const down = e => { e.currentTarget.setPointerCapture(e.pointerId); ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (ptrs.current.size === 2) pinca.current = { d: dist(), z }; };
+  const move = e => {
+    const prev = ptrs.current.get(e.pointerId); if (!prev) return;
+    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.current.size === 1) setO(c => prender(c.x + e.clientX - prev.x, c.y + e.clientY - prev.y, z));
+    else if (ptrs.current.size === 2 && pinca.current) mudarZoom(pinca.current.z * dist() / pinca.current.d);
+  };
+  const up = e => { ptrs.current.delete(e.pointerId); if (ptrs.current.size < 2) pinca.current = null; };
+  const s = cover * z, dw = nat ? nat.w * s : 0, dh = nat ? nat.h * s : 0;
+  const left = (W - dw) / 2 + o.x, top = (H - dh) / 2 + o.y;
+  const usar = () => {
+    const im = imgRef.current; if (!im) return;
+    const outW = forma === "circulo" ? 400 : 1080, outH = Math.round(outW * H / W);
+    const c = document.createElement("canvas"); c.width = outW; c.height = outH;
+    c.getContext("2d").drawImage(im, -left / s, -top / s, W / s, H / s, 0, 0, outW, outH);
+    vibrar("ok");
+    onDone(c.toDataURL("image/jpeg", forma === "circulo" ? .86 : .82));
+  };
+  // Vai direto para o <body>: assim aparece por cima de tudo, mesmo aberto de dentro de um painel
+  return createPortal(
+    <div className="crop" role="dialog" aria-modal="true" aria-label={titulo || "Ajustar imagem"}>
+      <div className="crop-top"><button className="icon-btn" onClick={onCancel} aria-label="Cancelar"><I.x /></button><b>{titulo || "Ajustar imagem"}</b><span style={{ width: 42 }} /></div>
+      <div className="crop-mid">
+        <div ref={frameRef} className={"crop-frame" + (forma === "circulo" ? " circ" : "")} style={{ width: W, height: H }}
+          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+          {nat && <img src={src} alt="" draggable="false" style={{ width: dw, height: dh, left, top }} />}
+          <span className="crop-grid" aria-hidden="true" />
+        </div>
+        <p className="crop-dica">{erro || "Arraste para posicionar. Use dois dedos ou a barra para dar zoom."}</p>
+      </div>
+      <div className="crop-bot">
+        <div className="crop-zoom">
+          <button type="button" aria-label="Diminuir zoom" onClick={() => mudarZoom(z / 1.2)}><I.minus /></button>
+          <input type="range" min="1" max="5" step="0.01" value={z} onChange={e => mudarZoom(Number(e.target.value))} aria-label="Zoom" />
+          <button type="button" aria-label="Aumentar zoom" onClick={() => mudarZoom(z * 1.2)}><I.plus /></button>
+        </div>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onCancel}>Cancelar</button>
+          <button className="btn" onClick={usar} disabled={!nat}><I.check /> Usar</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function PhotoPicker({ nome, foto, onChange }) {
   const [erro, setErro] = useState("");
+  const [recortar, setRecortar] = useState(null);
   const escolher = async e => {
     const f = e.target.files && e.target.files[0]; e.target.value = "";
     if (!f) return;
     if (!f.type.startsWith("image/")) return setErro("Escolha um arquivo de imagem.");
-    try { onChange(await lerFoto(f)); setErro(""); } catch (x) { setErro("Não consegui abrir essa imagem. Tenta outra?"); }
+    try { setRecortar(await lerArquivo(f)); setErro(""); } catch (x) { setErro("Não consegui abrir essa imagem. Tenta outra?"); }
   };
   return (
     <div className="photo">
@@ -741,9 +812,11 @@ function PhotoPicker({ nome, foto, onChange }) {
       <div className="photo-btns">
         <label htmlFor="foto-in">{foto ? "Trocar foto" : "Adicionar foto"}</label>
         <input id="foto-in" className="sr" type="file" accept="image/*" onChange={escolher} />
+        {foto && <button type="button" onClick={() => setRecortar(foto)}>Ajustar enquadramento</button>}
         {foto && <button type="button" className="rm" onClick={() => onChange(null)}>Remover foto</button>}
         {erro && <span className="error" style={{ padding: 0 }}>{erro}</span>}
       </div>
+      {recortar && <Cropper src={recortar} forma="circulo" titulo="Foto de perfil" onCancel={() => setRecortar(null)} onDone={url => { onChange(url); setRecortar(null); }} />}
     </div>
   );
 }
@@ -797,7 +870,7 @@ const Toggle = ({ on, onClick, children }) => <button type="button" className="t
 function ConfirmButton({ label, confirmLabel, onConfirm, icon }) {
   const [armed, setArmed] = useState(false);
   useEffect(() => { if (!armed) return; const t = setTimeout(() => setArmed(false), 4000); return () => clearTimeout(t); }, [armed]);
-  return <button className="btn danger" onClick={() => armed ? onConfirm() : setArmed(true)}>{icon}{armed ? confirmLabel : label}</button>;
+  return <button className="btn danger" onClick={() => { if (armed) { vibrar("aviso"); onConfirm(); } else { vibrar("aviso"); setArmed(true); } }}>{icon}{armed ? confirmLabel : label}</button>;
 }
 
 function TopBar({ eyebrow, title, act, tema, extra }) {
@@ -2067,7 +2140,7 @@ function Onboarding({ conta, onDone, onSair }) {
   ];
   const n = passos.length, P = passos[i];
   const terminar = () => onDone({ nome: nome.trim(), foto, perfil: { nascimento: nasc, profissao, termo, duracao: dur, valorPadrao: num(valor), subPadrao: temSub === "sim" ? num(sub) : 0, subTipo, meta: num(meta) || 0, estilo, pessoal: pessoal === "sim", cidade: cidade.trim(), avisos: p0.avisos || AVISOS_PADRAO } });
-  const avancar = () => { const e = P.valida(); if (e) return setErro(e); setErro(""); if (i === n - 1) terminar(); else { setI(i + 1); window.scrollTo(0, 0); } };
+  const avancar = () => { const e = P.valida(); if (e) { vibrar("erro"); return setErro(e); } vibrar("toque"); setErro(""); if (i === n - 1) terminar(); else { setI(i + 1); window.scrollTo(0, 0); } };
   return (
     <main className="ob">
       <div className="ob-top">
@@ -2103,7 +2176,8 @@ function SettingsSheet({ db, conta, tema, onClose, act }) {
   const av0 = { ...AVISOS_PADRAO, ...(pf.avisos || {}) };
   const [avAtivo, setAvAtivo] = useState(av0.ativo);
   const [antec, setAntec] = useState(av0.antecedencia);
-  const [som, setSom] = useState(av0.som);
+  const [vib, setVib] = useState(pf.vibrar !== false);
+  const [permissao, setPermissao] = useState(() => "Notification" in window ? Notification.permission : "indisponivel");
   const [teste, setTeste] = useState(null);
   const [hIni, setHIni] = useState(pf.horaIni ?? 8);
   const [hFim, setHFim] = useState(pf.horaFim ?? 20);
@@ -2111,8 +2185,15 @@ function SettingsSheet({ db, conta, tema, onClose, act }) {
   const [falta, setFalta] = useState(pf.falta || { cobrar: false, horas: 24 });
   const [regLembrar, setRegLembrar] = useState(pf.registro !== false);
   const [reserva, setReserva] = useState(pf.reserva || 0);
-  const testar = atraso => { setTeste({ esperando: atraso > 0 }); act.testarAviso(atraso).then(r => setTeste(r)); };
-  const textoSistema = { ok: "Notificação do sistema também apareceu.", negado: "Notificação do sistema: não permitida. Dá para liberar nas configurações do navegador.", pendente: "Notificação do sistema: ainda não liberada.", indisponivel: "Notificação do sistema: este navegador não oferece.", bloqueado: "Notificação do sistema: bloqueada pelo navegador. Instale o app na tela inicial e tente de novo." };
+  const testar = atraso => { setTeste({ esperando: atraso > 0 }); act.testarAviso(atraso).then(r => { setTeste({ r }); if ("Notification" in window) setPermissao(Notification.permission); }); };
+  const textoTeste = {
+    ok: "Notificação enviada. Se não apareceu, confira se o app pode mostrar notificações nas configurações do celular.",
+    negado: "As notificações estão bloqueadas. Libere em: Configurações do celular → Apps → Chrome (ou Agenda) → Notificações.",
+    pendente: "Você ainda não permitiu as notificações. Toque em Testar e escolha Permitir.",
+    indisponivel: "Este navegador não tem notificações. No iPhone, instale o app na tela inicial (iOS 16.4 ou mais novo).",
+    bloqueado: "O navegador bloqueou a notificação. Instale o app na tela inicial e teste de novo.",
+  };
+  const textoPermissao = { granted: "Permitidas", denied: "Bloqueadas", default: "Ainda não pedidas", indisponivel: "Indisponíveis neste navegador" };
   const idade = idadeDe(pf.nascimento);
   return (
     <Sheet title="Sua conta" sub={[pf.profissao, idade ? `${idade} anos` : null, conta.email].filter(Boolean).join(" · ")} onClose={onClose}>
@@ -2124,7 +2205,7 @@ function SettingsSheet({ db, conta, tema, onClose, act }) {
         <Field label="Cidade (para avisar de chuva)" icon={<I.cloud />} htmlFor="s-cidade"><input id="s-cidade" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex.: Curitiba" /></Field>
       </div>
       <h3 className="section-title" style={{ marginTop: 4 }}>Fundo do app</h3>
-      <FundoPicker fundo={conta.fundo} onChange={act.setFundo} />
+      <FundoPicker fundo={conta.fundo} meus={act.meusFundos} onChange={act.setFundo} onAdd={act.addFundo} onUpdate={act.updFundo} onDelete={act.delFundo} />
       <h3 className="section-title" style={{ marginTop: 4 }}>Agenda</h3>
       <div className="fields">
         <Field label="Horário de atendimento">
@@ -2151,18 +2232,15 @@ function SettingsSheet({ db, conta, tema, onClose, act }) {
         <Field label="Avisos de sessão, contas e pendências"><Seg value={avAtivo} onChange={setAvAtivo} options={[{ v: true, l: "Ligados" }, { v: false, l: "Desligados" }]} /></Field>
         <Field label="Avisar antes da sessão (minutos)"><Seg value={antec} onChange={setAntec} options={[5, 10, 15, 30].map(m => ({ v: m, l: String(m) }))} /></Field>
       </div>
-      <Toggle on={som} onClick={() => setSom(!som)}>Tocar um som junto com o aviso</Toggle>
+      <div className="hint">Notificações: <b>{textoPermissao[permissao] || permissao}</b></div>
       <div className="btn-row">
-        <button className="btn ghost" onClick={() => testar(0)}><I.bell /> Testar aviso</button>
+        <button className="btn ghost" onClick={() => testar(0)}><I.bell /> Testar notificação</button>
         <button className="btn ghost" onClick={() => testar(10000)}>Em 10 segundos</button>
       </div>
       {teste && (teste.esperando
-        ? <div className="test-res"><div><I.clock /><span>Aguarde 10 segundos… pode até mudar de aba do app.</span></div></div>
-        : <div className="test-res">
-            <div className="ok"><I.check /><span>Aviso dentro do app: funcionando.</span></div>
-            <div className={teste.som ? "ok" : "no"}>{teste.som ? <I.check /> : <I.alert />}<span>{teste.som ? "Som: tocou." : "Som: bloqueado pelo navegador."}</span></div>
-            <div className={teste.sistema === "ok" ? "ok" : "no"}>{teste.sistema === "ok" ? <I.check /> : <I.alert />}<span>{textoSistema[teste.sistema] || textoSistema.bloqueado}</span></div>
-          </div>)}
+        ? <div className="test-res"><div><I.clock /><span>Aguarde 10 segundos. Pode minimizar o app para ver a notificação chegar.</span></div></div>
+        : <div className="test-res"><div className={teste.r === "ok" ? "ok" : "no"}>{teste.r === "ok" ? <I.check /> : <I.alert />}<span>{textoTeste[teste.r] || textoTeste.bloqueado}</span></div></div>)}
+      <Toggle on={vib} onClick={() => { setVib(!vib); VIBRAR = !vib; if (!vib) vibrar("ok"); }}>Vibrar nos toques (Android)</Toggle>
       <div className="fields">
         <Field label="Quem você atende"><Seg value={termo} onChange={setTermo} options={["Paciente", "Cliente", "Analisando"].map(v => ({ v, l: v }))} /></Field>
         <Field label="Duração da sessão (minutos)"><Seg value={dur} onChange={setDur} options={DURACOES.map(d => ({ v: d, l: String(d) }))} /></Field>
@@ -2171,7 +2249,7 @@ function SettingsSheet({ db, conta, tema, onClose, act }) {
       </div>
       <Toggle on={pessoal} onClick={() => setPessoal(!pessoal)}>Usar também o modo Pessoal</Toggle>
       {pessoal && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
-      <button className="btn" onClick={() => act.salvarAjustes({ nome: nome.trim() || conta.nome, foto, perfil: { ...pf, termo, duracao: dur, meta: num(meta) || 0, estilo, pessoal, cidade: cidade.trim(), avisos: { ativo: avAtivo, antecedencia: antec, som }, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar, reserva } }, pix.trim())}>Salvar</button>
+      <button className="btn" onClick={() => act.salvarAjustes({ nome: nome.trim() || conta.nome, foto, perfil: { ...pf, termo, duracao: dur, meta: num(meta) || 0, estilo, pessoal, cidade: cidade.trim(), avisos: { ativo: avAtivo, antecedencia: antec }, vibrar: vib, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar, reserva } }, pix.trim())}>Salvar</button>
       <InstalarApp />
       <div className="hint">Atalhos: links do app terminados em <b>#gasto</b>, <b>#agora</b>, <b>#fechar</b> ou <b>#livres</b> abrem direto o gasto por voz, o Só o agora, o Fechar o dia e os horários livres. Dá para colocar na Siri ou na tela inicial.</div>
       <button className="btn ghost" onClick={act.refazer}><I.repeat /> Refazer perguntas iniciais</button>
@@ -2501,41 +2579,80 @@ function InstalarApp() {
   return null;
 }
 
-// Escolher o fundo do app
-function FundoPicker({ fundo, onChange }) {
+// Fundos do usuário ficam no IndexedDB do aparelho (cabe muito mais que o localStorage)
+const LIMITE_FUNDOS = 10;
+const IDB = (() => {
+  let conexao = null;
+  const abrir = () => conexao || (conexao = new Promise((res, rej) => {
+    const r = indexedDB.open("agenda-imagens", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("fundos", { keyPath: "id" });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const tx = async (modo, fn) => {
+    const db = await abrir();
+    return new Promise((res, rej) => { const t = db.transaction("fundos", modo); const req = fn(t.objectStore("fundos")); t.oncomplete = () => res(req ? req.result : undefined); t.onerror = () => rej(t.error); });
+  };
+  return {
+    listar: async dono => ((await tx("readonly", st => st.getAll())) || []).filter(f => f.dono === dono).sort((a, b) => a.criado - b.criado),
+    salvar: item => tx("readwrite", st => st.put(item)),
+    apagar: id => tx("readwrite", st => st.delete(id)),
+  };
+})();
+
+// Escolher o fundo do app: 3 prontos + até 10 fotos suas, com recorte
+function FundoPicker({ fundo, meus, onChange, onAdd, onUpdate, onDelete }) {
   const [erro, setErro] = useState("");
+  const [recortar, setRecortar] = useState(null); // { src, alvo: "novo" | id do fundo }
+  const [apagando, setApagando] = useState(null);
   const atual = fundo && fundo.id;
-  const opts = [{ id: null, nome: "Sem fundo" }, ...FUNDOS];
+  const sel = id => atual === id || (!atual && !id);
   const carregar = async e => {
     const f = e.target.files && e.target.files[0]; e.target.value = "";
     if (!f) return;
     if (!f.type.startsWith("image/")) return setErro("Escolha um arquivo de imagem.");
-    try { onChange({ ...(fundo || {}), id: "meu", img: await lerFundo(f) }); setErro(""); } catch (x) { setErro("Não consegui abrir essa imagem."); }
+    try { setRecortar({ src: await lerArquivo(f), alvo: "novo" }); setErro(""); } catch (x) { setErro("Não consegui abrir essa imagem."); }
   };
+  const escolher = id => onChange(id ? { ...(fundo || {}), id } : null);
+  const atualSrc = atual ? (atual.startsWith("u:") ? (meus.find(m => "u:" + m.id === atual) || {}).img : (FUNDOS.find(f => f.id === atual) || {}).img) : null;
   return (
     <>
       <div className="fundos" role="radiogroup" aria-label="Fundo do app">
-        {opts.map(o => (
-          <button type="button" key={String(o.id)} role="radio" aria-checked={atual === o.id || (!atual && !o.id)} className={"fundo" + ((atual === o.id || (!atual && !o.id)) ? " on" : "")} onClick={() => onChange(o.id ? { ...(fundo || {}), id: o.id, img: null } : null)}>
-            <span className="fundo-img" style={o.id ? { backgroundImage: `url(${o.thumb})` } : undefined}>{!o.id && <I.x />}</span>{o.nome}
+        <button type="button" role="radio" aria-checked={sel(null)} className={"fundo" + (sel(null) ? " on" : "")} onClick={() => escolher(null)}><span className="fundo-img"><I.x /></span>Sem fundo</button>
+        {FUNDOS.map(o => (
+          <button type="button" key={o.id} role="radio" aria-checked={sel(o.id)} className={"fundo" + (sel(o.id) ? " on" : "")} onClick={() => escolher(o.id)}>
+            <span className="fundo-img" style={{ backgroundImage: `url(${o.thumb})` }} />{o.nome}
           </button>
         ))}
-        <label className={"fundo" + (atual === "meu" ? " on" : "")} htmlFor="fundo-in">
-          <span className="fundo-img" style={atual === "meu" && fundo.img ? { backgroundImage: `url(${fundo.img})` } : undefined}>{atual !== "meu" && <I.plus />}</span>Sua foto
-        </label>
+        {meus.map((m, i) => (
+          <div key={m.id} className={"fundo" + (sel("u:" + m.id) ? " on" : "")}>
+            <button type="button" role="radio" aria-checked={sel("u:" + m.id)} className="fundo-img" style={{ backgroundImage: `url(${m.img})` }} onClick={() => escolher("u:" + m.id)} aria-label={`Sua foto ${i + 1}`} />
+            <button type="button" className={"fundo-del" + (apagando === m.id ? " armado" : "")} aria-label={apagando === m.id ? "Toque de novo para excluir" : "Excluir este fundo"}
+              onClick={() => { if (apagando === m.id) { onDelete(m.id); setApagando(null); } else { vibrar("aviso"); setApagando(m.id); setTimeout(() => setApagando(a => a === m.id ? null : a), 3500); } }}>
+              {apagando === m.id ? "Excluir?" : <I.x />}
+            </button>
+            Sua foto {i + 1}
+          </div>
+        ))}
+        {meus.length < LIMITE_FUNDOS && (
+          <label className="fundo" htmlFor="fundo-in"><span className="fundo-img add"><I.plus /></span>Adicionar</label>
+        )}
         <input id="fundo-in" className="sr" type="file" accept="image/*" onChange={carregar} />
       </div>
+      <div className="hint">{meus.length}/{LIMITE_FUNDOS} fotos suas{meus.length >= LIMITE_FUNDOS ? ": exclua uma para adicionar outra" : ""}.</div>
       {erro && <div className="error">{erro}</div>}
+      {fundo && atualSrc && <button className="btn ghost" onClick={() => setRecortar({ src: atualSrc, alvo: atual.startsWith("u:") ? atual.slice(2) : "novo" })}><I.pencil /> Ajustar enquadramento deste fundo</button>}
       {fundo && <Field label="Escurecer o fundo (deixa o texto mais fácil de ler)"><Seg value={fundo.veu || "medio"} onChange={v => onChange({ ...fundo, veu: v })} options={[{ v: "leve", l: "Leve" }, { v: "medio", l: "Médio" }, { v: "forte", l: "Forte" }]} /></Field>}
+      {recortar && <Cropper src={recortar.src} forma="tela" titulo="Ajustar fundo"
+        onCancel={() => setRecortar(null)}
+        onDone={async url => {
+          const alvo = recortar.alvo; setRecortar(null);
+          try {
+            if (alvo === "novo") { if (meus.length >= LIMITE_FUNDOS) return setErro("Você chegou ao limite de 10 fotos. Exclua uma para adicionar outra."); await onAdd(url); }
+            else await onUpdate(alvo, url);
+          } catch (x) { setErro("Não consegui guardar essa imagem neste aparelho."); }
+        }} />}
     </>
   );
-}
-function lerFundo(file) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => { const img = new Image(); img.onload = () => { const s = Math.min(1, 1400 / Math.max(img.width, img.height)); const c = document.createElement("canvas"); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL("image/jpeg", .75)); }; img.onerror = rej; img.src = r.result; };
-    r.onerror = rej; r.readAsDataURL(file);
-  });
 }
 
 /* =========================================================
@@ -2593,7 +2710,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const [now, setNow] = useState(new Date());
   const [clima, setClima] = useState(null);
   const [, setFerVer] = useState(0);
-  const [push, setPush] = useState(null);
+  const [meusFundos, setMeusFundos] = useState([]);
   CLIMA = clima;
   const tRef = useRef(null);
   useEffect(() => {
@@ -2617,12 +2734,30 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     else if (h === "livres") setSheet({ type: "livres" });
   }, []);
 
-  const avisar = (titulo, corpo, acao, opts = {}) => {
-    setPush({ titulo, corpo, acao, id: uid() });
-    let som = false; if (av.som || opts.forcarSom) som = tocarSom();
-    try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch (e) {}
-    return notificarSistema(titulo, corpo, opts.pedir).then(sistema => ({ som, sistema }));
-  };
+  // Avisos saem só como notificação do celular (o som e a vibração são os do próprio aparelho)
+  const avisar = (titulo, corpo) => notificarSistema(titulo, corpo, false);
+  VIBRAR = perfil.vibrar !== false;
+  // Trava a rolagem da página: quem rola é a área do app
+  useEffect(() => { document.body.classList.add("travado"); return () => document.body.classList.remove("travado"); }, []);
+  // Vibração leve em qualquer botão
+  useEffect(() => {
+    const f = e => { if (e.target.closest && e.target.closest("button, a.btn, label.fundo, label[for]")) vibrar("toque"); };
+    document.addEventListener("click", f, true);
+    return () => document.removeEventListener("click", f, true);
+  }, []);
+  // Fotos de fundo do usuário (guardadas no aparelho)
+  useEffect(() => {
+    let vivo = true;
+    IDB.listar(conta.email).then(async lista => {
+      // fundo antigo guardado dentro da conta: passa para o IndexedDB
+      if (conta.fundo && conta.fundo.id === "meu" && conta.fundo.img) {
+        const item = { id: uid(), dono: conta.email, img: conta.fundo.img, criado: Date.now() };
+        await IDB.salvar(item); lista = [...lista, item]; onAtualizar({ fundo: { veu: conta.fundo.veu, id: "u:" + item.id } });
+      }
+      if (vivo) setMeusFundos(lista);
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
   // Confere a cada 30 s se tem algo para avisar (sessão chegando, conta vencendo, sessão sem marcar)
   useEffect(() => {
     if (!av.ativo) return;
@@ -2659,6 +2794,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const registrarE = (pid, opts, manter) => {
     const r = registrar(db, pid, opts);
     setDb(r.db);
+    vibrar(opts.status === "done" ? "ok" : "aviso");
     if (!manter && r.nova && !r.nova.paid && r.nova.sessionIds.length > 1) { setSheet({ type: "charge", cid: r.nova.id, fresh: true }); return; }
     if (!manter) close();
     const extra = opts.status === "done" && r.nova && !r.nova.paid ? " · cobrança aberta" : "";
@@ -2667,13 +2803,16 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
 
   const act = {
     toast: m => notify(m),
-    setTab: t => { setTab(t); window.scrollTo(0, 0); },
-    setModo: m => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(m === "pessoal" ? "p-home" : "home"); window.scrollTo(0, 0); },
+    setTab: t => { setTab(t); rolarTopo(); },
+    setModo: m => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(m === "pessoal" ? "p-home" : "home"); rolarTopo(); },
     toggleOculto: () => setOculto(o => !o),
-    testarAviso: (atraso = 0) => new Promise(res => setTimeout(() => {
+    testarAviso: async (atraso = 0) => {
+      // pede a permissão na hora do toque (o navegador só deixa pedir assim)
+      try { if ("Notification" in window && Notification.permission === "default") await Notification.requestPermission(); } catch (e) {}
+      await new Promise(r => setTimeout(r, atraso));
       const prox = itensDoDia(db, todayISO()).find(i => i.kind === "next" && mins(i.time) > agoraMin(new Date()));
-      avisar(prox ? `Sessão com ${primeiro(prox.patient.name)} em ${av.antecedencia} min` : "Teste de aviso", prox ? `${prox.time} · este é um aviso de teste` : "Se você está vendo isto, os avisos estão funcionando.", null, { pedir: atraso === 0, forcarSom: true }).then(res);
-    }, atraso)),
+      return notificarSistema(prox ? `Sessão com ${primeiro(prox.patient.name)} em ${av.antecedencia} min` : "Teste de aviso", prox ? `${prox.time} · este é um aviso de teste` : "Se você está vendo isto, os avisos estão funcionando.", false);
+    },
     falarGasto: () => setSheet({ type: "lanc", tipo: "saida", voz: true }),
     openItem: item => setSheet({ type: "session", item }),
     registrar: registrarE,
@@ -2685,7 +2824,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     confirmar: iso => setSheet({ type: "confirmar", iso }),
     livres: () => setSheet({ type: "livres" }),
     registros: () => setSheet({ type: "registros" }),
-    verEspera: () => { setPacVista("espera"); setTab("pac"); window.scrollTo(0, 0); },
+    verEspera: () => { setPacVista("espera"); setTab("pac"); rolarTopo(); },
     novaEspera: () => setSheet({ type: "espera" }),
     editEspera: id => setSheet({ type: "espera", id }),
     salvarEspera: e => { setDb(d => ({ ...d, espera: d.espera.some(x => x.id === e.id) ? d.espera.map(x => x.id === e.id ? e : x) : [...d.espera, e] })); close(); notify(`${primeiro(e.nome)} está na lista de espera`); },
@@ -2697,9 +2836,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     adiarReajuste: pid => { setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, reajusteAdiado: addDays(todayISO(), 180) } : p) })); notify("Combinado: lembro de novo em 6 meses"); },
     exportar: chave => exportarMes(db, chave, act),
     setFundo: f => onAtualizar({ fundo: f }),
+    addFundo: async img => { const item = { id: uid(), dono: conta.email, img, criado: Date.now() }; await IDB.salvar(item); setMeusFundos(l => [...l, item]); onAtualizar({ fundo: { veu: (conta.fundo && conta.fundo.veu) || "medio", id: "u:" + item.id } }); notify("Fundo adicionado"); },
+    updFundo: async (id, img) => { const velho = meusFundos.find(m => m.id === id); const item = { ...velho, img }; await IDB.salvar(item); setMeusFundos(l => l.map(m => m.id === id ? item : m)); notify("Fundo ajustado"); },
+    delFundo: async id => { await IDB.apagar(id).catch(() => {}); setMeusFundos(l => l.filter(m => m.id !== id)); if (conta.fundo && conta.fundo.id === "u:" + id) onAtualizar({ fundo: null }); notify("Fundo excluído"); },
+    meusFundos,
     remarcar: (pid, data, hora) => { setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, nextDate: data, time: hora } : p) })); close(); notify(`Remarcado para ${dm(data)} às ${hora}`); },
     desfazer: sid => { setDb(d => desfazer(d, sid)); close(); notify("Registro desfeito"); },
-    setPago: (cid, pago) => setDb(d => ({ ...d, charges: d.charges.map(c => c.id === cid ? { ...c, paid: pago, paidAt: pago ? todayISO() : null } : c) })),
+    setPago: (cid, pago) => (pago && vibrar("ok"), setDb(d => ({ ...d, charges: d.charges.map(c => c.id === cid ? { ...c, paid: pago, paidAt: pago ? todayISO() : null } : c) }))),
     openCharge: cid => setSheet({ type: "charge", cid }),
     openPatient: pid => setSheet({ type: "patient", pid }),
     editPatient: pid => setSheet({ type: "form", pid }),
@@ -2707,7 +2850,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     openSettings: () => setSheet({ type: "settings" }),
     salvarPaciente: p => {
       setDb(d => ({ ...d, patients: d.patients.some(x => x.id === p.id) ? d.patients.map(x => x.id === p.id ? p : x) : [...d.patients, p] }));
-      close(); notify(`${primeiro(p.name)} salvo · próxima ${dm(p.nextDate)} às ${p.time}`);
+      vibrar("ok"); close(); notify(`${primeiro(p.name)} salvo · próxima ${dm(p.nextDate)} às ${p.time}`);
     },
     excluir: pid => { setDb(d => ({ ...d, patients: d.patients.filter(p => p.id !== pid) })); close(); notify("Paciente excluído"); },
     // Pessoal
@@ -2716,7 +2859,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     salvarLanc: l => {
       const novoL = !db.pessoal.lanc.some(x => x.id === l.id);
       setP(P => ({ ...P, lanc: novoL ? [...P.lanc, l] : P.lanc.map(x => x.id === l.id ? l : x) }));
-      close();
+      vibrar("ok"); close();
       notify(novoL ? `${l.tipo === "entrada" ? "Entrada" : "Gasto"} de ${brlReal(l.valor)} anotado` : "Lançamento atualizado", novoL ? () => setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== l.id) })) : undefined);
     },
     apagarLanc: id => { setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== id) })); close(); notify("Lançamento apagado"); },
@@ -2725,7 +2868,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     salvarConta: c => { setP(P => ({ ...P, contas: P.contas.some(x => x.id === c.id) ? P.contas.map(x => x.id === c.id ? c : x) : [...P.contas, c] })); close(); notify(`${c.nome} salva · vence todo dia ${c.dia}`); },
     apagarConta: id => { setP(P => ({ ...P, contas: P.contas.filter(x => x.id !== id) })); close(); notify("Conta apagada"); },
     pagarConta: id => {
-      const ch = chaveAtual(), c = db.pessoal.contas.find(x => x.id === id);
+      const ch = chaveAtual(), c = db.pessoal.contas.find(x => x.id === id); vibrar("ok");
       setP(P => ({ ...P, contas: P.contas.map(x => x.id === id ? { ...x, pagas: { ...(x.pagas || {}), [ch]: todayISO() } } : x) }));
       notify(`${c ? c.nome : "Conta"} marcada como paga`, () => setP(P => ({ ...P, contas: P.contas.map(x => { if (x.id !== id) return x; const pg = { ...(x.pagas || {}) }; delete pg[ch]; return { ...x, pagas: pg }; }) })));
     },
@@ -2753,8 +2896,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const contaSel = sheet && sheet.type === "conta" && sheet.id ? db.pessoal.contas.find(c => c.id === sheet.id) : null;
 
   return (
-    <div className={"shell" + (conta.fundo ? " glass" : "")} data-mode={modoEf}>
-      {conta.fundo && imagemFundo(conta.fundo) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
+    <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " glass" : "")} data-mode={modoEf}>
+      {conta.fundo && imagemFundo(conta.fundo, meusFundos) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo, meusFundos)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
       <aside className="side" aria-label="Menu">
         <div className="side-brand"><i><I.logo /></i>Agenda</div>
         {usaPessoal && <ModeSwitch modo={modo} setModo={act.setModo} block />}
@@ -2788,6 +2931,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         </div>
       </aside>
 
+      <div className="rolagem" ref={el => { ROLAGEM = el; }}>
       <main className="app">
         {tabEf === "home" && <HomeTab db={db} conta={conta} now={now} act={act} tema={tema} />}
         {tabEf === "agenda" && <AgendaTab db={db} now={now} act={act} tema={tema} />}
@@ -2797,6 +2941,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         {tabEf === "p-gastos" && <GastosTab db={db} act={act} tema={tema} />}
         {tabEf === "p-contas" && <ContasTab db={db} act={act} tema={tema} />}
       </main>
+      </div>
 
       <nav className="nav" aria-label="Seções">
         <div className="nav-pill">
@@ -2824,7 +2969,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       {sheet && sheet.type === "lanc" && <LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} tipo={sheet.tipo || "saida"} voz={sheet.voz} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} />}
       {sheet && sheet.type === "conta" && <ContaSheet key={sheet.id || "nova"} inicial={contaSel} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} />}
 
-      {push && <PushBanner push={push} onClose={() => setPush(null)} />}
       {toast && (
         <div className={"toast" + (toast.undo ? "" : " solo")} role="status">
           <span>{toast.msg}</span>

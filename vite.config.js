@@ -41,6 +41,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,woff2}"],
         globIgnores: ["**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*"],
         navigateFallback: "index.html",
+        importScripts: ["sw-extra.js"], // abre o app ao tocar numa notificação
         runtimeCaching: [
           { // Clima (Open-Meteo): tenta a internet, usa o último resultado se estiver offline
             urlPattern: /^https:\/\/(api|geocoding-api)\.open-meteo\.com\/.*/i,
