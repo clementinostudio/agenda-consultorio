@@ -11,6 +11,7 @@ Não precisa de VS Code nem de outro editor. Abra o terminal dentro desta pasta 
 ```bash
 bash instalar.sh     # instala o Node (se faltar), as dependências e abre o app
 bash publicar.sh     # sobe para o seu GitHub e publica no GitHub Pages
+bash servidor-avisos/instalar-avisos.sh   # liga os avisos com o app fechado (uma vez só)
 ```
 
 - O `instalar.sh` deixa o app rodando em `http://localhost:5173`. Para parar, aperte `Ctrl + C`.
@@ -83,6 +84,7 @@ agenda-consultorio/
 ├── public/
 │   ├── icons/               ← ícones do app (troque pelos seus, mesmos nomes e tamanhos)
 │   └── fundos/              ← imagens de fundo (cada uma tem a versão "-mini" para a miniatura)
+├── servidor-avisos/         ← servidor que manda os avisos com o app fechado (Cloudflare, grátis)
 └── src/
     ├── main.jsx             ← liga o app, as fontes e o service worker
     ├── styles.css           ← todas as cores, tamanhos e o visual (claro, escuro e vidro)
@@ -112,19 +114,31 @@ Para adicionar um fundo novo: coloque `meu-fundo.jpg` e `meu-fundo-mini.jpg` em 
 - Abrir sem internet depois de instalado.
 - Clima pela [Open-Meteo](https://open-meteo.com) e feriados pela [BrasilAPI](https://brasilapi.com.br), ambas gratuitas e sem chave. Sem internet, os feriados são calculados no próprio app.
 - Gasto por voz no Chrome/Android. No iPhone, use o microfone do teclado no mesmo campo.
-- Notificações do celular ("Sessão com Felipe em 15 min", "A luz vence amanhã") **enquanto o app estiver aberto ou em segundo plano recente**. Teste em Ajustes → Avisos → Testar notificação.
+- Notificações do celular **com o app fechado** ("Sessão em 15 min", "A luz vence amanhã", resumo do dia, fechar o dia), depois de ligar o servidor de avisos (veja abaixo). Teste em Ajustes → Avisos → Testar em 10 s.
+- Bloqueio com **Face ID / digital** (chave de acesso do próprio celular) e código de 4 números. Ajustes → Bloqueio.
+- Tela cheia no iPhone com o app instalado (sem faixa preta embaixo).
 - Foto de perfil e até 10 fundos próprios, com recorte (arrastar e zoom). Os fundos ficam guardados no aparelho.
 - Vibração nos toques (só Android: o iPhone não deixa sites vibrarem).
 - Planilha .csv do mês para o contador.
 
 **Ainda é demonstração:**
 - **Login e dados ficam só no aparelho** (no `localStorage` do navegador). Trocar de celular ou limpar os dados do navegador apaga tudo, e a senha não tem proteção de verdade.
-- **Avisos com o app totalmente fechado** precisam de um servidor que mande a notificação na hora certa (Web Push).
+
+### Avisos com o app fechado (servidor-avisos)
+O iPhone congela o app quando ele sai da tela, então quem avisa na hora certa é um servidorzinho grátis na Cloudflare. Ele recebe só a lista dos próximos avisos (horário + texto, sem nome de paciente por padrão) e dispara cada um no minuto certo, pelo padrão Web Push.
+
+```bash
+bash servidor-avisos/instalar-avisos.sh
+```
+
+O comando abre o navegador para você entrar na Cloudflare (crie a conta grátis se não tiver), publica o servidor e avisa o GitHub do endereço. Depois, no celular: abra o app pelo ícone → Ajustes → Avisos → **Ligar avisos com o app fechado** → Permitir. No iPhone precisa do iOS 16.4 ou mais novo e do app instalado na tela inicial. As chaves ficam em `servidor-avisos/.chaves.json`, que nunca vai para o GitHub (não apague: sem elas os aparelhos precisam ligar os avisos de novo).
+
+### Bloqueio com Face ID
+Ajustes → Bloqueio. Primeiro você cria um código de 4 números; depois o celular pergunta se quer salvar uma chave de acesso para a Agenda (é ela que usa o Face ID ou a digital). É uma tranca de privacidade na porta do app: os dados continuam guardados no aparelho como antes. Esqueceu o código? "Esqueci o código" leva para entrar de novo com e-mail e senha.
 
 ### Próximo passo recomendado: Supabase (plano gratuito)
 1. **Login de verdade** com e-mail e senha (Supabase Auth).
 2. **Dados na nuvem**, sincronizados entre celular e computador, com cada conta vendo só os próprios dados (Row Level Security).
-3. **Avisos com o app fechado**: uma função agendada do Supabase manda o Web Push ("Sessão com Felipe em 15 min", "A luz vence amanhã").
 
 Nomes de pacientes, frequência de terapia e pagamentos são **dados pessoais sensíveis** pela LGPD. Antes de outras pessoas usarem o app, vale ter o login de verdade, os dados protegidos e uma política de privacidade simples.
 

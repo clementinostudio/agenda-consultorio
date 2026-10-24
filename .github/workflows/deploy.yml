@@ -29,6 +29,8 @@ jobs:
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          # Endereço do servidor de avisos (o servidor-avisos/instalar-avisos.sh preenche sozinho)
+          VITE_AVISOS_URL: ${{ vars.AVISOS_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

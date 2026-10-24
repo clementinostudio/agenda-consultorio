@@ -5,3 +5,9 @@ dev-dist
 *.log
 .env
 .env.*
+
+# Servidor de avisos: chaves secretas e arquivos locais (nunca vão para o GitHub)
+servidor-avisos/node_modules
+servidor-avisos/.wrangler
+servidor-avisos/.chaves.json
+servidor-avisos/.segredos.json

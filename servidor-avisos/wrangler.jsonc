@@ -1,0 +1,7 @@
+{
+  // Configuração do servidor de avisos (Cloudflare Workers)
+  "name": "agenda-avisos",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "triggers": { "crons": ["* * * * *"] }
+}

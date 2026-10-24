@@ -111,8 +111,7 @@ const VIB = { toque: 8, ok: [14, 50, 14], aviso: [28, 40, 28], erro: [60, 40, 60
 const vibrar = (tipo = "toque") => { if (!VIBRAR) return; try { navigator.vibrate && navigator.vibrate(VIB[tipo] || 8); } catch (e) {} };
 
 // A área que rola fica dentro do app (assim a barra de baixo nunca sai do lugar)
-let ROLAGEM = null;
-const rolarTopo = () => { if (ROLAGEM) ROLAGEM.scrollTop = 0; else window.scrollTo(0, 0); };
+const rolarTopo = () => window.scrollTo(0, 0);
 const brlReal = v => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brl = v => ESCONDER ? "R$ •••" : brlReal(v);
 const num = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
@@ -539,7 +538,132 @@ async function notificarSistema(titulo, corpo, pedir) {
     return "ok";
   } catch (e) { return "bloqueado"; }
 }
-const AVISOS_PADRAO = { ativo: true, antecedencia: 15, som: true };
+const AVISOS_PADRAO = { ativo: true, antecedencia: 15, som: true, nomes: false, resumo: true, fechar: true };
+
+/* ---------- Avisos com o app fechado (Web Push) ----------
+   O iPhone congela o app assim que ele sai da tela, então nenhum relógio dentro do app consegue avisar na hora.
+   Quem avisa é o servidor-avisos (pasta servidor-avisos/, grátis na Cloudflare): o app manda para lá só a lista
+   dos próximos 7 dias (horário + texto do aviso) e o servidor dispara cada um no minuto certo.
+   Por padrão o texto não leva o nome do paciente (aparece na tela bloqueada). */
+const AVISOS_URL_PADRAO = String(import.meta.env.VITE_AVISOS_URL || "").trim().replace(/\/+$/, "");
+const K_PUSH = "agenda-push";         // { ligado, id do aparelho, chave do servidor, último envio }
+const K_PUSH_URL = "agenda-push-url"; // endereço do servidor colado à mão (se o GitHub não preencheu)
+const servidorAvisos = () => String(lerJSON(K_PUSH_URL, "") || AVISOS_URL_PADRAO).trim().replace(/\/+$/, "");
+const ehIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const appInstalado = () => (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+const pushSuportado = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const pushLigado = () => !!lerJSON(K_PUSH, {}).ligado && !!servidorAvisos();
+const b64uBytes = s => { s = String(s).replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+const bytesB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const comPrazo = (p, ms) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error("tempo")), ms))]);
+
+// O que impede de ligar ("" = pode ligar)
+function motivoSemPush() {
+  if (!servidorAvisos()) return "servidor";
+  if (ehIOS() && !appInstalado()) return "instalar";
+  if (!pushSuportado()) return "indisponivel";
+  if (Notification.permission === "denied") return "negado";
+  return "";
+}
+async function inscreverPush(pedir) {
+  const m = motivoSemPush(); if (m) throw new Error(m);
+  if (Notification.permission !== "granted") {
+    if (!pedir) throw new Error("permissao");
+    if (await Notification.requestPermission() !== "granted") throw new Error("negado");
+  }
+  const url = servidorAvisos();
+  const reg = await comPrazo(navigator.serviceWorker.ready, 8000).catch(() => { throw new Error("sem-sw"); });
+  const r = await comPrazo(fetch(url + "/chave"), 12000).catch(() => { throw new Error("servidor-fora"); });
+  const { chave } = await r.json().catch(() => ({}));
+  if (!r.ok || !chave) throw new Error("servidor-fora");
+  const st = lerJSON(K_PUSH, {});
+  let sub = await reg.pushManager.getSubscription();
+  if (sub && st.chave && st.chave !== chave) { try { await sub.unsubscribe(); } catch (e) {} sub = null; }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(chave) });
+  const id = st.id || uid() + uid();
+  gravar(K_PUSH, { ...lerJSON(K_PUSH, {}), id, chave });
+  return { id, sub: sub.toJSON() };
+}
+async function chamarServidor(caminho, corpo, manter) {
+  const r = await fetch(servidorAvisos() + caminho, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo), keepalive: !!manter });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || "servidor-fora");
+  return j;
+}
+// Lista dos avisos dos próximos 7 dias
+function gerarAvisos(db, av, usaPessoal) {
+  const agora = Date.now(), hoje = todayISO(), lista = [];
+  const quando = (iso, hhmm) => { const d = fromISO(iso); const [h, m] = hhmm.split(":").map(Number); d.setHours(h, m, 0, 0); return d.getTime(); };
+  const hm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+  const add = (t, titulo, corpo, tag) => { if (t > agora + 30000) lista.push({ t, titulo, corpo, tag }); };
+  const plural = (n, um, varios) => n === 1 ? um : varios.replace("#", n);
+  for (let i = 0; i < 8; i++) {
+    const iso = addDays(hoje, i);
+    const sess = itensDoDia(db, iso).filter(x => x.kind === "next" || x.kind === "proj");
+    if (!sess.length) continue;
+    sess.forEach((x, n) => add(quando(iso, x.time) - av.antecedencia * 60000,
+      `Sessão${av.nomes ? ` com ${primeiro(x.patient.name)}` : ""} em ${av.antecedencia} min`,
+      `Às ${x.time}.${n === sess.length - 1 && sess.length > 1 ? " É a última do dia." : ""}`, `s-${iso}-${x.time}`));
+    const pri = sess[0].time, ult = sess[sess.length - 1].time;
+    if (av.resumo !== false) add(Math.min(quando(iso, "07:30"), quando(iso, pri) - 90 * 60000),
+      `Hoje: ${plural(sess.length, "1 sessão", "# sessões")}`,
+      sess.length === 1 ? `Às ${pri}. Bom dia!` : `A primeira às ${pri} e a última às ${ult}. Bom dia!`, `r-${iso}`);
+    if (av.fechar !== false && !(db.fechados || {})[iso]) add(quando(iso, hm(Math.max(19 * 60, mins(ult) + DURACAO_SESSAO + 10))),
+      "Vamos fechar o dia?", "Leva uns 2 minutos: marcar quem veio, quem faltou e o que falta cobrar.", `f-${iso}`);
+  }
+  const pend = db.patients.filter(p => p.active && p.nextDate && p.nextDate < hoje).length;
+  if (pend) add(quando(hoje, "09:00") > agora + 60000 ? quando(hoje, "09:00") : quando(addDays(hoje, 1), "09:00"),
+    plural(pend, "Ficou 1 sessão sem marcar", "Ficaram # sessões sem marcar"), "Toque para dizer quem veio e quem faltou.", "pend");
+  if (usaPessoal) ((db.pessoal && db.pessoal.contas) || []).forEach(c => {
+    for (let i = 0; i < 8; i++) {
+      const iso = addDays(hoje, i), chave = iso.slice(0, 7);
+      if (vencimento(c, chave) !== iso || (c.pagas && c.pagas[chave])) continue;
+      add(quando(addDays(iso, -1), "09:00"), `${c.nome} vence amanhã`, `${brlReal(c.valor)} · toque para ver suas contas`, `c-${c.id}`);
+      add(quando(iso, "09:00"), `${c.nome} vence hoje`, `${brlReal(c.valor)} · já pagou? Marque no app.`, `c-${c.id}`);
+    }
+  });
+  return lista.sort((a, b) => a.t - b.t).slice(0, 200);
+}
+
+/* ---------- Bloqueio com Face ID / digital ----------
+   Usa a chave de acesso (passkey) do próprio celular: o Face ID ou a digital confirmam que é você.
+   É uma tranca de privacidade na porta do app (os dados continuam guardados no aparelho, como antes).
+   O código de 4 números serve para quando o Face ID não der. */
+const K_TRAVA = e => `agenda-trava:${e}`;
+const travaDe = email => lerJSON(K_TRAVA(email), null);
+async function resumoPin(email, pin) {
+  try {
+    const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`agenda:${email}:${pin}`));
+    return bytesB64u(d);
+  } catch (e) { return "h" + hash(`agenda:${email}:${pin}`); }
+}
+async function biometriaDisponivel() {
+  try { return !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }
+  catch (e) { return false; }
+}
+const nomeBiometria = () => ehIOS() ? "Face ID" : "digital ou rosto";
+async function criarBiometria(conta) {
+  const userId = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(conta.email)));
+  const cred = await navigator.credentials.create({ publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    rp: { name: "Agenda do Consultório", id: location.hostname },
+    user: { id: userId, name: conta.email, displayName: conta.nome || conta.email },
+    pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+    authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "preferred" },
+    timeout: 60000, attestation: "none",
+  } });
+  return bytesB64u(cred.rawId);
+}
+async function confirmarBiometria(credId) {
+  const r = await navigator.credentials.get({ publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    rpId: location.hostname,
+    allowCredentials: [{ type: "public-key", id: b64uBytes(credId), transports: ["internal", "hybrid"] }],
+    userVerification: "required", timeout: 60000,
+  } });
+  const dados = new Uint8Array(r.response.authenticatorData);
+  return !!(dados[32] & 4); // o celular confirmou que era você (Face ID, digital ou senha do aparelho)
+}
 
 /* =========================================================
    5. DADOS DE EXEMPLO
@@ -2162,6 +2286,236 @@ function Onboarding({ conta, onDone, onSair }) {
   );
 }
 
+/* ---------- Avisos com o app fechado: cartão dos Ajustes ---------- */
+const TXT_PUSH = {
+  servidor: "Falta ligar o servidor de avisos (uma vez só). No computador, dentro da pasta do app, rode: bash servidor-avisos/instalar-avisos.sh",
+  instalar: "No iPhone, os avisos com o app fechado só funcionam com o app instalado: no Safari, toque em Compartilhar → Adicionar à Tela de Início e abra pelo ícone.",
+  indisponivel: "Este navegador não recebe avisos com o app fechado. No iPhone, precisa do iOS 16.4 ou mais novo e do app instalado na tela inicial.",
+  negado: "As notificações estão bloqueadas para o app.",
+  permissao: "Toque em Ligar e escolha Permitir.",
+  "servidor-fora": "Não consegui falar com o servidor de avisos. Confira a internet e tente de novo.",
+  "sem-sw": "O app ainda está terminando de instalar. Feche, abra de novo pelo ícone e tente outra vez.",
+  tempo: "Demorou demais para responder. Tente de novo.",
+};
+const textoNegado = () => ehIOS()
+  ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Agenda → Permitir Notificações. Depois volte aqui."
+  : "As notificações estão bloqueadas. Libere nas configurações do celular: Apps → Agenda (ou Chrome) → Notificações. Depois volte aqui.";
+
+function AvisosFechado({ act }) {
+  const [ligado, setLigado] = useState(() => pushLigado());
+  const [estado, setEstado] = useState(null);
+  const [url, setUrl] = useState(() => lerJSON(K_PUSH_URL, ""));
+  const motivo = motivoSemPush();
+  const st = lerJSON(K_PUSH, {});
+  const explica = m => m === "negado" ? textoNegado() : TXT_PUSH[m] || `Não deu certo (${m}). Tente de novo.`;
+  const rodar = async (fn, okTxt) => {
+    setEstado({ tipo: "carregando" });
+    const r = await fn();
+    setLigado(pushLigado());
+    setEstado(r === "ok" ? { tipo: "ok", txt: okTxt } : { tipo: "erro", txt: explica(r) });
+  };
+  return (
+    <div className="push-card">
+      <div className="push-head">
+        <i className={ligado ? "on" : ""}><I.bell /></i>
+        <div>
+          <b>Avisos com o app fechado</b>
+          <span>{ligado ? `Ligados · ${st.total ?? 0} avisos guardados para os próximos dias` : "Sessão chegando, conta vencendo e fechar o dia, mesmo com o celular bloqueado."}</span>
+        </div>
+      </div>
+      {!ligado && motivo && <div className="test-res"><div className="no"><I.alert /><span>{explica(motivo)}</span></div></div>}
+      {!ligado && motivo === "servidor" && (
+        <Field label="Ou cole o endereço do servidor" icon={<I.send />} htmlFor="s-srv">
+          <input id="s-srv" inputMode="url" autoCapitalize="off" autoCorrect="off" value={url} placeholder="https://agenda-avisos….workers.dev" onChange={e => { setUrl(e.target.value); act.setServidor(e.target.value); }} />
+        </Field>
+      )}
+      {!ligado && !motivo && <button className="btn" disabled={estado && estado.tipo === "carregando"} onClick={() => rodar(act.ligarPush, "Pronto! Agora teste: toque em “Testar em 10 s” e feche o app.")}><I.bell /> Ligar avisos com o app fechado</button>}
+      {ligado && (
+        <div className="btn-row">
+          <button className="btn ghost" onClick={() => rodar(() => act.testarPush(0), "Enviado! Deve chegar em alguns segundos.")}>Testar agora</button>
+          <button className="btn ghost" onClick={() => rodar(() => act.testarPush(10000), "Agora feche o app (vá para a tela inicial) e espere 10 segundos.")}>Testar em 10 s</button>
+        </div>
+      )}
+      {estado && (estado.tipo === "carregando"
+        ? <div className="test-res"><div><I.clock /><span>Só um instante…</span></div></div>
+        : <div className="test-res"><div className={estado.tipo === "ok" ? "ok" : "no"}>{estado.tipo === "ok" ? <I.check /> : <I.alert />}<span>{estado.txt}</span></div></div>)}
+      {ligado && st.erro && !estado && <div className="hint">Último problema: {explica(st.erro)}</div>}
+      {ligado && <button className="btn text" onClick={async () => { await act.desligarPush(); setLigado(false); setEstado(null); }}>Desligar avisos com o app fechado</button>}
+    </div>
+  );
+}
+
+/* ---------- Teclado do código de 4 números ---------- */
+function PinPad({ valor, onChange, erro, bloqueado }) {
+  const tecla = d => {
+    if (bloqueado) return;
+    if (d === "<") onChange(valor.slice(0, -1));
+    else if (valor.length < 4) onChange(valor + d);
+  };
+  const ref = useRef(tecla); ref.current = tecla;
+  useEffect(() => {
+    const f = e => { if (/^\d$/.test(e.key)) ref.current(e.key); else if (e.key === "Backspace") ref.current("<"); };
+    window.addEventListener("keydown", f);
+    return () => window.removeEventListener("keydown", f);
+  }, []);
+  return (
+    <div className="pin">
+      <div className={"pin-dots" + (erro ? " erro" : "")} aria-label={`${valor.length} de 4 números digitados`}>
+        {[0, 1, 2, 3].map(i => <i key={i} className={i < valor.length ? "on" : ""} />)}
+      </div>
+      <div className="pin-pad">
+        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "<"].map((d, i) => d === ""
+          ? <span key={i} />
+          : <button type="button" key={i} disabled={bloqueado} onClick={() => tecla(d)} aria-label={d === "<" ? "Apagar" : d} className={d === "<" ? "apaga" : ""}>{d === "<" ? <I.chevL /> : d}</button>)}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Tela de bloqueio ---------- */
+function Trava({ conta, trava, onAbrir, onEsqueci }) {
+  const [pin, setPin] = useState("");
+  const [erro, setErro] = useState("");
+  const [tent, setTent] = useState(0);
+  const [espera, setEspera] = useState(0);
+  const [esqueci, setEsqueci] = useState(false);
+  const [bio, setBio] = useState(false);
+  const tentou = useRef(false);
+  const usarBio = async () => {
+    setErro("");
+    try {
+      if (await confirmarBiometria(trava.cred)) { vibrar("ok"); onAbrir(); }
+      else setErro("Não deu para confirmar. Use o código.");
+    } catch (e) {
+      if (e && e.name === "NotAllowedError") return; // cancelou ou o iPhone pediu um toque antes
+      setErro(`O ${nomeBiometria()} não respondeu. Use o código.`);
+    }
+  };
+  useEffect(() => {
+    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+  useEffect(() => {
+    if (!trava.cred) return;
+    biometriaDisponivel().then(ok => { setBio(ok); if (ok && !tentou.current) { tentou.current = true; usarBio(); } });
+  }, []);
+  useEffect(() => { if (!espera) return; const t = setTimeout(() => setEspera(e => Math.max(0, e - 1)), 1000); return () => clearTimeout(t); }, [espera]);
+  const digitar = async v => {
+    if (espera) return;
+    setErro(""); setPin(v);
+    if (v.length < 4) return;
+    if (await resumoPin(conta.email, v) === trava.pin) { vibrar("ok"); onAbrir(); return; }
+    vibrar("aviso");
+    const n = tent + 1; setTent(n); setPin("");
+    if (n % 5 === 0) { setEspera(30); setErro("Muitas tentativas."); } else setErro("Código errado. Tente de novo.");
+  };
+  return createPortal(
+    <div className="trava" role="dialog" aria-modal="true" aria-label="App bloqueado">
+      <div className="trava-in">
+        <div className="trava-top">
+          <Avatar conta={conta} />
+          <h2>Oi, {primeiro(conta.nome)}</h2>
+          <p>{bio ? `Use o ${nomeBiometria()} ou o seu código` : "Digite o seu código"}</p>
+        </div>
+        {!esqueci ? <>
+          <PinPad valor={pin} onChange={digitar} erro={!!erro} bloqueado={espera > 0} />
+          <div className="trava-msg" role="alert">{espera ? `Muitas tentativas. Espere ${espera} s.` : erro}</div>
+          <div className="trava-acoes">
+            {bio && <button className="btn" onClick={usarBio}><I.face /> Usar {nomeBiometria()}</button>}
+            <button className="btn text" onClick={() => setEsqueci(true)}>Esqueci o código</button>
+          </div>
+        </> : (
+          <div className="trava-esq">
+            <p>Para criar um código novo, entre de novo com o seu e-mail e a sua senha. Seus dados continuam guardados aqui.</p>
+            <button className="btn" onClick={onEsqueci}><I.key /> Entrar com a senha</button>
+            <button className="btn text" onClick={() => setEsqueci(false)}>Voltar</button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ---------- Ligar / ajustar o bloqueio ---------- */
+function TravaSheet({ conta, trava, onSave, onClose }) {
+  const [etapa, setEtapa] = useState(trava ? "pronto" : "inicio");
+  const [pin, setPin] = useState("");
+  const [p1, setP1] = useState("");
+  const [erro, setErro] = useState("");
+  const [bioOk, setBioOk] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
+  const nomeB = nomeBiometria(), NomeB = nomeB[0].toUpperCase() + nomeB.slice(1);
+  useEffect(() => { biometriaDisponivel().then(setBioOk); }, []);
+  const cfg = trava || { depois: 60 };
+  const digitar = async v => {
+    setErro(""); setPin(v);
+    if (v.length < 4) return;
+    if (etapa === "pin1") { setP1(v); setPin(""); setEtapa("pin2"); return; }
+    if (v !== p1) { vibrar("aviso"); setPin(""); setP1(""); setEtapa("pin1"); setErro("Os códigos ficaram diferentes. Vamos de novo."); return; }
+    const novo = { ...cfg, pin: await resumoPin(conta.email, v) };
+    onSave(novo); vibrar("ok"); setPin("");
+    setEtapa(bioOk && !novo.cred ? "bio" : "pronto");
+  };
+  const ligarBio = async () => {
+    setErro(""); setOcupado(true);
+    try { const cred = await criarBiometria(conta); onSave({ ...(trava || cfg), cred }); vibrar("ok"); setEtapa("pronto"); }
+    catch (e) {
+      setErro(e && e.name === "NotAllowedError" ? "Cancelado. Pode tentar de novo quando quiser."
+        : e && e.name === "SecurityError" ? `O ${nomeB} só funciona no endereço publicado (https), não no teste do computador.`
+        : `Não consegui ligar o ${nomeB} neste aparelho. O código continua funcionando.`);
+    }
+    setOcupado(false);
+  };
+  const testarBio = async () => {
+    setErro("");
+    try { setErro(await confirmarBiometria(trava.cred) ? `${NomeB} funcionando ✓` : "Não confirmou."); }
+    catch (e) { setErro(e && e.name === "NotAllowedError" ? "Cancelado." : `O ${nomeB} não respondeu.`); }
+  };
+  return (
+    <Sheet title="Bloqueio do app" sub={trava ? "Ligado" : `Com ${nomeB} e um código`} onClose={onClose}>
+      {etapa === "inicio" && <>
+        <div className="trava-explica">
+          <i><I.face /></i>
+          <p>Toda vez que abrir o app, ele pede o <b>{nomeB}</b> (ou um código de 4 números). Assim ninguém vê seus pacientes e valores se pegar o seu celular desbloqueado.</p>
+        </div>
+        <button className="btn" onClick={() => setEtapa("pin1")}>Começar: criar o código</button>
+      </>}
+      {(etapa === "pin1" || etapa === "pin2") && <>
+        <p className="trava-pede">{etapa === "pin1" ? "Crie um código de 4 números. Ele serve para quando o Face ID não der." : "Digite o código de novo, para confirmar."}</p>
+        <PinPad valor={pin} onChange={digitar} erro={!!erro} />
+        {erro && <div className="trava-msg" role="alert">{erro}</div>}
+      </>}
+      {etapa === "bio" && <>
+        <div className="trava-explica">
+          <i className="on"><I.check /></i>
+          <p>Código criado. Agora ligue o <b>{nomeB}</b>: o celular vai perguntar se quer salvar uma <b>chave de acesso</b> para a Agenda. Toque em Continuar.</p>
+        </div>
+        <button className="btn" disabled={ocupado} onClick={ligarBio}><I.face /> Ligar {nomeB}</button>
+        <button className="btn text" onClick={() => setEtapa("pronto")}>Agora não, só o código</button>
+        {erro && <div className="trava-msg" role="alert">{erro}</div>}
+      </>}
+      {etapa === "pronto" && trava && <>
+        <div className="test-res">
+          <div className="ok"><I.check /><span>Bloqueio ligado com código de 4 números.</span></div>
+          <div className={trava.cred ? "ok" : "no"}>{trava.cred ? <I.check /> : <I.alert />}<span>{trava.cred ? `${NomeB} ligado.` : bioOk ? `${NomeB} ainda não está ligado.` : `Este aparelho não oferece ${nomeB} para o app. Fica só o código.`}</span></div>
+        </div>
+        <div className="fields">
+          <Field label="Pedir de novo quando voltar ao app depois de">
+            <Seg value={trava.depois ?? 60} onChange={v => onSave({ ...trava, depois: v })} options={[{ v: 0, l: "Na hora" }, { v: 60, l: "1 min" }, { v: 300, l: "5 min" }, { v: 1800, l: "30 min" }]} />
+          </Field>
+        </div>
+        {trava.cred ? <button className="btn ghost" onClick={testarBio}><I.face /> Testar o {nomeB}</button>
+          : bioOk && <button className="btn" disabled={ocupado} onClick={ligarBio}><I.face /> Ligar {nomeB}</button>}
+        {erro && <div className="trava-msg" role="alert">{erro}</div>}
+        <button className="btn ghost" onClick={() => { setErro(""); setPin(""); setEtapa("pin1"); }}><I.key /> Trocar o código</button>
+        <ConfirmButton label="Desligar o bloqueio" confirmLabel="Toque de novo para desligar" onConfirm={() => { onSave(null); onClose(); }} />
+        <div className="hint">É uma tranca de privacidade na porta do app. Se esquecer o código, dá para entrar de novo com o e-mail e a senha.</div>
+      </>}
+    </Sheet>
+  );
+}
+
 function SettingsSheet({ db, conta, tema, onClose, act }) {
   const pf = conta.perfil || {};
   const [nome, setNome] = useState(conta.nome);
@@ -2176,6 +2530,9 @@ function SettingsSheet({ db, conta, tema, onClose, act }) {
   const av0 = { ...AVISOS_PADRAO, ...(pf.avisos || {}) };
   const [avAtivo, setAvAtivo] = useState(av0.ativo);
   const [antec, setAntec] = useState(av0.antecedencia);
+  const [avNomes, setAvNomes] = useState(!!av0.nomes);
+  const [avResumo, setAvResumo] = useState(av0.resumo !== false);
+  const [avFechar, setAvFechar] = useState(av0.fechar !== false);
   const [vib, setVib] = useState(pf.vibrar !== false);
   const [permissao, setPermissao] = useState(() => "Notification" in window ? Notification.permission : "indisponivel");
   const [teste, setTeste] = useState(null);
@@ -2232,14 +2589,23 @@ function SettingsSheet({ db, conta, tema, onClose, act }) {
         <Field label="Avisos de sessão, contas e pendências"><Seg value={avAtivo} onChange={setAvAtivo} options={[{ v: true, l: "Ligados" }, { v: false, l: "Desligados" }]} /></Field>
         <Field label="Avisar antes da sessão (minutos)"><Seg value={antec} onChange={setAntec} options={[5, 10, 15, 30].map(m => ({ v: m, l: String(m) }))} /></Field>
       </div>
-      <div className="hint">Notificações: <b>{textoPermissao[permissao] || permissao}</b></div>
-      <div className="btn-row">
-        <button className="btn ghost" onClick={() => testar(0)}><I.bell /> Testar notificação</button>
-        <button className="btn ghost" onClick={() => testar(10000)}>Em 10 segundos</button>
-      </div>
-      {teste && (teste.esperando
-        ? <div className="test-res"><div><I.clock /><span>Aguarde 10 segundos. Pode minimizar o app para ver a notificação chegar.</span></div></div>
-        : <div className="test-res"><div className={teste.r === "ok" ? "ok" : "no"}>{teste.r === "ok" ? <I.check /> : <I.alert />}<span>{textoTeste[teste.r] || textoTeste.bloqueado}</span></div></div>)}
+      <Toggle on={avResumo} onClick={() => setAvResumo(!avResumo)}>Resumo do dia de manhã</Toggle>
+      <Toggle on={avFechar} onClick={() => setAvFechar(!avFechar)}>Lembrar de fechar o dia</Toggle>
+      <Toggle on={avNomes} onClick={() => setAvNomes(!avNomes)}>Mostrar o nome do {TERMO.s.toLowerCase()} no aviso</Toggle>
+      {!avNomes && <div className="hint">O aviso diz só “Sessão em {antec} min”, sem nome. Mais discreto na tela bloqueada.</div>}
+      <AvisosFechado act={act} />
+      {!pushLigado() && <>
+        <div className="hint">Teste com o app aberto · notificações: <b>{textoPermissao[permissao] || permissao}</b></div>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={() => testar(0)}><I.bell /> Testar aqui</button>
+          <button className="btn ghost" onClick={() => testar(10000)}>Em 10 segundos</button>
+        </div>
+        {teste && (teste.esperando
+          ? <div className="test-res"><div><I.clock /><span>Aguarde 10 segundos com o app aberto.</span></div></div>
+          : <div className="test-res"><div className={teste.r === "ok" ? "ok" : "no"}>{teste.r === "ok" ? <I.check /> : <I.alert />}<span>{textoTeste[teste.r] || textoTeste.bloqueado}</span></div></div>)}
+      </>}
+      <h3 className="section-title" style={{ marginTop: 4 }}>Bloqueio</h3>
+      <button className="btn ghost" onClick={act.abrirTrava}><I.face /> {act.trava ? `Bloqueio ligado · ${act.trava.cred ? nomeBiometria() : "só código"}` : `Bloquear o app com ${nomeBiometria()}`}</button>
       <Toggle on={vib} onClick={() => { setVib(!vib); VIBRAR = !vib; if (!vib) vibrar("ok"); }}>Vibrar nos toques (Android)</Toggle>
       <div className="fields">
         <Field label="Quem você atende"><Seg value={termo} onChange={setTermo} options={["Paciente", "Cliente", "Analisando"].map(v => ({ v, l: v }))} /></Field>
@@ -2249,7 +2615,7 @@ function SettingsSheet({ db, conta, tema, onClose, act }) {
       </div>
       <Toggle on={pessoal} onClick={() => setPessoal(!pessoal)}>Usar também o modo Pessoal</Toggle>
       {pessoal && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
-      <button className="btn" onClick={() => act.salvarAjustes({ nome: nome.trim() || conta.nome, foto, perfil: { ...pf, termo, duracao: dur, meta: num(meta) || 0, estilo, pessoal, cidade: cidade.trim(), avisos: { ativo: avAtivo, antecedencia: antec }, vibrar: vib, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar, reserva } }, pix.trim())}>Salvar</button>
+      <button className="btn" onClick={() => act.salvarAjustes({ nome: nome.trim() || conta.nome, foto, perfil: { ...pf, termo, duracao: dur, meta: num(meta) || 0, estilo, pessoal, cidade: cidade.trim(), avisos: { ...av0, ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar }, vibrar: vib, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar, reserva } }, pix.trim())}>Salvar</button>
       <InstalarApp />
       <div className="hint">Atalhos: links do app terminados em <b>#gasto</b>, <b>#agora</b>, <b>#fechar</b> ou <b>#livres</b> abrem direto o gasto por voz, o Só o agora, o Fechar o dia e os horários livres. Dá para colocar na Siri ou na tela inicial.</div>
       <button className="btn ghost" onClick={act.refazer}><I.repeat /> Refazer perguntas iniciais</button>
@@ -2682,6 +3048,7 @@ function useTema() {
    15. APP (depois do login)
    ========================================================= */
 I.minus = () => <Svg sw={2.2}><path d="M5 12h14"/></Svg>;
+I.face = () => <Svg><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 9.5v1M15 9.5v1M12 9.5V13h-1M9.5 15.5c1.4 1.1 3.6 1.1 5 0"/></Svg>;
 
 function carregarDb(conta) {
   const salvo = lerJSON(K.db(conta.email), null);
@@ -2711,6 +3078,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const [clima, setClima] = useState(null);
   const [, setFerVer] = useState(0);
   const [meusFundos, setMeusFundos] = useState([]);
+  const [push, setPush] = useState(() => pushLigado());
+  const [trava, setTravaSt] = useState(() => travaDe(conta.email));
+  const [travado, setTravado] = useState(() => !!(travaDe(conta.email) || {}).pin);
+  const [travaSheet, setTravaSheet] = useState(false);
   CLIMA = clima;
   const tRef = useRef(null);
   useEffect(() => {
@@ -2737,8 +3108,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   // Avisos saem só como notificação do celular (o som e a vibração são os do próprio aparelho)
   const avisar = (titulo, corpo) => notificarSistema(titulo, corpo, false);
   VIBRAR = perfil.vibrar !== false;
-  // Trava a rolagem da página: quem rola é a área do app
-  useEffect(() => { document.body.classList.add("travado"); return () => document.body.classList.remove("travado"); }, []);
   // Vibração leve em qualquer botão
   useEffect(() => {
     const f = e => { if (e.target.closest && e.target.closest("button, a.btn, label.fundo, label[for]")) vibrar("toque"); };
@@ -2758,9 +3127,48 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     }).catch(() => {});
     return () => { vivo = false; };
   }, []);
-  // Confere a cada 30 s se tem algo para avisar (sessão chegando, conta vencendo, sessão sem marcar)
+  // Avisos com o app fechado: manda a lista dos próximos dias para o servidor sempre que algo muda
+  const sincronizar = async (manter, forcar) => {
+    if (!pushLigado()) return "desligado";
+    const avisos = av.ativo ? gerarAvisos(db, av, usaPessoal) : [];
+    const h = hash(JSON.stringify(avisos)), st = lerJSON(K_PUSH, {});
+    if (!forcar && st.hash === h && st.email === conta.email && Date.now() - (st.quando || 0) < 6 * 36e5) return "ok";
+    try {
+      const { id, sub } = await inscreverPush(false);
+      await chamarServidor("/agendar", { id, sub, avisos }, manter);
+      gravar(K_PUSH, { ...lerJSON(K_PUSH, {}), hash: h, email: conta.email, quando: Date.now(), total: avisos.length, erro: "" });
+      return "ok";
+    } catch (e) { gravar(K_PUSH, { ...lerJSON(K_PUSH, {}), erro: e.message }); return e.message; }
+  };
+  const sincRef = useRef(sincronizar);
+  sincRef.current = sincronizar;
   useEffect(() => {
-    if (!av.ativo) return;
+    if (!push) return;
+    const t = setTimeout(() => sincRef.current(false), 2500);
+    return () => clearTimeout(t);
+  }, [db, push, av.ativo, av.antecedencia, av.nomes, av.resumo, av.fechar, usaPessoal, Math.floor(now.getTime() / 9e5)]);
+  // Ao sair da tela: manda o que mudou na hora e marca quando saiu (para o bloqueio)
+  const saiuRef = useRef(0);
+  useEffect(() => {
+    const f = () => {
+      if (document.visibilityState === "hidden") {
+        saiuRef.current = Date.now();
+        sincRef.current(true);
+      } else {
+        const tv = travaDe(conta.email);
+        if (tv && tv.pin && saiuRef.current && Date.now() - saiuRef.current >= (tv.depois ?? 60) * 1000) setTravado(true);
+        saiuRef.current = 0;
+        sincRef.current(false);
+      }
+    };
+    document.addEventListener("visibilitychange", f);
+    return () => document.removeEventListener("visibilitychange", f);
+  }, []);
+
+  // Confere a cada 30 s se tem algo para avisar (sessão chegando, conta vencendo, sessão sem marcar).
+  // Com os avisos pelo servidor ligados, quem avisa é o servidor (assim não chega aviso repetido).
+  useEffect(() => {
+    if (!av.ativo || push) return;
     const timer = setTimeout(() => {
       const t = todayISO(), nm = agoraMin(new Date());
       const vistos = lerJSON(K.avisos(conta.email), {});
@@ -2783,7 +3191,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       if (dispara) avisar(...dispara);
     }, 2500);
     return () => clearTimeout(timer);
-  }, [now, av.ativo, av.antecedencia]);
+  }, [now, av.ativo, av.antecedencia, push]);
 
   const notify = (msg, undo) => { setToast({ msg, undo }); clearTimeout(tRef.current); tRef.current = setTimeout(() => setToast(null), undo ? 6000 : 2800); };
   const close = () => setSheet(null);
@@ -2813,6 +3221,40 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       const prox = itensDoDia(db, todayISO()).find(i => i.kind === "next" && mins(i.time) > agoraMin(new Date()));
       return notificarSistema(prox ? `Sessão com ${primeiro(prox.patient.name)} em ${av.antecedencia} min` : "Teste de aviso", prox ? `${prox.time} · este é um aviso de teste` : "Se você está vendo isto, os avisos estão funcionando.", false);
     },
+    // Avisos com o app fechado
+    pushLigado: () => push,
+    ligarPush: async () => {
+      try {
+        await inscreverPush(true);
+        gravar(K_PUSH, { ...lerJSON(K_PUSH, {}), ligado: true, hash: "" });
+        setPush(true);
+        const r = await sincronizar(false, true);
+        if (r !== "ok") throw new Error(r);
+        vibrar("ok");
+        return "ok";
+      } catch (e) { return e.message; }
+    },
+    desligarPush: async () => {
+      const st = lerJSON(K_PUSH, {});
+      gravar(K_PUSH, { ...st, ligado: false, hash: "" });
+      setPush(false);
+      try { if (st.id) await chamarServidor("/cancelar", { id: st.id }); } catch (e) {}
+    },
+    testarPush: async atraso => {
+      try {
+        const { id, sub } = await inscreverPush(true);
+        const tem = av.ativo && gerarAvisos(db, av, usaPessoal).length > 0;
+        await chamarServidor("/teste", { id, sub, atraso,
+          titulo: atraso ? "Teste com o app fechado" : "Teste de aviso",
+          corpo: atraso ? "Chegou! Os avisos funcionam mesmo com o app fechado." : tem ? "Funcionando. Os próximos avisos já estão guardados." : "Funcionando. Os avisos vão chegar por aqui." });
+        return "ok";
+      } catch (e) { return e.message; }
+    },
+    setServidor: url => { gravar(K_PUSH_URL, url.trim()); },
+    // Bloqueio com Face ID
+    trava,
+    abrirTrava: () => setTravaSheet(true),
+    salvarTrava: cfg => { if (cfg) gravar(K_TRAVA(conta.email), cfg); else apagar(K_TRAVA(conta.email)); setTravaSt(cfg); },
     falarGasto: () => setSheet({ type: "lanc", tipo: "saida", voz: true }),
     openItem: item => setSheet({ type: "session", item }),
     registrar: registrarE,
@@ -2879,7 +3321,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     refazer: () => { close(); onAtualizar({ perfil: { ...perfil, refazer: true } }); },
     zerar: () => { setDb(vazio()); close(); notify("Dados apagados"); },
     carregarExemplo: () => { setDb(exemplo()); close(); notify("Exemplos carregados"); },
-    sair: onSair,
+    sair: () => {
+      // a conta saiu deste aparelho: para de mandar os avisos dela
+      const st = lerJSON(K_PUSH, {});
+      if (st.ligado && st.id) { chamarServidor("/cancelar", { id: st.id }, true).catch(() => {}); gravar(K_PUSH, { ...st, hash: "" }); }
+      onSair();
+    },
     trocarTema: () => tema.setModo(tema.escuro ? "light" : "dark"),
   };
 
@@ -2931,7 +3378,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         </div>
       </aside>
 
-      <div className="rolagem" ref={el => { ROLAGEM = el; }}>
       <main className="app">
         {tabEf === "home" && <HomeTab db={db} conta={conta} now={now} act={act} tema={tema} />}
         {tabEf === "agenda" && <AgendaTab db={db} now={now} act={act} tema={tema} />}
@@ -2941,7 +3387,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         {tabEf === "p-gastos" && <GastosTab db={db} act={act} tema={tema} />}
         {tabEf === "p-contas" && <ContasTab db={db} act={act} tema={tema} />}
       </main>
-      </div>
 
       <nav className="nav" aria-label="Seções">
         <div className="nav-pill">
@@ -2959,6 +3404,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       {sheet && sheet.type === "form" && <PatientForm total={db.patients.length} perfil={perfil} pre={sheet.pre} initial={sheet.pid ? db.patients.find(p => p.id === sheet.pid) : null} onSave={act.salvarPaciente} onClose={close} />}
       {sheet && sheet.type === "charge" && <ChargeSheet key={sheet.cid} db={db} cid={sheet.cid} fresh={sheet.fresh} nomeProf={conta.nome} onClose={close} act={act} />}
       {sheet && sheet.type === "settings" && <SettingsSheet db={db} conta={conta} tema={tema} onClose={close} act={act} />}
+      {travaSheet && <TravaSheet conta={conta} trava={trava} onSave={act.salvarTrava} onClose={() => setTravaSheet(false)} />}
       {sheet && sheet.type === "fechar" && <FecharDia db={db} conta={conta} onClose={close} act={act} />}
       {sheet && sheet.type === "revisao" && <RevisaoSheet db={db} onClose={close} act={act} />}
       {sheet && sheet.type === "confirmar" && <ConfirmSheet db={db} iso={sheet.iso} onClose={close} act={act} />}
@@ -2975,6 +3421,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
           {toast.undo && <button onClick={() => { toast.undo(); setToast(null); }}>Desfazer</button>}
         </div>
       )}
+      {travado && trava && trava.pin && <Trava conta={conta} trava={trava} onAbrir={() => setTravado(false)} onEsqueci={() => { act.salvarTrava(null); setTravado(false); act.sair(); }} />}
     </div>
   );
 }

@@ -669,10 +669,10 @@ button:disabled{cursor:default}
 @media (max-width:360px){.pend-actions{grid-template-columns:1fr 1fr}.pend-actions .ghost{grid-column:1/-1}.bal-amt{font-size:36px}.tl-row{grid-template-columns:38px 28px minmax(0,1fr)}.tl::before{left:62px}.cats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (prefers-reduced-motion:reduce){.sheet,.scrim,.toast,.menu,.push,.focus,.focus-body{animation:none}.mic.on::after{animation:none}.nv{transition:none}}
 
-/* Rolagem dentro do app: a página não "pula" e a barra de baixo fica sempre no mesmo lugar */
-html, body { height: 100%; }
-body.travado { overflow: hidden; overscroll-behavior: none; }
-.rolagem { position: fixed; inset: 0; z-index: 1; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding-top: env(safe-area-inset-top, 0px); }
+/* Tela cheia no iPhone com o app instalado: quando a página é mais baixa que a tela, o iPhone encolhe a área do app
+   e sobra uma faixa preta embaixo (e a barra de baixo "sobe"). Deixando a página sempre um pouquinho mais alta que
+   a tela, ela ocupa tudo, de ponta a ponta, em todas as abas. */
+html { box-sizing: border-box; min-height: calc(100% + env(safe-area-inset-top, 0px)); }
 
 /* Recortar foto e fundo */
 .crop { position: fixed; inset: 0; z-index: 80; background: rgba(5, 6, 9, .94); color: #F2F4F8; display: flex; flex-direction: column; padding: calc(12px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); animation: fade .18s ease; }
@@ -701,3 +701,47 @@ body.travado { overflow: hidden; overscroll-behavior: none; }
 .fundo-del svg { width: 13px; height: 13px; }
 .fundo-del.armado { background: var(--rose); color: #fff; }
 @media (max-width: 420px) { .fundos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* Avisos com o app fechado (cartão dos Ajustes) */
+.push-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 24px; background: var(--card); border: 1px solid var(--line); }
+.push-head { display: flex; gap: 12px; align-items: flex-start; }
+.push-head i { flex: none; width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); }
+.push-head i.on { background: var(--accent); color: #fff; }
+.push-head i svg { width: 20px; height: 20px; }
+.push-head b { display: block; font-size: 16px; font-weight: 800; }
+.push-head span { display: block; color: var(--muted); font-size: 13px; font-weight: 600; margin-top: 2px; }
+.btn[disabled] { opacity: .55; pointer-events: none; }
+
+/* Teclado do código */
+.pin { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 6px 0; }
+.pin-dots { display: flex; gap: 16px; }
+.pin-dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); transition: background .12s, border-color .12s; }
+.pin-dots i.on { background: var(--fg); border-color: var(--fg); }
+.pin-dots.erro { animation: tremer .32s ease; }
+.pin-dots.erro i { border-color: var(--rose); }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 72px); gap: 14px 22px; }
+.pin-pad button { width: 72px; height: 72px; border-radius: 50%; background: var(--surface-2); color: var(--fg); font-family: var(--f-display); font-size: 28px; font-weight: 500; display: grid; place-items: center; border: 0; }
+.pin-pad button:active { background: var(--surface-3); transform: scale(.96); }
+.pin-pad button.apaga { background: transparent; color: var(--muted); }
+.pin-pad button svg { width: 26px; height: 26px; }
+.pin-pad button[disabled] { opacity: .4; }
+@keyframes tremer { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
+/* Tela de bloqueio */
+.trava { position: fixed; inset: 0; z-index: 200; background: var(--bg); color: var(--fg); overflow-y: auto; display: flex; justify-content: center; padding: calc(28px + env(safe-area-inset-top, 0px)) 20px calc(20px + env(safe-area-inset-bottom, 0px)); animation: fade .15s ease; }
+.trava-in { width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 18px; margin: auto 0; }
+.trava-top { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.trava-top .me { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; background: var(--accent); color: #fff; font-family: var(--f-display); font-weight: 600; font-size: 26px; }
+.trava-top .me img { width: 100%; height: 100%; object-fit: cover; }
+.trava-top h2 { font-family: var(--f-display); font-weight: 600; font-size: 24px; margin: 8px 0 0; }
+.trava-top p { margin: 0; color: var(--muted); font-weight: 600; }
+.trava-msg { min-height: 20px; color: var(--rose); font-weight: 700; font-size: 14px; text-align: center; }
+.trava-acoes, .trava-esq { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.trava-esq p { color: var(--muted); font-weight: 600; text-align: center; margin: 0 0 8px; }
+.trava-explica { display: flex; gap: 12px; align-items: flex-start; background: var(--surface-2); border-radius: 20px; padding: 14px; }
+.trava-explica i { flex: none; width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; background: var(--accent); color: #fff; }
+.trava-explica i.on { background: var(--mint); }
+.trava-explica i svg { width: 22px; height: 22px; }
+.trava-explica p { margin: 0; font-weight: 600; font-size: 14px; }
+.trava-pede { text-align: center; font-weight: 700; margin: 0; }
+@media (max-height: 640px) { .pin-pad { grid-template-columns: repeat(3, 62px); gap: 10px 20px; } .pin-pad button { width: 62px; height: 62px; font-size: 24px; } }
