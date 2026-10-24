@@ -535,190 +535,57 @@ function interpretarVarios(frase) {
   }).filter(r => r.valor > 0);
 }
 
-/* ---------- Ouvir: anotar falando sem tocar em nada ----------
-   - Android e computador: reconhecimento de voz do próprio navegador (texto aparece ao vivo).
-   - iPhone com o app instalado: a Apple não libera o reconhecimento do Safari para apps da tela inicial,
-     então o app grava, percebe sozinho quando você para de falar e manda o áudio para o servidor-avisos
-     transcrever (Whisper, plano gratuito da Cloudflare). O áudio não fica guardado em lugar nenhum. */
+/* ---------- Falar: reconhecimento de voz do próprio aparelho ----------
+   Sem servidor e sem API: usa o reconhecimento de voz que já vem no navegador (o mesmo do ditado).
+   Ele para sozinho quando você termina de falar. Se o aparelho não liberar (alguns iPhones com o app
+   instalado na tela inicial), o app abre o teclado: aí é só tocar no microfone do teclado e falar. */
 const SRec = () => window.SpeechRecognition || window.webkitSpeechRecognition;
-function modoVoz() {
-  const iosApp = ehIOS() && appInstalado();
-  if (SRec() && !iosApp) return "nativo";
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && servidorAvisos()) return "servidor";
-  return "nenhum";
-}
-// O iPhone só libera o som se o "motor de áudio" nascer num toque: por isso ele é criado no toque do botão
-let CTX_VOZ = null;
-function prepararAudio() {
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    if (!CTX_VOZ || CTX_VOZ.state === "closed") CTX_VOZ = new AC();
-    if (CTX_VOZ.state !== "running") CTX_VOZ.resume().catch(() => {});
-  } catch (e) {}
-}
-function wavBase64(partes, taxa) {
-  const total = partes.reduce((a, p) => a + p.length, 0);
-  const tudo = new Float32Array(total); let o = 0;
-  for (const p of partes) { tudo.set(p, o); o += p.length; }
-  const alvo = 16000, passo = taxa / alvo, n = Math.floor(total / passo);
-  const buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
-  const txt = (pos, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(pos + i, s.charCodeAt(i)); };
-  txt(0, "RIFF"); dv.setUint32(4, 36 + n * 2, true); txt(8, "WAVE"); txt(12, "fmt ");
-  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, alvo, true);
-  dv.setUint32(28, alvo * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); txt(36, "data"); dv.setUint32(40, n * 2, true);
-  const pcm = new Int16Array(buf, 44, n);
-  for (let i = 0; i < n; i++) {
-    const a = Math.floor(i * passo), b = Math.max(a + 1, Math.min(total, Math.floor((i + 1) * passo)));
-    let s = 0; for (let j = a; j < b; j++) s += tudo[j];
-    const v = Math.max(-1, Math.min(1, s / (b - a)));
-    pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
-  }
-  const u8 = new Uint8Array(buf); let bin = "";
-  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
-  return btoa(bin);
-}
-// O Whisper às vezes "inventa" frases de legenda quando o áudio é só ruído
-const ALUCINA = /(amara\.org|legendas pela|legendado por|obrigad[oa] por assistir|inscreva-se no canal|tradu[cç][aã]o e legendas)/i;
-async function transcrever(b64) {
-  const r = await comPrazo(fetch(servidorAvisos() + "/ouvir", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio: b64 }) }), 20000);
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.erro || "falhou");
-  const t = String(j.texto || "").replace(/\s+/g, " ").trim();
-  return ALUCINA.test(t) ? "" : t;
-}
-const ERRO_VOZ = {
-  "sem-ia": "O servidor ainda não tem a parte de voz. No computador, rode de novo: bash servidor-avisos/instalar-avisos.sh",
-  origem: "O servidor não reconheceu este endereço do app. Rode de novo: bash servidor-avisos/instalar-avisos.sh",
-  tempo: "A internet está lenta. Tente de novo ou escreva embaixo.",
-};
+const K_VOZ_TECLADO = "agenda-voz-teclado"; // lembra quando o reconhecimento não funcionou neste aparelho
 
-function useOuvido({ onParcial, onFinal }) {
-  const [estado, setEstado] = useState("parado"); // parado | pedindo | toque | ouvindo | falando | pensando | erro
+function useFalaNativa({ onParcial, onFinal, onFalhou }) {
+  const [estado, setEstado] = useState("parado"); // parado | ouvindo | falando | erro
   const [erro, setErro] = useState("");
   const [nivel, setNivel] = useState(0);
-  const modo = useMemo(modoVoz, []);
   const r = useRef({});
-  const cb = useRef({}); cb.current = { onParcial, onFinal };
-  const desligarMic = () => {
-    const x = r.current;
-    try { if (x.proc) { x.proc.onaudioprocess = null; x.proc.disconnect(); } } catch (e) {}
-    try { x.src && x.src.disconnect(); } catch (e) {}
-    try { x.stream && x.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
-    clearInterval(x.decai);
-  };
-  const limpar = () => { const x = r.current; x.morto = true; try { x.rec && x.rec.abort(); } catch (e) {} desligarMic(); r.current = {}; };
+  const cb = useRef({}); cb.current = { onParcial, onFinal, onFalhou };
+  const limpar = () => { const x = r.current; x.morto = true; clearInterval(x.decai); clearTimeout(x.vigia); try { x.rec && x.rec.abort(); } catch (e) {} r.current = {}; };
   useEffect(() => limpar, []);
-  const falhar = msg => { limpar(); setNivel(0); setErro(msg); setEstado("erro"); vibrar("aviso"); };
-
-  const nativo = () => {
-    const rec = new (SRec())();
+  const falhar = (msg, teclado) => { limpar(); setNivel(0); setErro(msg); setEstado("erro"); vibrar("aviso"); if (teclado) cb.current.onFalhou(); };
+  const iniciar = () => {
+    limpar(); setErro(""); setNivel(0);
+    const SR = SRec();
+    if (!SR) return false;
+    let texto = "", fim = false, ouviu = false;
+    const rec = new SR();
     rec.lang = "pt-BR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
-    let texto = "", fim = false;
     const x = r.current = { rec };
-    x.decai = setInterval(() => setNivel(n => n > .16 ? n * .82 : .12 + Math.random() * .06), 110);
-    rec.onspeechstart = () => setEstado("falando");
+    x.decai = setInterval(() => setNivel(n => n > .18 ? n * .8 : .1 + Math.random() * .08), 110);
+    // Se em 7 s nada chegar (nem erro), o aparelho travou o microfone: oferece o teclado
+    x.vigia = setTimeout(() => { if (!ouviu && !fim) { fim = true; gravar(K_VOZ_TECLADO, true); falhar("O aparelho não liberou o reconhecimento de voz aqui. Use o microfone do teclado: funciona igual.", true); } }, 7000);
     rec.onresult = e => {
+      ouviu = true; clearTimeout(x.vigia); apagar(K_VOZ_TECLADO);
       texto = [...e.results].map(y => y[0].transcript).join(" ");
-      setEstado("falando"); setNivel(.6 + Math.random() * .4);
+      setEstado("falando"); setNivel(.65 + Math.random() * .35);
       cb.current.onParcial(texto);
     };
+    rec.onspeechstart = () => setEstado("falando");
     rec.onerror = e => {
       if (fim || e.error === "aborted") return; fim = true;
-      if (e.error === "no-speech") falhar("Não ouvi nada. Toque no círculo para tentar de novo.");
-      else if (e.error === "not-allowed" || e.error === "service-not-allowed") falhar("O microfone está bloqueado. Libere nas configurações do navegador e toque no círculo.");
-      else falhar("Não consegui ouvir agora. Toque no círculo ou escreva embaixo.");
+      if (e.error === "no-speech") falhar("Não ouvi nada. Toque no microfone para tentar de novo.");
+      else if (e.error === "not-allowed" || e.error === "service-not-allowed") { gravar(K_VOZ_TECLADO, true); falhar("O microfone não foi liberado. Use o microfone do teclado: funciona igual.", true); }
+      else falhar("Não consegui ouvir agora. Toque no microfone para tentar de novo.");
     };
     rec.onend = () => {
       if (fim) return; fim = true;
-      const t = texto.trim(); clearInterval(x.decai); setNivel(0); r.current = {};
-      if (t) { setEstado("parado"); cb.current.onFinal(t); } else falhar("Não ouvi nada. Toque no círculo para tentar de novo.");
+      const t = texto.trim(); clearInterval(x.decai); clearTimeout(x.vigia); setNivel(0); r.current = {};
+      if (t) { setEstado("parado"); cb.current.onFinal(t); } else falhar("Não ouvi nada. Toque no microfone para tentar de novo.");
     };
-    try { rec.start(); setEstado("ouvindo"); } catch (e) { falhar("Não consegui abrir o microfone. Toque no círculo para tentar de novo."); }
+    try { rec.start(); setEstado("ouvindo"); return true; }
+    catch (e) { falhar("Não consegui abrir o microfone. Toque nele de novo.", false); return true; }
   };
-
-  const ligarProcessador = () => {
-    const x = r.current, ctx = x.ctx;
-    const src = ctx.createMediaStreamSource(x.stream), proc = ctx.createScriptProcessor(4096, 1, 1);
-    const taxa = ctx.sampleRate, dt = 4096 / taxa, partes = [];
-    let t = 0, chao = 0, nChao = 0, falou = false, ultimaVoz = 0, inicio = 0, ultimoEnvio = 0, emVoo = false, seq = 0, mostrado = 0, terminou = false;
-    // só o pedaço com fala (sem o silêncio do começo e do fim): menos dados e transcrição mais certa
-    const audioDesde = () => wavBase64(partes.slice(Math.max(0, Math.floor((inicio - .45) / dt)), Math.ceil((ultimaVoz + .5) / dt) + 1), taxa);
-    let mostrandoFala = false;
-    const parcial = () => {
-      emVoo = true; const meu = ++seq;
-      transcrever(audioDesde()).then(txt => { if (!terminou && !x.morto && txt && meu > mostrado) { mostrado = meu; cb.current.onParcial(txt); } }).catch(() => {}).finally(() => { emVoo = false; });
-    };
-    const finalizar = () => {
-      if (terminou) return; terminou = true;
-      desligarMic(); setNivel(0);
-      if (!falou) { falhar("Não ouvi nada. Toque no círculo para tentar de novo."); return; }
-      setEstado("pensando");
-      transcrever(audioDesde()).then(txt => {
-        if (x.morto) return;
-        r.current = {};
-        if (txt) { setEstado("parado"); cb.current.onFinal(txt); } else falhar("Não entendi. Toque no círculo e fale de novo, ou escreva embaixo.");
-      }).catch(e => { if (!x.morto) falhar(ERRO_VOZ[e.message] || "Não consegui transcrever agora. Confira a internet ou escreva embaixo."); });
-    };
-    proc.onaudioprocess = e => {
-      if (terminou) return;
-      const d = e.inputBuffer.getChannelData(0); partes.push(new Float32Array(d));
-      let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i];
-      const rms = Math.sqrt(s / d.length); t += dt;
-      if (t < .45) { chao += rms; nChao++; return; }
-      const limiar = Math.max(.012, (chao / Math.max(1, nChao)) * 2.6);
-      setNivel(Math.min(1, rms / (limiar * 5)));
-      if (rms > limiar) { falou = falou || (inicio = t - dt, true); ultimaVoz = t; }
-      const falandoAgora = falou && t - ultimaVoz < .35;
-      if (falandoAgora !== mostrandoFala) { mostrandoFala = falandoAgora; setEstado(falandoAgora ? "falando" : "ouvindo"); }
-      if (falandoAgora && !emVoo && t - ultimoEnvio > 1.4 && t - inicio > .9) { ultimoEnvio = t; parcial(); }
-      if ((falou && t - ultimaVoz > 1.35) || t > 25 || (!falou && t > 8)) finalizar();
-    };
-    src.connect(proc); proc.connect(ctx.destination);
-    Object.assign(x, { src, proc, finalizar });
-    setEstado("ouvindo");
-  };
-
-  const servidor = async () => {
-    setEstado("pedindo");
-    const x = r.current = {};
-    let stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
-    catch (e) {
-      return falhar(e && e.name === "NotAllowedError"
-        ? (ehIOS() ? "O microfone foi bloqueado. Toque no círculo e escolha Permitir. Se não perguntar: Ajustes do iPhone → Apps → Safari → Microfone → Perguntar." : "O microfone foi bloqueado. Libere nas configurações do navegador e toque no círculo.")
-        : "Não encontrei o microfone do aparelho.");
-    }
-    if (x.morto) { stream.getTracks().forEach(t => t.stop()); return; }
-    prepararAudio();
-    x.stream = stream; x.ctx = CTX_VOZ;
-    if (!x.ctx) return falhar("Este navegador não deixa gravar áudio. Escreva embaixo.");
-    try { if (x.ctx.state !== "running") await comPrazo(x.ctx.resume(), 700); } catch (e) {}
-    if (x.ctx.state !== "running") { setEstado("toque"); return; }
-    ligarProcessador();
-  };
-
-  const iniciar = () => {
-    limpar(); setErro(""); setNivel(0);
-    if (modo === "nativo") nativo();
-    else if (modo === "servidor") servidor();
-    else falhar(ehIOS() && appInstalado()
-      ? "Para falar no iPhone, ligue o servidor de avisos (bash servidor-avisos/instalar-avisos.sh). Enquanto isso, escreva embaixo ou use o microfone do teclado."
-      : "Este navegador não tem reconhecimento de voz. Escreva embaixo ou use o microfone do teclado.");
-  };
-  // tocar no círculo: começa, libera o som (iPhone) ou termina antes
-  const tocar = () => {
-    if (estado === "toque") { prepararAudio(); const x = r.current; (x.ctx ? x.ctx.resume() : Promise.resolve()).then(() => r.current === x && !x.morto && ligarProcessador()).catch(() => {}); return; }
-    if (estado === "erro" || estado === "parado") { prepararAudio(); iniciar(); return; }
-    if (estado === "ouvindo" || estado === "falando") parar();
-  };
-  const parar = () => {
-    const x = r.current;
-    if (x.rec) { try { x.rec.stop(); } catch (e) {} }
-    else if (x.finalizar) x.finalizar();
-  };
-  const cancelar = () => { limpar(); setNivel(0); setEstado("parado"); };
-  return { estado, erro, nivel, modo, iniciar, tocar, parar, cancelar };
+  const parar = () => { try { r.current.rec && r.current.rec.stop(); } catch (e) {} };
+  const cancelar = () => { limpar(); setNivel(0); setErro(""); setEstado("parado"); };
+  return { estado, erro, nivel, iniciar, parar, cancelar };
 }
 
 // Avisos: banner dentro do app + som + vibração; notificação do sistema quando o aparelho permitir
@@ -2204,18 +2071,9 @@ function ContasTab({ db, act, tema }) {
   );
 }
 
-/* ---------- Anotar falando (tela cheia com o orb) ---------- */
-function Orb({ estado, nivel, onClick }) {
-  return (
-    <button type="button" className={"orb " + estado} style={{ "--n": Math.max(0, Math.min(1, nivel)).toFixed(3) }} onClick={onClick}
-      aria-label={estado === "ouvindo" || estado === "falando" ? "Terminar agora" : estado === "toque" ? "Tocar para começar a ouvir" : estado === "pensando" ? "Entendendo" : "Falar de novo"}>
-      <i className="orb-glow" /><i className="orb-ring" /><i className="orb-ring r2" />
-      <span className="orb-core"><i className="orb-swirl" /><i className="orb-shine" /></span>
-      {(estado === "toque" || estado === "erro" || estado === "parado") && <span className="orb-ic"><I.mic /></span>}
-    </button>
-  );
-}
-// número que "corre" até o valor novo
+/* ---------- Falar na própria tela (sem abrir janela) ----------
+   O botão de microfone da barra de baixo acende um degradê colorido de baixo para cima,
+   e o que você fala vai aparecendo ali mesmo, com o valor, a categoria e a data. */
 function useContagem(alvo) {
   const [v, setV] = useState(alvo);
   const de = useRef(alvo);
@@ -2228,107 +2086,97 @@ function useContagem(alvo) {
   return v;
 }
 const quandoTxt = off => off === 2 ? "Anteontem" : off === 1 ? "Ontem" : "Hoje";
+const reais = v => (Math.round(v * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function VozSheet({ modo, onSalvar, onEditar, onClose }) {
+function VozBarra({ api, onSalvar, onEditar, onAtivo }) {
+  const [ativo, setAtivo] = useState(false);
+  const [fase, setFase] = useState("ouvindo"); // ouvindo | teclado | contando | faltando
   const [texto, setTexto] = useState("");
   const [itens, setItens] = useState([]);
-  const [fase, setFase] = useState("ouvindo"); // ouvindo | contando | faltando
   const [conta, setConta] = useState(3);
-  const [escrito, setEscrito] = useState("");
+  const tecRef = useRef(null);
+  const ocioso = useRef(null);
   const aplicar = t => { setTexto(t); setItens(interpretarVarios(t)); };
   const concluir = t => {
     aplicar(t);
-    if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la|nada)\b/.test(semAcento(t))) { vibrar("aviso"); onClose(); return; }
+    if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la)\b/.test(semAcento(t))) { fechar(); return; }
     const its = interpretarVarios(t);
-    if (its.length && its.every(i => i.valor > 0)) { setConta(3); setFase("contando"); vibrar("ok"); } else { setFase("faltando"); vibrar("aviso"); }
+    if (its.length && its.every(i => i.valor > 0)) { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); }
+    else { setFase("faltando"); vibrar("aviso"); }
   };
-  const ouvido = useOuvido({ onParcial: aplicar, onFinal: concluir });
-  useEffect(() => { ouvido.iniciar(); const prev = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = prev; }; }, []);
-  useEffect(() => { const k = e => e.key === "Escape" && onClose(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, []);
+  const fala = useFalaNativa({ onParcial: aplicar, onFinal: concluir, onFalhou: () => setFase("teclado") });
+  const abrirTeclado = () => { fala.cancelar(); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
+  // Chamado direto no toque do botão (o iPhone só libera microfone e teclado dentro do toque)
+  const comecar = () => {
+    clearTimeout(ocioso.current);
+    setTexto(""); setItens([]); setAtivo(true);
+    const usarTeclado = !SRec() || lerJSON(K_VOZ_TECLADO, false);
+    if (usarTeclado) { abrirTeclado(); return; }
+    setFase("ouvindo");
+    fala.iniciar();
+  };
+  const fechar = () => { fala.cancelar(); clearTimeout(ocioso.current); if (tecRef.current) tecRef.current.blur(); setAtivo(false); setFase("ouvindo"); };
+  const salvar = () => { const its = itens; fechar(); onSalvar(its); };
+  // toque no microfone com ele aceso
+  const tocar = () => {
+    if (!ativo) return comecar();
+    if (fase === "contando") return salvar();
+    if (fase === "teclado") { const t = tecRef.current ? tecRef.current.value : ""; return t.trim() ? concluir(t) : fechar(); }
+    if (fala.estado === "ouvindo" || fala.estado === "falando") return fala.parar();
+    comecar();
+  };
+  api.current = { tocar, comecar, fechar };
+  useEffect(() => { onAtivo(ativo ? fase : ""); }, [ativo, fase]);
   useEffect(() => {
     if (fase !== "contando") return;
-    if (conta <= 0) { onSalvar(itens); return; }
+    if (conta <= 0) { salvar(); return; }
     const t = setTimeout(() => setConta(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [fase, conta]);
-  const deNovo = () => { setFase("ouvindo"); setTexto(""); setItens([]); prepararAudio(); ouvido.iniciar(); };
-  const tocarOrb = () => { if (fase !== "ouvindo") { deNovo(); return; } ouvido.tocar(); };
-  const enviarEscrito = e => { e.preventDefault(); if (!escrito.trim()) return; ouvido.cancelar(); concluir(escrito); setEscrito(""); };
+  useEffect(() => { if (!ativo) return; const k = e => e.key === "Escape" && fechar(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [ativo]);
+  // ditado pelo teclado: entende enquanto escreve e conclui depois de uma pausa
+  const digitou = e => {
+    const t = e.target.value; aplicar(t);
+    clearTimeout(ocioso.current);
+    if (interpretarVarios(t).some(i => i.valor > 0)) ocioso.current = setTimeout(() => concluir(t), 2600);
+  };
 
-  const atual = itens[itens.length - 1] || { valor: 0, cat: null, desc: "", off: 0, tipo: "saida" };
   const varios = itens.length > 1;
-  const valorVisto = useContagem(varios ? soma(itens, x => x.valor) : atual.valor || 0);
-  const est = ouvido.estado;
-  const orbEstado = fase === "contando" ? "pronto" : fase === "faltando" ? "erro" : est;
+  const atual = itens[itens.length - 1] || { valor: 0, cat: null, desc: "", off: 0, tipo: "saida" };
+  const valorVisto = useContagem(varios ? soma(itens, i => i.valor) : atual.valor || 0);
+  const est = fala.estado;
   const temCat = atual.cat && atual.cat !== "outros" && atual.cat !== "outros-e";
-  const passos = [
-    { ok: !!texto, ativo: !texto, txt: est === "pedindo" ? "Abrindo o microfone…" : est === "toque" ? "Toque no círculo para eu começar a ouvir" : est === "pensando" && !texto ? "Entendendo o que você falou…" : texto ? "Ouvi você" : "Ouvindo… pode falar" },
-    { ok: atual.valor > 0, ativo: !!texto && !atual.valor, txt: atual.valor > 0 ? `Valor: ${brlReal(atual.valor)}` : "Procurando o valor" },
-    { ok: temCat || !!atual.desc, ativo: atual.valor > 0 && !temCat, txt: temCat ? `Categoria: ${catDe(atual.cat).nome}` : atual.desc ? `Onde: ${atual.desc}` : "Procurando a categoria" },
-    { ok: atual.valor > 0, ativo: false, txt: `Quando: ${quandoTxt(atual.off).toLowerCase()}` },
-    { ok: false, ativo: fase === "contando", txt: fase === "contando" ? `Salvando em ${conta}…` : itens.length > 1 ? `Anotar os ${itens.length}` : "Anotar" },
-  ];
-  const dica = est === "pensando" ? "Entendendo…" : est === "falando" ? "Estou ouvindo" : est === "ouvindo" ? "Pode falar" : est === "toque" ? "Toque para começar" : est === "pedindo" ? "Um instante…" : "";
-  return createPortal(
-    <div className={"voz" + (atual.tipo === "entrada" ? " in" : "")} data-mode={modo} role="dialog" aria-modal="true" aria-label="Anotar falando">
-      <div className="voz-top">
-        <button className="icon-btn" onClick={onClose} aria-label="Fechar"><I.x /></button>
-        <span className="voz-tag">{fase === "contando" ? "Entendi" : fase === "faltando" ? "Faltou algo" : dica || "Anotar falando"}</span>
-        <span style={{ width: 44 }} />
-      </div>
-
-      <div className="voz-centro">
-        <Orb estado={orbEstado} nivel={ouvido.nivel} onClick={tocarOrb} />
-        <div className={"voz-valor" + (atual.valor > 0 ? " on" : "")} aria-live="polite">
-          {atual.valor > 0 ? <><small>{varios ? "total R$" : atual.tipo === "entrada" ? "+ R$" : "R$"}</small>{(Math.round(valorVisto * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</> : <span>{est === "erro" ? "" : "Diga o valor e onde foi"}</span>}
-        </div>
-        {atual.valor > 0 && !varios && (
-          <div className="voz-chips">
-            <span className="voz-chip" style={catVars(catDe(atual.cat))}><i className="ci"><CatIcon cat={catDe(atual.cat)} /></i>{atual.desc || catDe(atual.cat).nome}</span>
-            <span className="voz-chip">{quandoTxt(atual.off)}</span>
-            <span className="voz-chip">{atual.tipo === "entrada" ? "Entrada" : "Gasto"}</span>
+  const status = fase === "contando" ? `Entendi · salvando em ${conta}`
+    : fase === "faltando" ? (atual.valor > 0 ? "Faltou o valor de alguma coisa" : "Não peguei o valor")
+    : fase === "teclado" ? "Toque no microfone do teclado e fale"
+    : est === "erro" ? "" : est === "falando" ? "Ouvindo…" : "Pode falar";
+  return (
+    <>
+      <input ref={tecRef} className={"voz-tec" + (ativo && fase === "teclado" ? " on" : "")} tabIndex={ativo && fase === "teclado" ? 0 : -1} type="text" enterKeyHint="done" autoComplete="off" autoCorrect="on"
+        placeholder="Ex.: gastei 32 e 50 no mercado" aria-label="Fale ou escreva o gasto" onChange={digitou}
+        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(ocioso.current); if (e.target.value.trim()) concluir(e.target.value); } }} />
+      {ativo && <div className={"vozb " + (fase === "contando" ? "pronto" : fase === "faltando" || est === "erro" ? "erro" : est) + (fase === "teclado" ? " teclado" : "")} style={{ "--n": fala.nivel.toFixed(3) }} aria-live="polite">
+        <div className="vozb-sombra" aria-hidden="true"><i /><i /><i /></div>
+        <div className="vozb-conteudo">
+          {atual.valor > 0 && <div className={"vozb-valor" + (atual.tipo === "entrada" ? " in" : "")} key={varios ? "v" : atual.cat}><small>{varios ? `${itens.length} anotações · R$` : atual.tipo === "entrada" ? "+ R$" : "R$"}</small>{reais(valorVisto)}</div>}
+          {atual.valor > 0 && !varios && <div className="vozb-chips">
+            <span style={catVars(catDe(atual.cat))}><i className="ci"><CatIcon cat={catDe(atual.cat)} /></i>{atual.desc || catDe(atual.cat).nome}</span>
+            <span>{quandoTxt(atual.off)}</span>
+            {temCat || atual.tipo === "entrada" ? <span>{atual.tipo === "entrada" ? "Entrada" : "Gasto"}</span> : null}
+          </div>}
+          {varios && <div className="vozb-lista">{itens.map((it, i) => <span key={i}>{it.desc || catDe(it.cat).nome} <b>{brlReal(it.valor)}</b></span>)}</div>}
+          <p className="vozb-fala">{texto ? texto : est === "erro" ? fala.erro : fase === "teclado" ? "" : "Diga o valor e onde foi"}</p>
+          {status && <div className="vozb-status">{fase !== "contando" && fase !== "faltando" && est !== "erro" && <i className="vozb-onda"><b /><b /><b /><b /></i>}{status}</div>}
+          <div className="vozb-acoes">
+            {fase === "contando" && <button className="pill-btn forte" onClick={salvar} style={{ "--k": conta / 3 }}><I.check /> Salvar agora</button>}
+            {fase === "contando" && itens.length === 1 && <button className="pill-btn" onClick={() => { const it = itens[0]; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
+            {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn forte" onClick={comecar}><I.mic /> Falar de novo</button>}
+            {(est === "erro" || fase === "faltando") && fase !== "teclado" && <button className="pill-btn" onClick={abrirTeclado}>Usar o teclado</button>}
+            <button className="pill-btn" onClick={fechar}>Cancelar</button>
           </div>
-        )}
-        <p className={"voz-fala" + (texto ? "" : " vazio")}>{texto ? <>“{texto}”</> : est === "erro" ? "" : <>Ex.: “gastei 32 e 50 no mercado” ou “paguei 120 de luz ontem”</>}</p>
-        {ouvido.erro && fase === "ouvindo" && <div className="voz-erro"><I.alert /><span>{ouvido.erro}</span></div>}
-        {fase === "faltando" && <div className="voz-erro"><I.alert /><span>{atual.valor > 0 ? "Faltou o valor de alguma coisa." : "Não peguei o valor."} Toque no círculo e fale de novo, ou escreva embaixo.</span></div>}
-      </div>
-
-      {itens.length > 1 && (
-        <div className="voz-lista">
-          {itens.map((it, i) => (
-            <div key={i} className="voz-item" style={catVars(catDe(it.cat))}>
-              <i className="ci"><CatIcon cat={catDe(it.cat)} /></i>
-              <span>{it.desc || catDe(it.cat).nome}<small>{quandoTxt(it.off)}</small></span>
-              <b className={it.tipo === "entrada" ? "in" : ""}>{it.tipo === "entrada" ? "+" : ""}{brlReal(it.valor)}</b>
-            </div>
-          ))}
         </div>
-      )}
-
-      <ol className="voz-passos">
-        {passos.map((p, i) => <li key={i} className={p.ok ? "ok" : p.ativo ? "ativo" : ""}><i>{p.ok ? <I.check /> : null}</i>{p.txt}</li>)}
-      </ol>
-
-      <div className="voz-base">
-        {fase === "contando" ? <>
-          <button className="btn mode voz-salvar" onClick={() => onSalvar(itens)} style={{ "--k": conta / 3 }}>
-            <span className="voz-anel" aria-hidden="true" /><I.check /> Salvar agora
-          </button>
-          <div className="btn-row">
-            {itens.length === 1 && <button className="btn ghost" onClick={() => onEditar(itens[0])}><I.pencil /> Ajustar</button>}
-            <button className="btn ghost" onClick={() => { setFase("faltando"); onClose(); }}>Cancelar</button>
-          </div>
-        </> : <>
-          {(est === "ouvindo" || est === "falando") && <div className="hint" style={{ textAlign: "center" }}>Eu paro sozinho quando você terminar de falar.</div>}
-          <form className="voice" onSubmit={enviarEscrito}>
-            <input value={escrito} onChange={e => setEscrito(e.target.value)} placeholder="Ou escreva aqui: gastei 32 na padaria" enterKeyHint="done" autoComplete="off" aria-label="Escrever o gasto" />
-            <button type="submit" className="mic" aria-label="Anotar o que escrevi"><I.send /></button>
-          </form>
-        </>}
-      </div>
-    </div>,
-    document.body
+      </div>}
+    </>
   );
 }
 
@@ -2357,7 +2205,7 @@ function LancSheet({ inicial, pre, tipo: tipo0, onVoz, onSave, onDelete, onClose
       {!inicial && <>
         <div className="voice">
           <input id="l-frase" value={frase} onChange={e => aplicar(e.target.value)} placeholder='Fale ou escreva: "gastei 32 na padaria"' enterKeyHint="done" autoComplete="off" aria-label="Descreva o gasto em uma frase" />
-          <button type="button" className="mic" onClick={() => { prepararAudio(); onVoz(); }} aria-label="Falar"><I.mic /></button>
+          <button type="button" className="mic" onClick={onVoz} aria-label="Falar"><I.mic /></button>
         </div>
         {entendi && entendi.valor > 0 && <div className="voice-ok"><I.check /><span>Entendi: {entendi.tipo === "entrada" ? "entrada" : "gasto"} de {brlReal(entendi.valor)} em {catDe(entendi.cat).nome}{entendi.off ? (entendi.off === 1 ? ", ontem" : ", anteontem") : ", hoje"}. Confira e salve.</span></div>}
       </>}
@@ -3352,6 +3200,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const [, setFerVer] = useState(0);
   const [meusFundos, setMeusFundos] = useState([]);
   const [push, setPush] = useState(() => pushLigado());
+  const [vozAtiva, setVozAtiva] = useState(false);
+  const vozApi = useRef({});
   CLIMA = clima;
   const tRef = useRef(null);
   useEffect(() => {
@@ -3369,7 +3219,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   // Atalhos por link: ...#gasto abre o gasto por voz, #agora o "Só o agora", #fechar o "Fechar o dia", #livres os horários livres
   useEffect(() => {
     const h = (location.hash || "").slice(1);
-    if (h === "gasto" && usaPessoal) { act.setModo("pessoal"); setSheet({ type: "voz" }); }
+    if (h === "gasto" && usaPessoal) { act.setModo("pessoal"); setTimeout(() => vozApi.current.comecar && vozApi.current.comecar(), 400); }
     else if (h === "agora") setFoco(true);
     else if (h === "fechar") setSheet({ type: "fechar" });
     else if (h === "livres") setSheet({ type: "livres" });
@@ -3522,7 +3372,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       } catch (e) { return e.message; }
     },
     setServidor: url => { gravar(K_PUSH_URL, url.trim()); },
-    falarGasto: () => { prepararAudio(); setSheet({ type: "voz" }); },
+    falarGasto: () => { if (sheet) close(); vozApi.current.comecar && vozApi.current.comecar(); },
     salvarVoz: itens => {
       const novos = itens.map(it => ({ id: uid(), tipo: it.tipo, valor: it.valor, cat: it.cat, desc: it.desc || "", data: addDays(todayISO(), -(it.off || 0)) }));
       const ids = new Set(novos.map(n => n.id));
@@ -3669,6 +3519,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         {tabEf === "p-contas" && <ContasTab db={db} act={act} tema={tema} />}
       </main>
 
+      {usaPessoal && <VozBarra api={vozApi} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />}
       <nav className="nav" aria-label="Seções">
         <div className="nav-pill">
           {abas.map(a => (
@@ -3677,7 +3528,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
             </button>
           ))}
         </div>
-        {modoEf === "pessoal" && <button className="nav-plus" onClick={() => act.novoLanc("saida")} aria-label="Anotar gasto"><I.plus /></button>}
+        {usaPessoal && <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva ? "Terminar" : "Falar um gasto"}>{vozAtiva === "contando" ? <I.check /> : vozAtiva ? <span className="nav-mic-onda"><b /><b /><b /></span> : <I.mic />}</button>}
       </nav>
 
       {sheet && sheet.type === "session" && <SessionSheet key={sheet.item.patient.id + sheet.item.date + sheet.item.kind} db={db} item={sheet.item} onClose={close} act={act} />}
@@ -3693,7 +3544,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
       {foco && <Agora db={db} conta={conta} now={now} onClose={() => setFoco(false)} act={act} />}
       {sheet && sheet.type === "lanc" && <LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} />}
-      {sheet && sheet.type === "voz" && <VozSheet modo={modoEf} onSalvar={act.salvarVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} onClose={close} />}
       {sheet && sheet.type === "conta" && <ContaSheet key={sheet.id || "nova"} inicial={contaSel} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} />}
 
       {toast && (

@@ -113,9 +113,9 @@ Para adicionar um fundo novo: coloque `meu-fundo.jpg` e `meu-fundo-mini.jpg` em 
 - Tudo do app: agenda, cobranças, modo Pessoal, perguntas iniciais, fundos com vidro, temas claro e escuro.
 - Abrir sem internet depois de instalado.
 - Clima pela [Open-Meteo](https://open-meteo.com) e feriados pela [BrasilAPI](https://brasilapi.com.br), ambas gratuitas e sem chave. Sem internet, os feriados são calculados no próprio app.
-- Voz no Android/computador pelo reconhecimento do próprio navegador. No iPhone com o app instalado, a voz passa pelo servidor-avisos (a Apple não libera o reconhecimento do Safari para apps da tela inicial).
+- Voz pelo reconhecimento do próprio aparelho (sem servidor). Se o aparelho não liberar, o app abre o ditado do teclado.
 - Notificações do celular **com o app fechado** ("Sessão em 15 min", "A luz vence amanhã", resumo do dia, fechar o dia), depois de ligar o servidor de avisos (veja abaixo). Teste em Ajustes → Avisos → Testar em 10 s.
-- **Anotar falando sem tocar em nada**: abre já ouvindo, para sozinho quando você termina, mostra ao vivo o que entendeu (valor, categoria, data) e salva sozinho em 3 segundos, com Desfazer. Entende várias coisas numa frase ("gastei 30 no mercado e 12 de uber").
+- **Falar um gasto pelo microfone da barra de baixo**: começa a ouvir no toque, para sozinho quando você termina, mostra ao vivo o que entendeu (valor, categoria, data) e salva sozinho em 3 segundos, com Desfazer. Entende várias coisas numa frase ("gastei 30 no mercado e 12 de uber").
 - Número de pendências no ícone do app, toque leve (háptico) no iPhone, tela acesa no "Só o agora".
 - Tela cheia no iPhone com o app instalado (sem faixa preta embaixo).
 - Foto de perfil e até 10 fundos próprios, com recorte (arrastar e zoom). Os fundos ficam guardados no aparelho.
@@ -134,8 +134,8 @@ bash servidor-avisos/instalar-avisos.sh
 
 O comando abre o navegador para você entrar na Cloudflare (crie a conta grátis se não tiver), publica o servidor e avisa o GitHub do endereço. Depois, no celular: abra o app pelo ícone → Ajustes → Avisos → **Ligar avisos com o app fechado** → Permitir. No iPhone precisa do iOS 16.4 ou mais novo e do app instalado na tela inicial. As chaves ficam em `servidor-avisos/.chaves.json`, que nunca vai para o GitHub (não apague: sem elas os aparelhos precisam ligar os avisos de novo).
 
-### Anotar falando no iPhone
-A Apple não deixa apps instalados na tela inicial usarem o reconhecimento de voz do Safari. Por isso, no iPhone, o app grava só enquanto você fala, percebe sozinho quando você parou e manda o trecho para o servidor-avisos transcrever (Whisper, dentro do plano gratuito da Cloudflare, que dá algumas horas de fala por dia). O áudio não fica guardado. Depois de atualizar, rode de novo `bash servidor-avisos/instalar-avisos.sh` uma vez para ligar essa parte.
+### Falar um gasto
+Toque no microfone da barra de baixo e fale ("gastei 32 e 50 no mercado"). Um degradê colorido sobe do pé da tela e o que você fala aparece ali mesmo, sem abrir janela. Usa o reconhecimento de voz do próprio aparelho, sem servidor. Se o aparelho não liberar o reconhecimento (acontece em alguns iPhones com o app instalado), o app abre o teclado: toque no microfone do teclado e fale, que funciona igual.
 
 ### Próximo passo recomendado: Supabase (plano gratuito)
 1. **Login de verdade** com e-mail e senha (Supabase Auth).

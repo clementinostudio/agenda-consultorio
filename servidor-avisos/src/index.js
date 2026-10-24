@@ -7,9 +7,6 @@
   - O app manda a lista dos próximos avisos (horário + texto) para /agendar.
   - A cada minuto o servidor confere a lista e envia os avisos daquele minuto.
   - O texto vai criptografado de ponta a ponta até o seu aparelho (RFC 8291).
-  - /ouvir transcreve o "anotar falando" (Whisper do Workers AI, dentro do plano gratuito).
-    O iPhone não deixa apps da tela inicial usarem o reconhecimento de voz do Safari, então o áudio vem para cá.
-    O áudio não é guardado: transcreve e devolve o texto.
 */
 
 const CHAVE = "dados"; // tudo fica numa chave só do KV (um app pessoal, poucos aparelhos)
@@ -78,21 +75,6 @@ export default {
 
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
-
-    // Transcreve um trecho de fala (WAV 16 kHz em base64)
-    if (url.pathname === "/ouvir") {
-      if (!permitida) return json({ erro: "origem" }, 403);
-      if (!env.AI) return json({ erro: "sem-ia" }, 501);
-      const audio = typeof b.audio === "string" ? b.audio : "";
-      if (audio.length < 200 || audio.length > 2800000) return json({ erro: "audio" }, 400);
-      try {
-        const r = await env.AI.run("@cf/openai/whisper-large-v3-turbo", {
-          audio, task: "transcribe", language: "pt",
-          initial_prompt: "Anotação de gastos em reais. Gastei 32 reais e 50 centavos no mercado. Paguei 120 de luz ontem. Recebi 200 de Pix.",
-        });
-        return json({ ok: true, texto: String((r && r.text) || "").trim() });
-      } catch (e) { return json({ erro: "ia" }, 502); }
-    }
 
     const id = limpar(b.id, 64);
     if (!id) return json({ erro: "Falta o id" }, 400);
