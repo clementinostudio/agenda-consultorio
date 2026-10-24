@@ -3,5 +3,7 @@
   "name": "agenda-avisos",
   "main": "src/index.js",
   "compatibility_date": "2026-09-01",
-  "triggers": { "crons": ["* * * * *"] }
+  "triggers": { "crons": ["* * * * *"] },
+  // Transcrição de voz (Workers AI, plano gratuito)
+  "ai": { "binding": "AI" }
 }

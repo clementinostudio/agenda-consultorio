@@ -108,7 +108,28 @@ const imagemFundo = (f, meus = []) => !f ? null : f.id === "meu" ? f.img : f.id.
 // Vibração do celular (Android; o iPhone não deixa sites vibrarem)
 let VIBRAR = true;
 const VIB = { toque: 8, ok: [14, 50, 14], aviso: [28, 40, 28], erro: [60, 40, 60] };
-const vibrar = (tipo = "toque") => { if (!VIBRAR) return; try { navigator.vibrate && navigator.vibrate(VIB[tipo] || 8); } catch (e) {} };
+// iPhone: o Safari não tem vibração, mas dá um toquinho (háptico) quando um interruptor nativo muda.
+// O app guarda um interruptor invisível e "aperta" ele no toque (funciona a partir do iOS 18).
+let HAPTICO = null;
+function hapticoIOS(vezes) {
+  try {
+    if (!HAPTICO) {
+      const inp = document.createElement("input"); inp.type = "checkbox"; inp.setAttribute("switch", ""); inp.id = "haptico-sw"; inp.tabIndex = -1; inp.setAttribute("aria-hidden", "true");
+      const lab = document.createElement("label"); lab.htmlFor = "haptico-sw"; lab.setAttribute("aria-hidden", "true");
+      inp.style.cssText = lab.style.cssText = "position:fixed;left:-200px;top:0;width:1px;height:1px;opacity:0;pointer-events:none";
+      document.body.append(inp, lab); HAPTICO = lab;
+    }
+    HAPTICO.click();
+    for (let i = 1; i < vezes; i++) setTimeout(() => HAPTICO && HAPTICO.click(), i * 110);
+  } catch (e) {}
+}
+const vibrar = (tipo = "toque") => {
+  if (!VIBRAR) return;
+  try {
+    if (navigator.vibrate) navigator.vibrate(VIB[tipo] || 8);
+    else if (/iPhone|iPad|iPod/.test(navigator.userAgent)) hapticoIOS(tipo === "toque" ? 1 : 2);
+  } catch (e) {}
+};
 
 // A área que rola fica dentro do app (assim a barra de baixo nunca sai do lugar)
 const rolarTopo = () => window.scrollTo(0, 0);
@@ -488,26 +509,216 @@ function interpretarFala(frase) {
   return { tipo: entrada ? "entrada" : "saida", valor, cat, desc, off };
 }
 
-// Microfone do navegador (quando o navegador deixar)
-function useFala(onTexto) {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const [ouvindo, setOuvindo] = useState(false);
+// Várias anotações numa frase só: "gastei 30 no mercado e 12 de uber"
+const VERBO_FALA = /\b(gastei|paguei|comprei|recebi|ganhei|entrou|vendi|caiu|me pagou|me pagaram)\b/;
+function interpretarVarios(frase) {
+  const t = numerosPorExtenso(semAcento(frase || "")).replace(/\s+/g, " ").trim();
+  if (!t) return [];
+  const geral = interpretarFala(t);
+  const cortes = [...t.matchAll(/\s*(?:,|;|\be\b|\bmais\b|\btambem\b|\bdepois\b)\s+/g)];
+  const partes = []; let ini = 0;
+  for (const c of cortes) {
+    const esq = t.slice(ini, c.index).trim(), dir = t.slice(c.index + c[0].length);
+    const r = interpretarFala(esq);
+    // só corta quando o pedaço da esquerda já é uma anotação completa (valor + onde) e a direita tem outro valor
+    if (r.valor > 0 && (r.cat !== "outros" && r.cat !== "outros-e" || r.desc) && /\d/.test(dir) && !/^(?:rs\s*)?\d{1,2}(?:\s*centavos?)?\s*$/.test(dir.trim())) { partes.push(esq); ini = c.index + c[0].length; }
+  }
+  partes.push(t.slice(ini).trim());
+  if (partes.length < 2) return [geral];
+  let ultimoTipo = null;
+  return partes.map(p => {
+    const temVerbo = VERBO_FALA.test(p);
+    const r = interpretarFala(!temVerbo && ultimoTipo === "entrada" ? "recebi " + p : p);
+    if (!/\b(ontem|anteontem|hoje)\b/.test(p)) r.off = geral.off;
+    ultimoTipo = r.tipo;
+    return r;
+  }).filter(r => r.valor > 0);
+}
+
+/* ---------- Ouvir: anotar falando sem tocar em nada ----------
+   - Android e computador: reconhecimento de voz do próprio navegador (texto aparece ao vivo).
+   - iPhone com o app instalado: a Apple não libera o reconhecimento do Safari para apps da tela inicial,
+     então o app grava, percebe sozinho quando você para de falar e manda o áudio para o servidor-avisos
+     transcrever (Whisper, plano gratuito da Cloudflare). O áudio não fica guardado em lugar nenhum. */
+const SRec = () => window.SpeechRecognition || window.webkitSpeechRecognition;
+function modoVoz() {
+  const iosApp = ehIOS() && appInstalado();
+  if (SRec() && !iosApp) return "nativo";
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && servidorAvisos()) return "servidor";
+  return "nenhum";
+}
+// O iPhone só libera o som se o "motor de áudio" nascer num toque: por isso ele é criado no toque do botão
+let CTX_VOZ = null;
+function prepararAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!CTX_VOZ || CTX_VOZ.state === "closed") CTX_VOZ = new AC();
+    if (CTX_VOZ.state !== "running") CTX_VOZ.resume().catch(() => {});
+  } catch (e) {}
+}
+function wavBase64(partes, taxa) {
+  const total = partes.reduce((a, p) => a + p.length, 0);
+  const tudo = new Float32Array(total); let o = 0;
+  for (const p of partes) { tudo.set(p, o); o += p.length; }
+  const alvo = 16000, passo = taxa / alvo, n = Math.floor(total / passo);
+  const buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+  const txt = (pos, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(pos + i, s.charCodeAt(i)); };
+  txt(0, "RIFF"); dv.setUint32(4, 36 + n * 2, true); txt(8, "WAVE"); txt(12, "fmt ");
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, alvo, true);
+  dv.setUint32(28, alvo * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); txt(36, "data"); dv.setUint32(40, n * 2, true);
+  const pcm = new Int16Array(buf, 44, n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(i * passo), b = Math.max(a + 1, Math.min(total, Math.floor((i + 1) * passo)));
+    let s = 0; for (let j = a; j < b; j++) s += tudo[j];
+    const v = Math.max(-1, Math.min(1, s / (b - a)));
+    pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  const u8 = new Uint8Array(buf); let bin = "";
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+// O Whisper às vezes "inventa" frases de legenda quando o áudio é só ruído
+const ALUCINA = /(amara\.org|legendas pela|legendado por|obrigad[oa] por assistir|inscreva-se no canal|tradu[cç][aã]o e legendas)/i;
+async function transcrever(b64) {
+  const r = await comPrazo(fetch(servidorAvisos() + "/ouvir", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio: b64 }) }), 20000);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || "falhou");
+  const t = String(j.texto || "").replace(/\s+/g, " ").trim();
+  return ALUCINA.test(t) ? "" : t;
+}
+const ERRO_VOZ = {
+  "sem-ia": "O servidor ainda não tem a parte de voz. No computador, rode de novo: bash servidor-avisos/instalar-avisos.sh",
+  origem: "O servidor não reconheceu este endereço do app. Rode de novo: bash servidor-avisos/instalar-avisos.sh",
+  tempo: "A internet está lenta. Tente de novo ou escreva embaixo.",
+};
+
+function useOuvido({ onParcial, onFinal }) {
+  const [estado, setEstado] = useState("parado"); // parado | pedindo | toque | ouvindo | falando | pensando | erro
   const [erro, setErro] = useState("");
-  const rec = useRef(null);
-  useEffect(() => () => { try { rec.current && rec.current.abort(); } catch (e) {} }, []);
-  const iniciar = () => {
-    if (!SR) { setErro("Este navegador não tem reconhecimento de voz. Toque no campo e use o microfone do teclado."); return; }
-    try {
-      const r = new SR();
-      r.lang = "pt-BR"; r.interimResults = true; r.maxAlternatives = 1;
-      r.onresult = e => onTexto([...e.results].map(x => x[0].transcript).join(" "));
-      r.onerror = e => { setOuvindo(false); setErro(e.error === "not-allowed" || e.error === "service-not-allowed" ? "O microfone está bloqueado aqui. Toque no campo e use o microfone do teclado: funciona igual." : e.error === "no-speech" ? "Não ouvi nada. Tenta de novo?" : "Não consegui ouvir. Tenta de novo ou use o teclado."); };
-      r.onend = () => setOuvindo(false);
-      rec.current = r; r.start(); setOuvindo(true); setErro("");
-    } catch (e) { setOuvindo(false); setErro("O microfone está bloqueado aqui. Toque no campo e use o microfone do teclado."); }
+  const [nivel, setNivel] = useState(0);
+  const modo = useMemo(modoVoz, []);
+  const r = useRef({});
+  const cb = useRef({}); cb.current = { onParcial, onFinal };
+  const desligarMic = () => {
+    const x = r.current;
+    try { if (x.proc) { x.proc.onaudioprocess = null; x.proc.disconnect(); } } catch (e) {}
+    try { x.src && x.src.disconnect(); } catch (e) {}
+    try { x.stream && x.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    clearInterval(x.decai);
   };
-  const parar = () => { try { rec.current && rec.current.stop(); } catch (e) {} setOuvindo(false); };
-  return { ouvindo, erro, iniciar, parar };
+  const limpar = () => { const x = r.current; x.morto = true; try { x.rec && x.rec.abort(); } catch (e) {} desligarMic(); r.current = {}; };
+  useEffect(() => limpar, []);
+  const falhar = msg => { limpar(); setNivel(0); setErro(msg); setEstado("erro"); vibrar("aviso"); };
+
+  const nativo = () => {
+    const rec = new (SRec())();
+    rec.lang = "pt-BR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+    let texto = "", fim = false;
+    const x = r.current = { rec };
+    x.decai = setInterval(() => setNivel(n => n > .16 ? n * .82 : .12 + Math.random() * .06), 110);
+    rec.onspeechstart = () => setEstado("falando");
+    rec.onresult = e => {
+      texto = [...e.results].map(y => y[0].transcript).join(" ");
+      setEstado("falando"); setNivel(.6 + Math.random() * .4);
+      cb.current.onParcial(texto);
+    };
+    rec.onerror = e => {
+      if (fim || e.error === "aborted") return; fim = true;
+      if (e.error === "no-speech") falhar("Não ouvi nada. Toque no círculo para tentar de novo.");
+      else if (e.error === "not-allowed" || e.error === "service-not-allowed") falhar("O microfone está bloqueado. Libere nas configurações do navegador e toque no círculo.");
+      else falhar("Não consegui ouvir agora. Toque no círculo ou escreva embaixo.");
+    };
+    rec.onend = () => {
+      if (fim) return; fim = true;
+      const t = texto.trim(); clearInterval(x.decai); setNivel(0); r.current = {};
+      if (t) { setEstado("parado"); cb.current.onFinal(t); } else falhar("Não ouvi nada. Toque no círculo para tentar de novo.");
+    };
+    try { rec.start(); setEstado("ouvindo"); } catch (e) { falhar("Não consegui abrir o microfone. Toque no círculo para tentar de novo."); }
+  };
+
+  const ligarProcessador = () => {
+    const x = r.current, ctx = x.ctx;
+    const src = ctx.createMediaStreamSource(x.stream), proc = ctx.createScriptProcessor(4096, 1, 1);
+    const taxa = ctx.sampleRate, dt = 4096 / taxa, partes = [];
+    let t = 0, chao = 0, nChao = 0, falou = false, ultimaVoz = 0, inicio = 0, ultimoEnvio = 0, emVoo = false, seq = 0, mostrado = 0, terminou = false;
+    // só o pedaço com fala (sem o silêncio do começo e do fim): menos dados e transcrição mais certa
+    const audioDesde = () => wavBase64(partes.slice(Math.max(0, Math.floor((inicio - .45) / dt)), Math.ceil((ultimaVoz + .5) / dt) + 1), taxa);
+    let mostrandoFala = false;
+    const parcial = () => {
+      emVoo = true; const meu = ++seq;
+      transcrever(audioDesde()).then(txt => { if (!terminou && !x.morto && txt && meu > mostrado) { mostrado = meu; cb.current.onParcial(txt); } }).catch(() => {}).finally(() => { emVoo = false; });
+    };
+    const finalizar = () => {
+      if (terminou) return; terminou = true;
+      desligarMic(); setNivel(0);
+      if (!falou) { falhar("Não ouvi nada. Toque no círculo para tentar de novo."); return; }
+      setEstado("pensando");
+      transcrever(audioDesde()).then(txt => {
+        if (x.morto) return;
+        r.current = {};
+        if (txt) { setEstado("parado"); cb.current.onFinal(txt); } else falhar("Não entendi. Toque no círculo e fale de novo, ou escreva embaixo.");
+      }).catch(e => { if (!x.morto) falhar(ERRO_VOZ[e.message] || "Não consegui transcrever agora. Confira a internet ou escreva embaixo."); });
+    };
+    proc.onaudioprocess = e => {
+      if (terminou) return;
+      const d = e.inputBuffer.getChannelData(0); partes.push(new Float32Array(d));
+      let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i];
+      const rms = Math.sqrt(s / d.length); t += dt;
+      if (t < .45) { chao += rms; nChao++; return; }
+      const limiar = Math.max(.012, (chao / Math.max(1, nChao)) * 2.6);
+      setNivel(Math.min(1, rms / (limiar * 5)));
+      if (rms > limiar) { falou = falou || (inicio = t - dt, true); ultimaVoz = t; }
+      const falandoAgora = falou && t - ultimaVoz < .35;
+      if (falandoAgora !== mostrandoFala) { mostrandoFala = falandoAgora; setEstado(falandoAgora ? "falando" : "ouvindo"); }
+      if (falandoAgora && !emVoo && t - ultimoEnvio > 1.4 && t - inicio > .9) { ultimoEnvio = t; parcial(); }
+      if ((falou && t - ultimaVoz > 1.35) || t > 25 || (!falou && t > 8)) finalizar();
+    };
+    src.connect(proc); proc.connect(ctx.destination);
+    Object.assign(x, { src, proc, finalizar });
+    setEstado("ouvindo");
+  };
+
+  const servidor = async () => {
+    setEstado("pedindo");
+    const x = r.current = {};
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
+    catch (e) {
+      return falhar(e && e.name === "NotAllowedError"
+        ? (ehIOS() ? "O microfone foi bloqueado. Toque no círculo e escolha Permitir. Se não perguntar: Ajustes do iPhone → Apps → Safari → Microfone → Perguntar." : "O microfone foi bloqueado. Libere nas configurações do navegador e toque no círculo.")
+        : "Não encontrei o microfone do aparelho.");
+    }
+    if (x.morto) { stream.getTracks().forEach(t => t.stop()); return; }
+    prepararAudio();
+    x.stream = stream; x.ctx = CTX_VOZ;
+    if (!x.ctx) return falhar("Este navegador não deixa gravar áudio. Escreva embaixo.");
+    try { if (x.ctx.state !== "running") await comPrazo(x.ctx.resume(), 700); } catch (e) {}
+    if (x.ctx.state !== "running") { setEstado("toque"); return; }
+    ligarProcessador();
+  };
+
+  const iniciar = () => {
+    limpar(); setErro(""); setNivel(0);
+    if (modo === "nativo") nativo();
+    else if (modo === "servidor") servidor();
+    else falhar(ehIOS() && appInstalado()
+      ? "Para falar no iPhone, ligue o servidor de avisos (bash servidor-avisos/instalar-avisos.sh). Enquanto isso, escreva embaixo ou use o microfone do teclado."
+      : "Este navegador não tem reconhecimento de voz. Escreva embaixo ou use o microfone do teclado.");
+  };
+  // tocar no círculo: começa, libera o som (iPhone) ou termina antes
+  const tocar = () => {
+    if (estado === "toque") { prepararAudio(); const x = r.current; (x.ctx ? x.ctx.resume() : Promise.resolve()).then(() => r.current === x && !x.morto && ligarProcessador()).catch(() => {}); return; }
+    if (estado === "erro" || estado === "parado") { prepararAudio(); iniciar(); return; }
+    if (estado === "ouvindo" || estado === "falando") parar();
+  };
+  const parar = () => {
+    const x = r.current;
+    if (x.rec) { try { x.rec.stop(); } catch (e) {} }
+    else if (x.finalizar) x.finalizar();
+  };
+  const cancelar = () => { limpar(); setNivel(0); setEstado("parado"); };
+  return { estado, erro, nivel, modo, iniciar, tocar, parar, cancelar };
 }
 
 // Avisos: banner dentro do app + som + vibração; notificação do sistema quando o aparelho permitir
@@ -625,45 +836,6 @@ function gerarAvisos(db, av, usaPessoal) {
   return lista.sort((a, b) => a.t - b.t).slice(0, 200);
 }
 
-/* ---------- Bloqueio com Face ID / digital ----------
-   Usa a chave de acesso (passkey) do próprio celular: o Face ID ou a digital confirmam que é você.
-   É uma tranca de privacidade na porta do app (os dados continuam guardados no aparelho, como antes).
-   O código de 4 números serve para quando o Face ID não der. */
-const K_TRAVA = e => `agenda-trava:${e}`;
-const travaDe = email => lerJSON(K_TRAVA(email), null);
-async function resumoPin(email, pin) {
-  try {
-    const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`agenda:${email}:${pin}`));
-    return bytesB64u(d);
-  } catch (e) { return "h" + hash(`agenda:${email}:${pin}`); }
-}
-async function biometriaDisponivel() {
-  try { return !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }
-  catch (e) { return false; }
-}
-const nomeBiometria = () => ehIOS() ? "Face ID" : "digital ou rosto";
-async function criarBiometria(conta) {
-  const userId = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(conta.email)));
-  const cred = await navigator.credentials.create({ publicKey: {
-    challenge: crypto.getRandomValues(new Uint8Array(32)),
-    rp: { name: "Agenda do Consultório", id: location.hostname },
-    user: { id: userId, name: conta.email, displayName: conta.nome || conta.email },
-    pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
-    authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "preferred" },
-    timeout: 60000, attestation: "none",
-  } });
-  return bytesB64u(cred.rawId);
-}
-async function confirmarBiometria(credId) {
-  const r = await navigator.credentials.get({ publicKey: {
-    challenge: crypto.getRandomValues(new Uint8Array(32)),
-    rpId: location.hostname,
-    allowCredentials: [{ type: "public-key", id: b64uBytes(credId), transports: ["internal", "hybrid"] }],
-    userVerification: "required", timeout: 60000,
-  } });
-  const dados = new Uint8Array(r.response.authenticatorData);
-  return !!(dados[32] & 4); // o celular confirmou que era você (Face ID, digital ou senha do aparelho)
-}
 
 /* =========================================================
    5. DADOS DE EXEMPLO
@@ -808,7 +980,7 @@ function Money({ v, cls = "" }) {
 }
 // Clima de agora + chuva perto da próxima sessão
 function WeatherChip({ cidade, act, sessao }) {
-  if (!cidade) return <button className="wx btn-like" onClick={act.openSettings}><I.cloud /><span>Defina sua cidade para ver a chuva</span></button>;
+  if (!cidade) return <button className="wx btn-like" onClick={() => act.openSettings("dados")}><I.cloud /><span>Defina sua cidade para ver a chuva</span></button>;
   if (!CLIMA) return <span className="wx"><I.cloud /><span className="r" style={{ color: "var(--muted)" }}>Buscando o clima…</span></span>;
   const now = new Date(), agora = climaHora(todayISO(), now.getHours());
   if (!agora) return null;
@@ -2032,12 +2204,140 @@ function ContasTab({ db, act, tema }) {
   );
 }
 
-function LancSheet({ inicial, tipo: tipo0, voz, onSave, onDelete, onClose }) {
-  const [tipo, setTipo] = useState(inicial ? inicial.tipo : tipo0);
-  const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : "");
-  const [cat, setCat] = useState(inicial ? inicial.cat : null);
-  const [desc, setDesc] = useState(inicial ? inicial.desc : "");
-  const [data, setData] = useState(inicial ? inicial.data : todayISO());
+/* ---------- Anotar falando (tela cheia com o orb) ---------- */
+function Orb({ estado, nivel, onClick }) {
+  return (
+    <button type="button" className={"orb " + estado} style={{ "--n": Math.max(0, Math.min(1, nivel)).toFixed(3) }} onClick={onClick}
+      aria-label={estado === "ouvindo" || estado === "falando" ? "Terminar agora" : estado === "toque" ? "Tocar para começar a ouvir" : estado === "pensando" ? "Entendendo" : "Falar de novo"}>
+      <i className="orb-glow" /><i className="orb-ring" /><i className="orb-ring r2" />
+      <span className="orb-core"><i className="orb-swirl" /><i className="orb-shine" /></span>
+      {(estado === "toque" || estado === "erro" || estado === "parado") && <span className="orb-ic"><I.mic /></span>}
+    </button>
+  );
+}
+// número que "corre" até o valor novo
+function useContagem(alvo) {
+  const [v, setV] = useState(alvo);
+  const de = useRef(alvo);
+  useEffect(() => {
+    const ini = de.current, t0 = performance.now(); let raf;
+    const passo = agora => { const k = Math.min(1, (agora - t0) / 420), e = 1 - Math.pow(1 - k, 3); const x = ini + (alvo - ini) * e; setV(x); de.current = x; if (k < 1) raf = requestAnimationFrame(passo); };
+    raf = requestAnimationFrame(passo);
+    return () => cancelAnimationFrame(raf);
+  }, [alvo]);
+  return v;
+}
+const quandoTxt = off => off === 2 ? "Anteontem" : off === 1 ? "Ontem" : "Hoje";
+
+function VozSheet({ modo, onSalvar, onEditar, onClose }) {
+  const [texto, setTexto] = useState("");
+  const [itens, setItens] = useState([]);
+  const [fase, setFase] = useState("ouvindo"); // ouvindo | contando | faltando
+  const [conta, setConta] = useState(3);
+  const [escrito, setEscrito] = useState("");
+  const aplicar = t => { setTexto(t); setItens(interpretarVarios(t)); };
+  const concluir = t => {
+    aplicar(t);
+    if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la|nada)\b/.test(semAcento(t))) { vibrar("aviso"); onClose(); return; }
+    const its = interpretarVarios(t);
+    if (its.length && its.every(i => i.valor > 0)) { setConta(3); setFase("contando"); vibrar("ok"); } else { setFase("faltando"); vibrar("aviso"); }
+  };
+  const ouvido = useOuvido({ onParcial: aplicar, onFinal: concluir });
+  useEffect(() => { ouvido.iniciar(); const prev = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = prev; }; }, []);
+  useEffect(() => { const k = e => e.key === "Escape" && onClose(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, []);
+  useEffect(() => {
+    if (fase !== "contando") return;
+    if (conta <= 0) { onSalvar(itens); return; }
+    const t = setTimeout(() => setConta(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [fase, conta]);
+  const deNovo = () => { setFase("ouvindo"); setTexto(""); setItens([]); prepararAudio(); ouvido.iniciar(); };
+  const tocarOrb = () => { if (fase !== "ouvindo") { deNovo(); return; } ouvido.tocar(); };
+  const enviarEscrito = e => { e.preventDefault(); if (!escrito.trim()) return; ouvido.cancelar(); concluir(escrito); setEscrito(""); };
+
+  const atual = itens[itens.length - 1] || { valor: 0, cat: null, desc: "", off: 0, tipo: "saida" };
+  const varios = itens.length > 1;
+  const valorVisto = useContagem(varios ? soma(itens, x => x.valor) : atual.valor || 0);
+  const est = ouvido.estado;
+  const orbEstado = fase === "contando" ? "pronto" : fase === "faltando" ? "erro" : est;
+  const temCat = atual.cat && atual.cat !== "outros" && atual.cat !== "outros-e";
+  const passos = [
+    { ok: !!texto, ativo: !texto, txt: est === "pedindo" ? "Abrindo o microfone…" : est === "toque" ? "Toque no círculo para eu começar a ouvir" : est === "pensando" && !texto ? "Entendendo o que você falou…" : texto ? "Ouvi você" : "Ouvindo… pode falar" },
+    { ok: atual.valor > 0, ativo: !!texto && !atual.valor, txt: atual.valor > 0 ? `Valor: ${brlReal(atual.valor)}` : "Procurando o valor" },
+    { ok: temCat || !!atual.desc, ativo: atual.valor > 0 && !temCat, txt: temCat ? `Categoria: ${catDe(atual.cat).nome}` : atual.desc ? `Onde: ${atual.desc}` : "Procurando a categoria" },
+    { ok: atual.valor > 0, ativo: false, txt: `Quando: ${quandoTxt(atual.off).toLowerCase()}` },
+    { ok: false, ativo: fase === "contando", txt: fase === "contando" ? `Salvando em ${conta}…` : itens.length > 1 ? `Anotar os ${itens.length}` : "Anotar" },
+  ];
+  const dica = est === "pensando" ? "Entendendo…" : est === "falando" ? "Estou ouvindo" : est === "ouvindo" ? "Pode falar" : est === "toque" ? "Toque para começar" : est === "pedindo" ? "Um instante…" : "";
+  return createPortal(
+    <div className={"voz" + (atual.tipo === "entrada" ? " in" : "")} data-mode={modo} role="dialog" aria-modal="true" aria-label="Anotar falando">
+      <div className="voz-top">
+        <button className="icon-btn" onClick={onClose} aria-label="Fechar"><I.x /></button>
+        <span className="voz-tag">{fase === "contando" ? "Entendi" : fase === "faltando" ? "Faltou algo" : dica || "Anotar falando"}</span>
+        <span style={{ width: 44 }} />
+      </div>
+
+      <div className="voz-centro">
+        <Orb estado={orbEstado} nivel={ouvido.nivel} onClick={tocarOrb} />
+        <div className={"voz-valor" + (atual.valor > 0 ? " on" : "")} aria-live="polite">
+          {atual.valor > 0 ? <><small>{varios ? "total R$" : atual.tipo === "entrada" ? "+ R$" : "R$"}</small>{(Math.round(valorVisto * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</> : <span>{est === "erro" ? "" : "Diga o valor e onde foi"}</span>}
+        </div>
+        {atual.valor > 0 && !varios && (
+          <div className="voz-chips">
+            <span className="voz-chip" style={catVars(catDe(atual.cat))}><i className="ci"><CatIcon cat={catDe(atual.cat)} /></i>{atual.desc || catDe(atual.cat).nome}</span>
+            <span className="voz-chip">{quandoTxt(atual.off)}</span>
+            <span className="voz-chip">{atual.tipo === "entrada" ? "Entrada" : "Gasto"}</span>
+          </div>
+        )}
+        <p className={"voz-fala" + (texto ? "" : " vazio")}>{texto ? <>“{texto}”</> : est === "erro" ? "" : <>Ex.: “gastei 32 e 50 no mercado” ou “paguei 120 de luz ontem”</>}</p>
+        {ouvido.erro && fase === "ouvindo" && <div className="voz-erro"><I.alert /><span>{ouvido.erro}</span></div>}
+        {fase === "faltando" && <div className="voz-erro"><I.alert /><span>{atual.valor > 0 ? "Faltou o valor de alguma coisa." : "Não peguei o valor."} Toque no círculo e fale de novo, ou escreva embaixo.</span></div>}
+      </div>
+
+      {itens.length > 1 && (
+        <div className="voz-lista">
+          {itens.map((it, i) => (
+            <div key={i} className="voz-item" style={catVars(catDe(it.cat))}>
+              <i className="ci"><CatIcon cat={catDe(it.cat)} /></i>
+              <span>{it.desc || catDe(it.cat).nome}<small>{quandoTxt(it.off)}</small></span>
+              <b className={it.tipo === "entrada" ? "in" : ""}>{it.tipo === "entrada" ? "+" : ""}{brlReal(it.valor)}</b>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ol className="voz-passos">
+        {passos.map((p, i) => <li key={i} className={p.ok ? "ok" : p.ativo ? "ativo" : ""}><i>{p.ok ? <I.check /> : null}</i>{p.txt}</li>)}
+      </ol>
+
+      <div className="voz-base">
+        {fase === "contando" ? <>
+          <button className="btn mode voz-salvar" onClick={() => onSalvar(itens)} style={{ "--k": conta / 3 }}>
+            <span className="voz-anel" aria-hidden="true" /><I.check /> Salvar agora
+          </button>
+          <div className="btn-row">
+            {itens.length === 1 && <button className="btn ghost" onClick={() => onEditar(itens[0])}><I.pencil /> Ajustar</button>}
+            <button className="btn ghost" onClick={() => { setFase("faltando"); onClose(); }}>Cancelar</button>
+          </div>
+        </> : <>
+          {(est === "ouvindo" || est === "falando") && <div className="hint" style={{ textAlign: "center" }}>Eu paro sozinho quando você terminar de falar.</div>}
+          <form className="voice" onSubmit={enviarEscrito}>
+            <input value={escrito} onChange={e => setEscrito(e.target.value)} placeholder="Ou escreva aqui: gastei 32 na padaria" enterKeyHint="done" autoComplete="off" aria-label="Escrever o gasto" />
+            <button type="submit" className="mic" aria-label="Anotar o que escrevi"><I.send /></button>
+          </form>
+        </>}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function LancSheet({ inicial, pre, tipo: tipo0, onVoz, onSave, onDelete, onClose }) {
+  const [tipo, setTipo] = useState(inicial ? inicial.tipo : pre ? pre.tipo : tipo0);
+  const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : pre && pre.valor ? fmtNum(pre.valor) : "");
+  const [cat, setCat] = useState(inicial ? inicial.cat : pre ? pre.cat : null);
+  const [desc, setDesc] = useState(inicial ? inicial.desc : pre ? pre.desc : "");
+  const [data, setData] = useState(inicial ? inicial.data : pre ? addDays(todayISO(), -(pre.off || 0)) : todayISO());
   const [frase, setFrase] = useState("");
   const [entendi, setEntendi] = useState(null);
   const aplicar = txt => {
@@ -2049,8 +2349,6 @@ function LancSheet({ inicial, tipo: tipo0, voz, onSave, onDelete, onClose }) {
     if (r.desc) setDesc(r.desc);
     setEntendi(r);
   };
-  const fala = useFala(aplicar);
-  useEffect(() => { if (voz) fala.iniciar(); }, []);
   const lista = tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
   const v = num(valor);
   const ok = v > 0 && cat && lista.some(c => c.id === cat);
@@ -2059,10 +2357,8 @@ function LancSheet({ inicial, tipo: tipo0, voz, onSave, onDelete, onClose }) {
       {!inicial && <>
         <div className="voice">
           <input id="l-frase" value={frase} onChange={e => aplicar(e.target.value)} placeholder='Fale ou escreva: "gastei 32 na padaria"' enterKeyHint="done" autoComplete="off" aria-label="Descreva o gasto em uma frase" />
-          <button type="button" className={"mic" + (fala.ouvindo ? " on" : "")} onClick={fala.ouvindo ? fala.parar : fala.iniciar} aria-label={fala.ouvindo ? "Parar de ouvir" : "Falar"}><I.mic /></button>
+          <button type="button" className="mic" onClick={() => { prepararAudio(); onVoz(); }} aria-label="Falar"><I.mic /></button>
         </div>
-        {fala.ouvindo && <div className="hint">Pode falar… por exemplo: "gastei 45 reais no mercado ontem".</div>}
-        {fala.erro && <div className="hint">{fala.erro}</div>}
         {entendi && entendi.valor > 0 && <div className="voice-ok"><I.check /><span>Entendi: {entendi.tipo === "entrada" ? "entrada" : "gasto"} de {brlReal(entendi.valor)} em {catDe(entendi.cat).nome}{entendi.off ? (entendi.off === 1 ? ", ontem" : ", anteontem") : ", hoje"}. Confira e salve.</span></div>}
       </>}
       <Seg big value={tipo} onChange={x => { setTipo(x); setCat(null); }} options={[{ v: "saida", l: "Gasto" }, { v: "entrada", l: "Entrada" }]} />
@@ -2135,7 +2431,7 @@ function MetaGauge({ db, meta, act }) {
     <section className="goal">
       <div className="goal-head"><div><b>Meta do mês</b><span>Ainda sem meta definida</span></div></div>
       <p className="goal-sub" style={{ margin: "14px 0 0" }}>Com uma meta, eu mostro se o mês está no ritmo e quantas sessões faltam.</p>
-      <button className="goal-tip" onClick={act.openSettings}>Definir meta</button>
+      <button className="goal-tip" onClick={() => act.openSettings("dinheiro")}>Definir meta</button>
     </section>
   );
   const liq = liquidoMes(db, chave);
@@ -2345,284 +2641,250 @@ function AvisosFechado({ act }) {
   );
 }
 
-/* ---------- Teclado do código de 4 números ---------- */
-function PinPad({ valor, onChange, erro, bloqueado }) {
-  const tecla = d => {
-    if (bloqueado) return;
-    if (d === "<") onChange(valor.slice(0, -1));
-    else if (valor.length < 4) onChange(valor + d);
-  };
-  const ref = useRef(tecla); ref.current = tecla;
-  useEffect(() => {
-    const f = e => { if (/^\d$/.test(e.key)) ref.current(e.key); else if (e.key === "Backspace") ref.current("<"); };
-    window.addEventListener("keydown", f);
-    return () => window.removeEventListener("keydown", f);
-  }, []);
-  return (
-    <div className="pin">
-      <div className={"pin-dots" + (erro ? " erro" : "")} aria-label={`${valor.length} de 4 números digitados`}>
-        {[0, 1, 2, 3].map(i => <i key={i} className={i < valor.length ? "on" : ""} />)}
-      </div>
-      <div className="pin-pad">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "<"].map((d, i) => d === ""
-          ? <span key={i} />
-          : <button type="button" key={i} disabled={bloqueado} onClick={() => tecla(d)} aria-label={d === "<" ? "Apagar" : d} className={d === "<" ? "apaga" : ""}>{d === "<" ? <I.chevL /> : d}</button>)}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Tela de bloqueio ---------- */
-function Trava({ conta, trava, onAbrir, onEsqueci }) {
-  const [pin, setPin] = useState("");
-  const [erro, setErro] = useState("");
-  const [tent, setTent] = useState(0);
-  const [espera, setEspera] = useState(0);
-  const [esqueci, setEsqueci] = useState(false);
-  const [bio, setBio] = useState(false);
-  const tentou = useRef(false);
-  const usarBio = async () => {
-    setErro("");
-    try {
-      if (await confirmarBiometria(trava.cred)) { vibrar("ok"); onAbrir(); }
-      else setErro("Não deu para confirmar. Use o código.");
-    } catch (e) {
-      if (e && e.name === "NotAllowedError") return; // cancelou ou o iPhone pediu um toque antes
-      setErro(`O ${nomeBiometria()} não respondeu. Use o código.`);
-    }
-  };
-  useEffect(() => {
-    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-  useEffect(() => {
-    if (!trava.cred) return;
-    biometriaDisponivel().then(ok => { setBio(ok); if (ok && !tentou.current) { tentou.current = true; usarBio(); } });
-  }, []);
-  useEffect(() => { if (!espera) return; const t = setTimeout(() => setEspera(e => Math.max(0, e - 1)), 1000); return () => clearTimeout(t); }, [espera]);
-  const digitar = async v => {
-    if (espera) return;
-    setErro(""); setPin(v);
-    if (v.length < 4) return;
-    if (await resumoPin(conta.email, v) === trava.pin) { vibrar("ok"); onAbrir(); return; }
-    vibrar("aviso");
-    const n = tent + 1; setTent(n); setPin("");
-    if (n % 5 === 0) { setEspera(30); setErro("Muitas tentativas."); } else setErro("Código errado. Tente de novo.");
-  };
-  return createPortal(
-    <div className="trava" role="dialog" aria-modal="true" aria-label="App bloqueado">
-      <div className="trava-in">
-        <div className="trava-top">
-          <Avatar conta={conta} />
-          <h2>Oi, {primeiro(conta.nome)}</h2>
-          <p>{bio ? `Use o ${nomeBiometria()} ou o seu código` : "Digite o seu código"}</p>
-        </div>
-        {!esqueci ? <>
-          <PinPad valor={pin} onChange={digitar} erro={!!erro} bloqueado={espera > 0} />
-          <div className="trava-msg" role="alert">{espera ? `Muitas tentativas. Espere ${espera} s.` : erro}</div>
-          <div className="trava-acoes">
-            {bio && <button className="btn" onClick={usarBio}><I.face /> Usar {nomeBiometria()}</button>}
-            <button className="btn text" onClick={() => setEsqueci(true)}>Esqueci o código</button>
-          </div>
-        </> : (
-          <div className="trava-esq">
-            <p>Para criar um código novo, entre de novo com o seu e-mail e a sua senha. Seus dados continuam guardados aqui.</p>
-            <button className="btn" onClick={onEsqueci}><I.key /> Entrar com a senha</button>
-            <button className="btn text" onClick={() => setEsqueci(false)}>Voltar</button>
-          </div>
-        )}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-/* ---------- Ligar / ajustar o bloqueio ---------- */
-function TravaSheet({ conta, trava, onSave, onClose }) {
-  const [etapa, setEtapa] = useState(trava ? "pronto" : "inicio");
-  const [pin, setPin] = useState("");
-  const [p1, setP1] = useState("");
-  const [erro, setErro] = useState("");
-  const [bioOk, setBioOk] = useState(false);
-  const [ocupado, setOcupado] = useState(false);
-  const nomeB = nomeBiometria(), NomeB = nomeB[0].toUpperCase() + nomeB.slice(1);
-  useEffect(() => { biometriaDisponivel().then(setBioOk); }, []);
-  const cfg = trava || { depois: 60 };
-  const digitar = async v => {
-    setErro(""); setPin(v);
-    if (v.length < 4) return;
-    if (etapa === "pin1") { setP1(v); setPin(""); setEtapa("pin2"); return; }
-    if (v !== p1) { vibrar("aviso"); setPin(""); setP1(""); setEtapa("pin1"); setErro("Os códigos ficaram diferentes. Vamos de novo."); return; }
-    const novo = { ...cfg, pin: await resumoPin(conta.email, v) };
-    onSave(novo); vibrar("ok"); setPin("");
-    setEtapa(bioOk && !novo.cred ? "bio" : "pronto");
-  };
-  const ligarBio = async () => {
-    setErro(""); setOcupado(true);
-    try { const cred = await criarBiometria(conta); onSave({ ...(trava || cfg), cred }); vibrar("ok"); setEtapa("pronto"); }
-    catch (e) {
-      setErro(e && e.name === "NotAllowedError" ? "Cancelado. Pode tentar de novo quando quiser."
-        : e && e.name === "SecurityError" ? `O ${nomeB} só funciona no endereço publicado (https), não no teste do computador.`
-        : `Não consegui ligar o ${nomeB} neste aparelho. O código continua funcionando.`);
-    }
-    setOcupado(false);
-  };
-  const testarBio = async () => {
-    setErro("");
-    try { setErro(await confirmarBiometria(trava.cred) ? `${NomeB} funcionando ✓` : "Não confirmou."); }
-    catch (e) { setErro(e && e.name === "NotAllowedError" ? "Cancelado." : `O ${nomeB} não respondeu.`); }
-  };
-  return (
-    <Sheet title="Bloqueio do app" sub={trava ? "Ligado" : `Com ${nomeB} e um código`} onClose={onClose}>
-      {etapa === "inicio" && <>
-        <div className="trava-explica">
-          <i><I.face /></i>
-          <p>Toda vez que abrir o app, ele pede o <b>{nomeB}</b> (ou um código de 4 números). Assim ninguém vê seus pacientes e valores se pegar o seu celular desbloqueado.</p>
-        </div>
-        <button className="btn" onClick={() => setEtapa("pin1")}>Começar: criar o código</button>
-      </>}
-      {(etapa === "pin1" || etapa === "pin2") && <>
-        <p className="trava-pede">{etapa === "pin1" ? "Crie um código de 4 números. Ele serve para quando o Face ID não der." : "Digite o código de novo, para confirmar."}</p>
-        <PinPad valor={pin} onChange={digitar} erro={!!erro} />
-        {erro && <div className="trava-msg" role="alert">{erro}</div>}
-      </>}
-      {etapa === "bio" && <>
-        <div className="trava-explica">
-          <i className="on"><I.check /></i>
-          <p>Código criado. Agora ligue o <b>{nomeB}</b>: o celular vai perguntar se quer salvar uma <b>chave de acesso</b> para a Agenda. Toque em Continuar.</p>
-        </div>
-        <button className="btn" disabled={ocupado} onClick={ligarBio}><I.face /> Ligar {nomeB}</button>
-        <button className="btn text" onClick={() => setEtapa("pronto")}>Agora não, só o código</button>
-        {erro && <div className="trava-msg" role="alert">{erro}</div>}
-      </>}
-      {etapa === "pronto" && trava && <>
-        <div className="test-res">
-          <div className="ok"><I.check /><span>Bloqueio ligado com código de 4 números.</span></div>
-          <div className={trava.cred ? "ok" : "no"}>{trava.cred ? <I.check /> : <I.alert />}<span>{trava.cred ? `${NomeB} ligado.` : bioOk ? `${NomeB} ainda não está ligado.` : `Este aparelho não oferece ${nomeB} para o app. Fica só o código.`}</span></div>
-        </div>
-        <div className="fields">
-          <Field label="Pedir de novo quando voltar ao app depois de">
-            <Seg value={trava.depois ?? 60} onChange={v => onSave({ ...trava, depois: v })} options={[{ v: 0, l: "Na hora" }, { v: 60, l: "1 min" }, { v: 300, l: "5 min" }, { v: 1800, l: "30 min" }]} />
-          </Field>
-        </div>
-        {trava.cred ? <button className="btn ghost" onClick={testarBio}><I.face /> Testar o {nomeB}</button>
-          : bioOk && <button className="btn" disabled={ocupado} onClick={ligarBio}><I.face /> Ligar {nomeB}</button>}
-        {erro && <div className="trava-msg" role="alert">{erro}</div>}
-        <button className="btn ghost" onClick={() => { setErro(""); setPin(""); setEtapa("pin1"); }}><I.key /> Trocar o código</button>
-        <ConfirmButton label="Desligar o bloqueio" confirmLabel="Toque de novo para desligar" onConfirm={() => { onSave(null); onClose(); }} />
-        <div className="hint">É uma tranca de privacidade na porta do app. Se esquecer o código, dá para entrar de novo com o e-mail e a senha.</div>
-      </>}
-    </Sheet>
-  );
-}
-
-function SettingsSheet({ db, conta, tema, onClose, act }) {
+/* =========================================================
+   PERFIL (Sua conta): cartão com seus números + seções que abrem em páginas.
+   Tudo salva sozinho (sem botão "Salvar" para esquecer de apertar).
+   ========================================================= */
+function PerfilPage({ db, conta, tema, inicio, onClose, act }) {
   const pf = conta.perfil || {};
+  const [aba, setAba] = useState(inicio || null);
   const [nome, setNome] = useState(conta.nome);
   const [foto, setFoto] = useState(conta.foto || null);
+  const [profissao, setProfissao] = useState(pf.profissao || "Psicologia");
+  const [nasc, setNasc] = useState(pf.nascimento || "");
+  const [cidade, setCidade] = useState(pf.cidade || "");
   const [pix, setPix] = useState(db.settings.pix || "");
   const [termo, setTermo] = useState(pf.termo || "Paciente");
   const [dur, setDur] = useState(pf.duracao || 50);
+  const [hIni, setHIni] = useState(pf.horaIni ?? 8);
+  const [hFim, setHFim] = useState(pf.horaFim ?? 20);
+  const [diasT, setDiasT] = useState(pf.diasTrab || [1, 2, 3, 4, 5]);
+  const [falta, setFalta] = useState(pf.falta || { cobrar: false, horas: 24 });
+  const [regLembrar, setRegLembrar] = useState(pf.registro !== false);
   const [meta, setMeta] = useState(pf.meta ? fmtNum(pf.meta) : "");
-  const [estilo, setEstilo] = useState(pf.estilo || "detalhado");
-  const [pessoal, setPessoal] = useState(pf.pessoal !== false);
-  const [cidade, setCidade] = useState(pf.cidade || "");
+  const [valorPadrao, setValorPadrao] = useState(pf.valorPadrao ? fmtNum(pf.valorPadrao) : "");
+  const [subPadrao, setSubPadrao] = useState(pf.subPadrao ? fmtNum(pf.subPadrao) : "");
+  const [reserva, setReserva] = useState(pf.reserva || 0);
   const av0 = { ...AVISOS_PADRAO, ...(pf.avisos || {}) };
   const [avAtivo, setAvAtivo] = useState(av0.ativo);
   const [antec, setAntec] = useState(av0.antecedencia);
   const [avNomes, setAvNomes] = useState(!!av0.nomes);
   const [avResumo, setAvResumo] = useState(av0.resumo !== false);
   const [avFechar, setAvFechar] = useState(av0.fechar !== false);
+  const [estilo, setEstilo] = useState(pf.estilo || "detalhado");
   const [vib, setVib] = useState(pf.vibrar !== false);
+  const [pessoal, setPessoal] = useState(pf.pessoal !== false);
   const [permissao, setPermissao] = useState(() => "Notification" in window ? Notification.permission : "indisponivel");
   const [teste, setTeste] = useState(null);
-  const [hIni, setHIni] = useState(pf.horaIni ?? 8);
-  const [hFim, setHFim] = useState(pf.horaFim ?? 20);
-  const [diasT, setDiasT] = useState(pf.diasTrab || [1, 2, 3, 4, 5]);
-  const [falta, setFalta] = useState(pf.falta || { cobrar: false, horas: 24 });
-  const [regLembrar, setRegLembrar] = useState(pf.registro !== false);
-  const [reserva, setReserva] = useState(pf.reserva || 0);
+  const [salvo, setSalvo] = useState(false);
+  const primeira = useRef(true);
+  const topo = useRef(null);
+
+  // Salva sozinho meio segundo depois da última mudança
+  useEffect(() => {
+    if (primeira.current) { primeira.current = false; return; }
+    const t = setTimeout(() => {
+      const atual = conta.perfil || {};
+      act.salvarPerfil({
+        nome: nome.trim() || conta.nome, foto,
+        perfil: { ...atual, profissao, nascimento: nasc, cidade: cidade.trim(), termo, duracao: dur, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar,
+          meta: num(meta) || 0, valorPadrao: num(valorPadrao) || atual.valorPadrao || 0, subPadrao: num(subPadrao), reserva,
+          avisos: { ...av0, ...(atual.avisos || {}), ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar },
+          estilo, vibrar: vib, pessoal },
+      }, pix.trim());
+      setSalvo(true);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, hIni, hFim, diasT, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, estilo, vib, pessoal]);
+  useEffect(() => { if (!salvo) return; const t = setTimeout(() => setSalvo(false), 1600); return () => clearTimeout(t); }, [salvo]);
+  useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba]);
+  useEffect(() => {
+    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
+    const k = e => { if (e.key === "Escape") { if (aba) setAba(null); else onClose(); } };
+    window.addEventListener("keydown", k);
+    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", k); };
+  }, [aba]);
+
   const testar = atraso => { setTeste({ esperando: atraso > 0 }); act.testarAviso(atraso).then(r => { setTeste({ r }); if ("Notification" in window) setPermissao(Notification.permission); }); };
   const textoTeste = {
     ok: "Notificação enviada. Se não apareceu, confira se o app pode mostrar notificações nas configurações do celular.",
-    negado: "As notificações estão bloqueadas. Libere em: Configurações do celular → Apps → Chrome (ou Agenda) → Notificações.",
+    negado: "As notificações estão bloqueadas. Libere nas configurações do celular.",
     pendente: "Você ainda não permitiu as notificações. Toque em Testar e escolha Permitir.",
     indisponivel: "Este navegador não tem notificações. No iPhone, instale o app na tela inicial (iOS 16.4 ou mais novo).",
     bloqueado: "O navegador bloqueou a notificação. Instale o app na tela inicial e teste de novo.",
   };
   const textoPermissao = { granted: "Permitidas", denied: "Bloqueadas", default: "Ainda não pedidas", indisponivel: "Indisponíveis neste navegador" };
-  const idade = idadeDe(pf.nascimento);
-  return (
-    <Sheet title="Sua conta" sub={[pf.profissao, idade ? `${idade} anos` : null, conta.email].filter(Boolean).join(" · ")} onClose={onClose}>
-      <PhotoPicker nome={nome} foto={foto} onChange={setFoto} />
-      <div className="fields">
-        <Field label="Como quer ser chamado(a)" icon={<I.user />} htmlFor="s-nome"><input id="s-nome" value={nome} onChange={e => setNome(e.target.value)} /></Field>
-        <Field label="Meta líquida do mês (R$)" icon={<I.chart />} htmlFor="s-meta"><input id="s-meta" inputMode="decimal" value={meta} onChange={e => setMeta(soNumero(e.target.value))} placeholder="Sem meta" /></Field>
-        <Field label="Chave Pix (entra nas cobranças)" icon={<I.key />} htmlFor="s-pix"><input id="s-pix" value={pix} onChange={e => setPix(e.target.value)} placeholder="CPF, e-mail ou telefone" /></Field>
-        <Field label="Cidade (para avisar de chuva)" icon={<I.cloud />} htmlFor="s-cidade"><input id="s-cidade" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex.: Curitiba" /></Field>
-      </div>
-      <h3 className="section-title" style={{ marginTop: 4 }}>Fundo do app</h3>
-      <FundoPicker fundo={conta.fundo} meus={act.meusFundos} onChange={act.setFundo} onAdd={act.addFundo} onUpdate={act.updFundo} onDelete={act.delFundo} />
-      <h3 className="section-title" style={{ marginTop: 4 }}>Agenda</h3>
-      <div className="fields">
-        <Field label="Horário de atendimento">
-          <div className="stepper">
-            <button type="button" aria-label="Começa mais cedo" onClick={() => setHIni(Math.max(5, hIni - 1))}>−</button><b className="num">{hIni}h</b><button type="button" aria-label="Começa mais tarde" onClick={() => setHIni(Math.min(hFim - 1, hIni + 1))}>+</button>
-            <span style={{ color: "var(--muted)", fontWeight: 600 }}>até</span>
-            <button type="button" aria-label="Termina mais cedo" onClick={() => setHFim(Math.max(hIni + 1, hFim - 1))}>−</button><b className="num">{hFim}h</b><button type="button" aria-label="Termina mais tarde" onClick={() => setHFim(Math.min(23, hFim + 1))}>+</button>
-          </div>
-        </Field>
-        <Field label="Dias em que atende">
-          <div className="slots">{[1, 2, 3, 4, 5, 6, 0].map(d => <button type="button" key={d} className={"slot" + (diasT.includes(d) ? "" : " off")} style={{ textDecoration: "none" }} aria-pressed={diasT.includes(d)} onClick={() => setDiasT(diasT.includes(d) ? diasT.filter(x => x !== d) : [...diasT, d])}>{DIA_CURTO[d]}</button>)}</div>
-        </Field>
-      </div>
-      <Toggle on={regLembrar} onClick={() => setRegLembrar(!regLembrar)}>Lembrar do registro depois de cada sessão</Toggle>
-      <Toggle on={falta.cobrar} onClick={() => setFalta({ ...falta, cobrar: !falta.cobrar })}>Cobrar falta sem aviso</Toggle>
-      {falta.cobrar && <div className="fields"><Field label="Aviso mínimo para não cobrar (horas)"><Seg value={falta.horas} onChange={h => setFalta({ ...falta, horas: h })} options={[12, 24, 48].map(h => ({ v: h, l: `${h}h` }))} /></Field></div>}
-      <h3 className="section-title" style={{ marginTop: 4 }}>Dinheiro</h3>
-      <div className="fields">
-        <Field label="Separar para o imposto (% do líquido)"><Seg value={reserva} onChange={setReserva} options={[0, 10, 15, 20, 27.5].map(v => ({ v, l: v ? String(v).replace(".", ",") : "Não" }))} /></Field>
-      </div>
-      <div className="hint">Estimativa simples para não levar susto. O valor certo do Carnê-Leão quem calcula é o contador.</div>
-      <h3 className="section-title" style={{ marginTop: 4 }}>Avisos</h3>
-      <div className="fields">
-        <Field label="Avisos de sessão, contas e pendências"><Seg value={avAtivo} onChange={setAvAtivo} options={[{ v: true, l: "Ligados" }, { v: false, l: "Desligados" }]} /></Field>
-        <Field label="Avisar antes da sessão (minutos)"><Seg value={antec} onChange={setAntec} options={[5, 10, 15, 30].map(m => ({ v: m, l: String(m) }))} /></Field>
-      </div>
-      <Toggle on={avResumo} onClick={() => setAvResumo(!avResumo)}>Resumo do dia de manhã</Toggle>
-      <Toggle on={avFechar} onClick={() => setAvFechar(!avFechar)}>Lembrar de fechar o dia</Toggle>
-      <Toggle on={avNomes} onClick={() => setAvNomes(!avNomes)}>Mostrar o nome do {TERMO.s.toLowerCase()} no aviso</Toggle>
-      {!avNomes && <div className="hint">O aviso diz só “Sessão em {antec} min”, sem nome. Mais discreto na tela bloqueada.</div>}
-      <AvisosFechado act={act} />
-      {!pushLigado() && <>
-        <div className="hint">Teste com o app aberto · notificações: <b>{textoPermissao[permissao] || permissao}</b></div>
-        <div className="btn-row">
-          <button className="btn ghost" onClick={() => testar(0)}><I.bell /> Testar aqui</button>
-          <button className="btn ghost" onClick={() => testar(10000)}>Em 10 segundos</button>
+
+  // Números do cartão
+  const hoje = todayISO(), chave = hoje.slice(0, 7);
+  const ativos = db.patients.filter(p => p.active).length;
+  const sessMes = db.sessions.filter(s => s.status === "done" && s.date.startsWith(chave)).length;
+  const liqMes = liquidoMes(db, chave);
+  let seguidos = 0;
+  for (let i = 1; i < 60; i++) { const d = addDays(hoje, -i); if (!itensDoDia(db, d).length) continue; if ((db.fechados || {})[d]) seguidos++; else break; }
+  const idade = idadeDe(nasc);
+  const T = termoDe(termo);
+  const diasTxt = diasT.length === 5 && [1, 2, 3, 4, 5].every(d => diasT.includes(d)) ? "seg a sex" : [1, 2, 3, 4, 5, 6, 0].filter(d => diasT.includes(d)).map(d => DIA_CURTO[d].toLowerCase()).join(", ");
+  const temaNome = { dark: "Escuro", light: "Claro", auto: "Do aparelho" }[tema.modo];
+
+  const secoes = [
+    { grupo: "Você", itens: [
+      { id: "dados", ic: <I.user />, t: "Dados pessoais", v: [profissao, cidade].filter(Boolean).join(" · ") || "Nome, foto e cidade" },
+      { id: "pix", ic: <I.key />, t: "Chave Pix", v: pix ? "Entra nas cobranças" : "Ainda não colocou" },
+    ] },
+    { grupo: "Consultório", itens: [
+      { id: "agenda", ic: <I.cal />, t: "Agenda", v: `${hIni}h às ${hFim}h · ${diasTxt || "sem dias"}` },
+      { id: "dinheiro", ic: <I.wallet />, t: "Valores e metas", v: meta ? `Meta de ${brl(num(meta))}` : "Sem meta" },
+      { id: "avisos", ic: <I.bell />, t: "Avisos", v: !avAtivo ? "Desligados" : pushLigado() ? `Com o app fechado · ${antec} min antes` : `${antec} min antes` },
+    ] },
+    { grupo: "App", itens: [
+      { id: "visual", ic: <I.sun />, t: "Aparência e fundo", v: temaNome },
+      ...[{ id: "pessoal", ic: <I.piggy />, t: "Modo Pessoal", v: pessoal ? "Ligado" : "Desligado" }],
+      { id: "app", ic: <I.down />, t: "Instalar e atalhos", v: appInstalado() ? "Instalado" : "Colocar na tela inicial" },
+    ] },
+  ];
+  const titulo = { dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Modo Pessoal", app: "Instalar e atalhos" }[aba];
+
+  return createPortal(
+    <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
+      <div className="perfil-in">
+        <div className="perfil-top">
+          <button className="icon-btn" onClick={() => aba ? setAba(null) : onClose()} aria-label={aba ? "Voltar" : "Fechar"}>{aba ? <I.chevL /> : <I.x />}</button>
+          <b>{titulo || "Perfil"}</b>
+          <span className={"perfil-salvo" + (salvo ? " on" : "")} aria-live="polite">{salvo ? <><I.check /> Salvo</> : ""}</span>
         </div>
-        {teste && (teste.esperando
-          ? <div className="test-res"><div><I.clock /><span>Aguarde 10 segundos com o app aberto.</span></div></div>
-          : <div className="test-res"><div className={teste.r === "ok" ? "ok" : "no"}>{teste.r === "ok" ? <I.check /> : <I.alert />}<span>{textoTeste[teste.r] || textoTeste.bloqueado}</span></div></div>)}
-      </>}
-      <h3 className="section-title" style={{ marginTop: 4 }}>Bloqueio</h3>
-      <button className="btn ghost" onClick={act.abrirTrava}><I.face /> {act.trava ? `Bloqueio ligado · ${act.trava.cred ? nomeBiometria() : "só código"}` : `Bloquear o app com ${nomeBiometria()}`}</button>
-      <Toggle on={vib} onClick={() => { setVib(!vib); VIBRAR = !vib; if (!vib) vibrar("ok"); }}>Vibrar nos toques (Android)</Toggle>
-      <div className="fields">
-        <Field label="Quem você atende"><Seg value={termo} onChange={setTermo} options={["Paciente", "Cliente", "Analisando"].map(v => ({ v, l: v }))} /></Field>
-        <Field label="Duração da sessão (minutos)"><Seg value={dur} onChange={setDur} options={DURACOES.map(d => ({ v: d, l: String(d) }))} /></Field>
-        <Field label="Resumo do Início"><Seg value={estilo} onChange={setEstilo} options={[{ v: "curto", l: "Direto ao ponto" }, { v: "detalhado", l: "Completo" }]} /></Field>
-        <Field label="Aparência"><Seg value={tema.modo} onChange={tema.setModo} options={[{ v: "dark", l: "Escuro" }, { v: "light", l: "Claro" }, { v: "auto", l: "Do aparelho" }]} /></Field>
+
+        {!aba && <>
+          <div className="perfil-hero">
+            <button className="perfil-foto" onClick={() => setAba("dados")} aria-label="Trocar foto e dados">
+              <Avatar conta={{ nome: nome || "?", foto }} /><i><I.pencil /></i>
+            </button>
+            <h2>{nome || conta.nome}</h2>
+            <p>{[profissao, idade ? `${idade} anos` : null].filter(Boolean).join(" · ")}</p>
+            <span className="perfil-email">{conta.email}{conta.demo ? " · demonstração" : ""}</span>
+            <div className="perfil-nums">
+              <div><b>{ativos}</b><span>{ativos === 1 ? `${T.s} ativo` : `${T.p} ativos`}</span></div>
+              <div><b>{sessMes}</b><span>{sessMes === 1 ? "sessão no mês" : "sessões no mês"}</span></div>
+              <div><b className="num">{ESCONDER ? "R$ •••" : `R$ ${Math.round(liqMes).toLocaleString("pt-BR")}`}</b><span>líquido no mês</span></div>
+            </div>
+            {seguidos >= 2 && <div className="perfil-seq"><I.flag /> Você fechou o dia {seguidos} vezes seguidas</div>}
+          </div>
+
+          {secoes.map(g => (
+            <div key={g.grupo} className="perfil-grupo">
+              <h3>{g.grupo}</h3>
+              <div className="perfil-lista">
+                {g.itens.map(it => (
+                  <button key={it.id} className="perfil-row" onClick={() => setAba(it.id)}>
+                    <i>{it.ic}</i><span><b>{it.t}</b><small>{it.v}</small></span><I.chev />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="perfil-grupo">
+            <h3>Conta</h3>
+            <div className="perfil-lista">
+              <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
+              <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>Seus dados ficam guardados neste aparelho</small></span><I.chev /></button>
+            </div>
+          </div>
+          <ConfirmButton label="Apagar meus dados" confirmLabel="Toque de novo para apagar tudo" onConfirm={act.zerar} />
+          {db.patients.length === 0 && <button className="btn text" onClick={act.carregarExemplo}>Carregar dados de exemplo</button>}
+        </>}
+
+        {aba === "dados" && <div className="stack">
+          <PhotoPicker nome={nome} foto={foto} onChange={setFoto} />
+          <div className="fields">
+            <Field label="Como quer ser chamado(a)" icon={<I.user />} htmlFor="p-nome"><input id="p-nome" value={nome} onChange={e => setNome(e.target.value)} /></Field>
+            <Field label="Data de nascimento" htmlFor="p-nasc"><input id="p-nasc" type="date" value={nasc} onChange={e => setNasc(e.target.value)} /></Field>
+            <Field label="Cidade (para o clima e a chuva)" icon={<I.cloud />} htmlFor="p-cidade"><input id="p-cidade" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex.: Curitiba" /></Field>
+          </div>
+          <h3 className="section-title">Profissão</h3>
+          <div className="chips-wrap">{PROFISSOES.map(p => <button type="button" key={p.id} className={"chip-op" + (profissao === p.id ? " on" : "")} aria-pressed={profissao === p.id} onClick={() => { setProfissao(p.id); setTermo(p.termo); }}>{p.id}</button>)}</div>
+          <div className="fields"><Field label="Quem você atende"><Seg value={termo} onChange={setTermo} options={["Paciente", "Cliente", "Analisando"].map(v => ({ v, l: v }))} /></Field></div>
+          {ehAniversario({ nascimento: nasc }) && <div className="note mint"><I.star /><span>Feliz aniversário! Hoje o app fica mais leve com você.</span></div>}
+        </div>}
+
+        {aba === "pix" && <div className="stack">
+          <div className="fields"><Field label="Sua chave Pix" icon={<I.key />} htmlFor="p-pix"><input id="p-pix" value={pix} onChange={e => setPix(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" autoCapitalize="off" /></Field></div>
+          <div className="hint">Ela entra sozinha no fim das mensagens de cobrança, para o {T.s} só copiar e pagar.</div>
+        </div>}
+
+        {aba === "agenda" && <div className="stack">
+          <div className="fields">
+            <Field label="Horário de atendimento">
+              <div className="stepper">
+                <button type="button" aria-label="Começa mais cedo" onClick={() => setHIni(Math.max(5, hIni - 1))}>−</button><b className="num">{hIni}h</b><button type="button" aria-label="Começa mais tarde" onClick={() => setHIni(Math.min(hFim - 1, hIni + 1))}>+</button>
+                <span style={{ color: "var(--muted)", fontWeight: 600 }}>até</span>
+                <button type="button" aria-label="Termina mais cedo" onClick={() => setHFim(Math.max(hIni + 1, hFim - 1))}>−</button><b className="num">{hFim}h</b><button type="button" aria-label="Termina mais tarde" onClick={() => setHFim(Math.min(23, hFim + 1))}>+</button>
+              </div>
+            </Field>
+            <Field label="Dias em que atende">
+              <div className="slots">{[1, 2, 3, 4, 5, 6, 0].map(d => <button type="button" key={d} className={"slot" + (diasT.includes(d) ? "" : " off")} style={{ textDecoration: "none" }} aria-pressed={diasT.includes(d)} onClick={() => setDiasT(diasT.includes(d) ? diasT.filter(x => x !== d) : [...diasT, d])}>{DIA_CURTO[d]}</button>)}</div>
+            </Field>
+            <Field label="Duração da sessão (minutos)"><Seg value={dur} onChange={setDur} options={DURACOES.map(d => ({ v: d, l: String(d) }))} /></Field>
+          </div>
+          <Toggle on={regLembrar} onClick={() => setRegLembrar(!regLembrar)}>Lembrar do registro depois de cada sessão</Toggle>
+          <Toggle on={falta.cobrar} onClick={() => setFalta({ ...falta, cobrar: !falta.cobrar })}>Cobrar falta sem aviso</Toggle>
+          {falta.cobrar && <div className="fields"><Field label="Aviso mínimo para não cobrar (horas)"><Seg value={falta.horas} onChange={h => setFalta({ ...falta, horas: h })} options={[12, 24, 48].map(h => ({ v: h, l: `${h}h` }))} /></Field></div>}
+        </div>}
+
+        {aba === "dinheiro" && <div className="stack">
+          <div className="fields">
+            <Field label="Meta líquida do mês (R$)" icon={<I.target />} htmlFor="p-meta"><input id="p-meta" inputMode="decimal" value={meta} onChange={e => setMeta(soNumero(e.target.value))} placeholder="Sem meta" /></Field>
+            <Field label={`Valor padrão da sessão para ${T.p} novos (R$)`} icon={<I.money />} htmlFor="p-valor"><input id="p-valor" inputMode="decimal" value={valorPadrao} onChange={e => setValorPadrao(soNumero(e.target.value))} placeholder="0,00" /></Field>
+            <Field label="Sublocação padrão por sessão (R$)" icon={<I.door />} htmlFor="p-sub"><input id="p-sub" inputMode="decimal" value={subPadrao} onChange={e => setSubPadrao(soNumero(e.target.value))} placeholder="Sem sublocação" /></Field>
+            <Field label="Separar para o imposto (% do líquido)"><Seg value={reserva} onChange={setReserva} options={[0, 10, 15, 20, 27.5].map(v => ({ v, l: v ? String(v).replace(".", ",") : "Não" }))} /></Field>
+          </div>
+          <div className="hint">Estimativa simples para não levar susto. O valor certo do Carnê-Leão quem calcula é o contador.</div>
+          <div className="fields"><Field label="Resumo do Início"><Seg value={estilo} onChange={setEstilo} options={[{ v: "curto", l: "Direto ao ponto" }, { v: "detalhado", l: "Completo" }]} /></Field></div>
+        </div>}
+
+        {aba === "avisos" && <div className="stack">
+          <div className="fields">
+            <Field label="Avisos de sessão, contas e pendências"><Seg value={avAtivo} onChange={setAvAtivo} options={[{ v: true, l: "Ligados" }, { v: false, l: "Desligados" }]} /></Field>
+            <Field label="Avisar antes da sessão (minutos)"><Seg value={antec} onChange={setAntec} options={[5, 10, 15, 30].map(m => ({ v: m, l: String(m) }))} /></Field>
+          </div>
+          <Toggle on={avResumo} onClick={() => setAvResumo(!avResumo)}>Resumo do dia de manhã</Toggle>
+          <Toggle on={avFechar} onClick={() => setAvFechar(!avFechar)}>Lembrar de fechar o dia</Toggle>
+          <Toggle on={avNomes} onClick={() => setAvNomes(!avNomes)}>Mostrar o nome do {T.s} no aviso</Toggle>
+          {!avNomes && <div className="hint">O aviso diz só “Sessão em {antec} min”, sem nome. Mais discreto na tela bloqueada.</div>}
+          <AvisosFechado act={act} />
+          {!pushLigado() && <>
+            <div className="hint">Teste com o app aberto · notificações: <b>{textoPermissao[permissao] || permissao}</b></div>
+            <div className="btn-row">
+              <button className="btn ghost" onClick={() => testar(0)}><I.bell /> Testar aqui</button>
+              <button className="btn ghost" onClick={() => testar(10000)}>Em 10 segundos</button>
+            </div>
+            {teste && (teste.esperando
+              ? <div className="test-res"><div><I.clock /><span>Aguarde 10 segundos com o app aberto.</span></div></div>
+              : <div className="test-res"><div className={teste.r === "ok" ? "ok" : "no"}>{teste.r === "ok" ? <I.check /> : <I.alert />}<span>{textoTeste[teste.r] || textoTeste.bloqueado}</span></div></div>)}
+          </>}
+        </div>}
+
+        {aba === "visual" && <div className="stack">
+          <div className="fields"><Field label="Aparência"><Seg value={tema.modo} onChange={tema.setModo} options={[{ v: "dark", l: "Escuro" }, { v: "light", l: "Claro" }, { v: "auto", l: "Do aparelho" }]} /></Field></div>
+          <h3 className="section-title">Fundo do app</h3>
+          <FundoPicker fundo={conta.fundo} meus={act.meusFundos} onChange={act.setFundo} onAdd={act.addFundo} onUpdate={act.updFundo} onDelete={act.delFundo} />
+          <Toggle on={vib} onClick={() => { setVib(!vib); VIBRAR = !vib; if (!vib) vibrar("ok"); }}>Vibrar nos toques</Toggle>
+          <div className="hint">No iPhone a vibração é bem leve (o iPhone só deixa apps da web darem um toquinho).</div>
+        </div>}
+
+        {aba === "pessoal" && <div className="stack">
+          <div className="note"><I.piggy /><span>O modo Pessoal guarda os gastos da casa, as contas fixas e o que sobra no mês, separado do consultório.</span></div>
+          <Toggle on={pessoal} onClick={() => setPessoal(!pessoal)}>Usar também o modo Pessoal</Toggle>
+          {pessoal && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
+        </div>}
+
+        {aba === "app" && <div className="stack">
+          <InstalarApp />
+          <div className="hint">Atalhos: links do app terminados em <b>#gasto</b>, <b>#agora</b>, <b>#fechar</b> ou <b>#livres</b> abrem direto o gasto por voz, o Só o agora, o Fechar o dia e os horários livres. No Android, segure o ícone do app para ver os atalhos.</div>
+        </div>}
       </div>
-      <Toggle on={pessoal} onClick={() => setPessoal(!pessoal)}>Usar também o modo Pessoal</Toggle>
-      {pessoal && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
-      <button className="btn" onClick={() => act.salvarAjustes({ nome: nome.trim() || conta.nome, foto, perfil: { ...pf, termo, duracao: dur, meta: num(meta) || 0, estilo, pessoal, cidade: cidade.trim(), avisos: { ...av0, ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar }, vibrar: vib, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar, reserva } }, pix.trim())}>Salvar</button>
-      <InstalarApp />
-      <div className="hint">Atalhos: links do app terminados em <b>#gasto</b>, <b>#agora</b>, <b>#fechar</b> ou <b>#livres</b> abrem direto o gasto por voz, o Só o agora, o Fechar o dia e os horários livres. Dá para colocar na Siri ou na tela inicial.</div>
-      <button className="btn ghost" onClick={act.refazer}><I.repeat /> Refazer perguntas iniciais</button>
-      <button className="btn ghost" onClick={act.sair}><I.out /> Sair da conta</button>
-      <ConfirmButton label="Apagar meus dados" confirmLabel="Toque de novo para apagar tudo" onConfirm={act.zerar} />
-      {db.patients.length === 0 && <button className="btn text" onClick={act.carregarExemplo}>Carregar dados de exemplo</button>}
-    </Sheet>
+    </div>,
+    document.body
   );
 }
 
@@ -2738,7 +3000,19 @@ function FecharDia({ db, conta, onClose, act }) {
 }
 
 // SÓ O AGORA: uma coisa por vez, em letra grande
+// Tela acesa enquanto o "Só o agora" está aberto (Screen Wake Lock)
+function useTelaAcesa() {
+  useEffect(() => {
+    if (!("wakeLock" in navigator)) return;
+    let trava = null, vivo = true;
+    const pedir = () => { if (document.visibilityState === "visible") navigator.wakeLock.request("screen").then(t => { if (vivo) trava = t; else t.release(); }).catch(() => {}); };
+    pedir();
+    document.addEventListener("visibilitychange", pedir);
+    return () => { vivo = false; document.removeEventListener("visibilitychange", pedir); try { trava && trava.release(); } catch (e) {} };
+  }, []);
+}
 function Agora({ db, conta, now, onClose, act }) {
+  useTelaAcesa();
   const t = todayISO(), nm = agoraMin(now), chave = t.slice(0, 7);
   const [pular, setPular] = useState(0);
   const lista = [];
@@ -3048,7 +3322,6 @@ function useTema() {
    15. APP (depois do login)
    ========================================================= */
 I.minus = () => <Svg sw={2.2}><path d="M5 12h14"/></Svg>;
-I.face = () => <Svg><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 9.5v1M15 9.5v1M12 9.5V13h-1M9.5 15.5c1.4 1.1 3.6 1.1 5 0"/></Svg>;
 
 function carregarDb(conta) {
   const salvo = lerJSON(K.db(conta.email), null);
@@ -3079,9 +3352,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const [, setFerVer] = useState(0);
   const [meusFundos, setMeusFundos] = useState([]);
   const [push, setPush] = useState(() => pushLigado());
-  const [trava, setTravaSt] = useState(() => travaDe(conta.email));
-  const [travado, setTravado] = useState(() => !!(travaDe(conta.email) || {}).pin);
-  const [travaSheet, setTravaSheet] = useState(false);
   CLIMA = clima;
   const tRef = useRef(null);
   useEffect(() => {
@@ -3099,7 +3369,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   // Atalhos por link: ...#gasto abre o gasto por voz, #agora o "Só o agora", #fechar o "Fechar o dia", #livres os horários livres
   useEffect(() => {
     const h = (location.hash || "").slice(1);
-    if (h === "gasto" && usaPessoal) { act.setModo("pessoal"); setSheet({ type: "lanc", tipo: "saida", voz: true }); }
+    if (h === "gasto" && usaPessoal) { act.setModo("pessoal"); setSheet({ type: "voz" }); }
     else if (h === "agora") setFoco(true);
     else if (h === "fechar") setSheet({ type: "fechar" });
     else if (h === "livres") setSheet({ type: "livres" });
@@ -3110,7 +3380,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   VIBRAR = perfil.vibrar !== false;
   // Vibração leve em qualquer botão
   useEffect(() => {
-    const f = e => { if (e.target.closest && e.target.closest("button, a.btn, label.fundo, label[for]")) vibrar("toque"); };
+    const f = e => { if (e.target === HAPTICO || (e.target && e.target.id === "haptico-sw")) return; if (e.target.closest && e.target.closest("button, a.btn, label.fundo, label[for]")) vibrar("toque"); };
     document.addEventListener("click", f, true);
     return () => document.removeEventListener("click", f, true);
   }, []);
@@ -3127,6 +3397,18 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     }).catch(() => {});
     return () => { vivo = false; };
   }, []);
+  // Número no ícone do app: sessões sem marcar + contas vencendo hoje ou atrasadas
+  const pendIcone = db.patients.filter(p => p.active && p.nextDate && p.nextDate < todayISO()).length
+    + (usaPessoal ? db.pessoal.contas.filter(c => { const st = situacaoConta(c, todayISO().slice(0, 7)).st; return st === "hoje" || st === "atrasada"; }).length : 0);
+  useEffect(() => {
+    try {
+      if (!("setAppBadge" in navigator)) return;
+      if (pendIcone > 0) navigator.setAppBadge(pendIcone).catch(() => {}); else navigator.clearAppBadge().catch(() => {});
+    } catch (e) {}
+  }, [pendIcone]);
+  // Pede ao navegador para não apagar os dados do app quando faltar espaço
+  useEffect(() => { try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {} }, []);
+
   // Avisos com o app fechado: manda a lista dos próximos dias para o servidor sempre que algo muda
   const sincronizar = async (manter, forcar) => {
     if (!pushLigado()) return "desligado";
@@ -3147,20 +3429,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     const t = setTimeout(() => sincRef.current(false), 2500);
     return () => clearTimeout(t);
   }, [db, push, av.ativo, av.antecedencia, av.nomes, av.resumo, av.fechar, usaPessoal, Math.floor(now.getTime() / 9e5)]);
-  // Ao sair da tela: manda o que mudou na hora e marca quando saiu (para o bloqueio)
-  const saiuRef = useRef(0);
+  // Ao sair da tela: manda o que mudou na hora
   useEffect(() => {
-    const f = () => {
-      if (document.visibilityState === "hidden") {
-        saiuRef.current = Date.now();
-        sincRef.current(true);
-      } else {
-        const tv = travaDe(conta.email);
-        if (tv && tv.pin && saiuRef.current && Date.now() - saiuRef.current >= (tv.depois ?? 60) * 1000) setTravado(true);
-        saiuRef.current = 0;
-        sincRef.current(false);
-      }
-    };
+    const f = () => sincRef.current(document.visibilityState === "hidden");
     document.addEventListener("visibilitychange", f);
     return () => document.removeEventListener("visibilitychange", f);
   }, []);
@@ -3251,11 +3522,15 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       } catch (e) { return e.message; }
     },
     setServidor: url => { gravar(K_PUSH_URL, url.trim()); },
-    // Bloqueio com Face ID
-    trava,
-    abrirTrava: () => setTravaSheet(true),
-    salvarTrava: cfg => { if (cfg) gravar(K_TRAVA(conta.email), cfg); else apagar(K_TRAVA(conta.email)); setTravaSt(cfg); },
-    falarGasto: () => setSheet({ type: "lanc", tipo: "saida", voz: true }),
+    falarGasto: () => { prepararAudio(); setSheet({ type: "voz" }); },
+    salvarVoz: itens => {
+      const novos = itens.map(it => ({ id: uid(), tipo: it.tipo, valor: it.valor, cat: it.cat, desc: it.desc || "", data: addDays(todayISO(), -(it.off || 0)) }));
+      const ids = new Set(novos.map(n => n.id));
+      setP(P => ({ ...P, lanc: [...P.lanc, ...novos] }));
+      close(); vibrar("ok");
+      const n = novos[0];
+      notify(novos.length > 1 ? `${novos.length} anotações · ${brlReal(soma(novos, x => x.valor))}` : `Anotado: ${brlReal(n.valor)} em ${n.desc || catDe(n.cat).nome}`, () => setP(P => ({ ...P, lanc: P.lanc.filter(x => !ids.has(x.id)) })));
+    },
     openItem: item => setSheet({ type: "session", item }),
     registrar: registrarE,
     rapido: (pid, status, manter) => { const p = db.patients.find(x => x.id === pid); registrarE(pid, { status, nextDate: addDays(p.nextDate, p.freq), paidNow: false }, manter); },
@@ -3289,7 +3564,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     openPatient: pid => setSheet({ type: "patient", pid }),
     editPatient: pid => setSheet({ type: "form", pid }),
     novoPaciente: () => setSheet({ type: "form" }),
-    openSettings: () => setSheet({ type: "settings" }),
+    openSettings: aba => setSheet({ type: "settings", aba: typeof aba === "string" ? aba : null }),
+    salvarPerfil: (patch, pix) => {
+      setDb(d => d.settings.pix === pix ? d : { ...d, settings: { ...d.settings, pix } });
+      onAtualizar(patch);
+      if (patch.perfil && patch.perfil.pessoal === false && modo === "pessoal") { setModoSt("consultorio"); gravar(K.modo(conta.email), "consultorio"); setTab("home"); }
+    },
+    modo: usaPessoal ? modo : "consultorio",
     salvarPaciente: p => {
       setDb(d => ({ ...d, patients: d.patients.some(x => x.id === p.id) ? d.patients.map(x => x.id === p.id ? p : x) : [...d.patients, p] }));
       vibrar("ok"); close(); notify(`${primeiro(p.name)} salvo · próxima ${dm(p.nextDate)} às ${p.time}`);
@@ -3403,8 +3684,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       {sheet && sheet.type === "patient" && <PatientSheet db={db} pid={sheet.pid} onClose={close} act={act} />}
       {sheet && sheet.type === "form" && <PatientForm total={db.patients.length} perfil={perfil} pre={sheet.pre} initial={sheet.pid ? db.patients.find(p => p.id === sheet.pid) : null} onSave={act.salvarPaciente} onClose={close} />}
       {sheet && sheet.type === "charge" && <ChargeSheet key={sheet.cid} db={db} cid={sheet.cid} fresh={sheet.fresh} nomeProf={conta.nome} onClose={close} act={act} />}
-      {sheet && sheet.type === "settings" && <SettingsSheet db={db} conta={conta} tema={tema} onClose={close} act={act} />}
-      {travaSheet && <TravaSheet conta={conta} trava={trava} onSave={act.salvarTrava} onClose={() => setTravaSheet(false)} />}
+      {sheet && sheet.type === "settings" && <PerfilPage db={db} conta={conta} tema={tema} inicio={sheet.aba} onClose={close} act={act} />}
       {sheet && sheet.type === "fechar" && <FecharDia db={db} conta={conta} onClose={close} act={act} />}
       {sheet && sheet.type === "revisao" && <RevisaoSheet db={db} onClose={close} act={act} />}
       {sheet && sheet.type === "confirmar" && <ConfirmSheet db={db} iso={sheet.iso} onClose={close} act={act} />}
@@ -3412,7 +3692,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       {sheet && sheet.type === "registros" && <RegistrosSheet db={db} onClose={close} act={act} />}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
       {foco && <Agora db={db} conta={conta} now={now} onClose={() => setFoco(false)} act={act} />}
-      {sheet && sheet.type === "lanc" && <LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} tipo={sheet.tipo || "saida"} voz={sheet.voz} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} />}
+      {sheet && sheet.type === "lanc" && <LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} />}
+      {sheet && sheet.type === "voz" && <VozSheet modo={modoEf} onSalvar={act.salvarVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} onClose={close} />}
       {sheet && sheet.type === "conta" && <ContaSheet key={sheet.id || "nova"} inicial={contaSel} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} />}
 
       {toast && (
@@ -3421,7 +3702,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
           {toast.undo && <button onClick={() => { toast.undo(); setToast(null); }}>Desfazer</button>}
         </div>
       )}
-      {travado && trava && trava.pin && <Trava conta={conta} trava={trava} onAbrir={() => setTravado(false)} onEsqueci={() => { act.salvarTrava(null); setTravado(false); act.sair(); }} />}
     </div>
   );
 }
