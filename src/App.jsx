@@ -1244,8 +1244,8 @@ function Sheet({ title, sub, onClose, children }) {
   // Arrastar para baixo pela alça (ou pelo título) fecha, igual aos apps do celular
   const ref = useRef(null), arr = useRef(null);
   const ini = e => { if (!ref.current) return; arr.current = { y: e.touches[0].clientY, dy: 0 }; ref.current.style.transition = "none"; };
-  const mov = e => { if (!arr.current) return; const dy = Math.max(0, e.touches[0].clientY - arr.current.y); arr.current.dy = dy; ref.current.style.transform = `translateY(${dy}px)`; };
-  const fim = () => { if (!arr.current) return; const dy = arr.current.dy; arr.current = null; ref.current.style.transition = "transform .2s ease"; if (dy > 110) { vibrar("toque"); onClose(); } else ref.current.style.transform = ""; };
+  const mov = e => { if (!arr.current) return; const dy = Math.max(0, e.touches[0].clientY - arr.current.y); arr.current.dy = dy; ref.current.style.translate = `0 ${dy}px`; };
+  const fim = () => { if (!arr.current) return; const dy = arr.current.dy; arr.current = null; ref.current.style.transition = "translate .22s ease"; if (dy > 110) { ref.current.style.translate = "0 100vh"; vibrar("toque"); setTimeout(onClose, 160); } else ref.current.style.translate = ""; };
   const arrasto = { onTouchStart: ini, onTouchMove: mov, onTouchEnd: fim, onTouchCancel: fim };
   useEffect(() => {
     const k = e => e.key === "Escape" && onClose();

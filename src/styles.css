@@ -814,10 +814,9 @@ html { box-sizing: border-box; min-height: calc(100% + env(safe-area-inset-top, 
 .voz-tec { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--teclado, 0px) + 16px); width: min(calc(100% - 32px), 520px); height: 54px; border-radius: 18px; border: 1px solid var(--line); padding: 0 18px; font: 600 16px var(--f-body); background: var(--card); color: var(--fg); opacity: 0; pointer-events: none; z-index: 31; box-shadow: 0 16px 40px rgba(0, 0, 0, .3); }
 .voz-tec.on { opacity: 1; pointer-events: auto; }
 .voz-tec::placeholder { color: var(--muted); }
-@media (min-width: 900px) { .vozb-doca { bottom: 40px; } .vozb { left: 300px; } }
 /* fundo que acompanha a doca: o texto da página nunca aparece por trás do que você falou */
 .vozb-doca::before { content: ""; position: absolute; z-index: -1; pointer-events: none; left: -50vw; right: -50vw; top: -72px; bottom: calc(-110px - env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(to bottom, transparent 0, color-mix(in srgb, var(--bg) 92%, transparent) 64px, color-mix(in srgb, var(--bg) 80%, transparent) 45%, color-mix(in srgb, var(--bg) 25%, transparent) 72%, transparent 88%); }
+  background: linear-gradient(to bottom, transparent 0, color-mix(in srgb, var(--bg) 92%, transparent) 64px, color-mix(in srgb, var(--bg) 78%, transparent) 42%, color-mix(in srgb, var(--bg) 18%, transparent) 64%, transparent 78%); }
 
 /* Barra de cima ao rolar: aparece com um degradê escuro que esconde o que passa por baixo */
 .topo-fixo { position: fixed; left: 0; right: 0; top: 0; z-index: 28; pointer-events: none; opacity: 0; transform: translateY(-14px); transition: opacity .22s ease, transform .22s ease; }
@@ -974,3 +973,64 @@ main.app.puxando { transition: none; }
 .nav.mini .nv.on .lb { display: none; }
 .nav.mini .nav-mic { transform: scale(.92); }
 @media (prefers-reduced-motion: reduce) { .nav, .nav .nv { transition: none; } }
+
+/* ===== Fala: aurora de cores fluindo (em vez de bolas) ===== */
+.vozb { --au1: #4A62FF; --au2: #8B6CFF; --au3: #38C6E8; }
+.shell[data-mode="pessoal"] .vozb { --au1: #1FB879; --au2: #2EC4B6; --au3: #8ED96A; }
+.vozb.pronto { --au1: #1FB879; --au2: #38C6E8; --au3: #5EE0A8; }
+.vozb.erro { --au1: #E0A13A; --au2: #FF7A63; --au3: #F2C14E; }
+.vozb-sombra i { display: none; }
+.vozb-sombra::before, .vozb-sombra::after { content: ""; position: absolute; left: -25%; right: -25%; bottom: -8%; height: 82%; pointer-events: none; transition: opacity .4s; }
+.vozb-sombra::before {
+  background:
+    radial-gradient(38% 70% at 18% 100%, var(--au1) 0%, transparent 72%),
+    radial-gradient(34% 80% at 52% 100%, var(--au2) 0%, transparent 72%),
+    radial-gradient(38% 70% at 86% 100%, var(--au3) 0%, transparent 72%);
+  filter: blur(30px) saturate(140%); opacity: calc(.82 + var(--n) * .18);
+  animation: aurora-a 14s ease-in-out infinite alternate; scale: 1 calc(1 + var(--n) * .22); transform-origin: 50% 100%;
+  transition: opacity .4s, scale .25s ease-out, background .6s;
+}
+.vozb-sombra::after {
+  background:
+    radial-gradient(30% 60% at 30% 100%, var(--au3) 0%, transparent 70%),
+    radial-gradient(30% 65% at 72% 100%, var(--au1) 0%, transparent 70%);
+  filter: blur(38px); opacity: calc(.5 + var(--n) * .3); mix-blend-mode: screen;
+  animation: aurora-b 18s ease-in-out infinite alternate; height: 55%;
+}
+@keyframes aurora-a { 0% { translate: -7% 0; } 50% { translate: 4% -3%; } 100% { translate: 8% 1%; } }
+@keyframes aurora-b { 0% { translate: 8% 0; } 50% { translate: -5% -4%; } 100% { translate: -9% 2%; } }
+@media (prefers-reduced-motion: reduce) { .vozb-sombra::before, .vozb-sombra::after { animation: none; } }
+
+/* ===== Computador e telas grandes ===== */
+@media (min-width: 900px) {
+  /* a aurora passa por trás da barra lateral (que é de vidro) e a fala fica no centro da área do app */
+  .vozb { left: 0; z-index: 24; height: 64vh; }
+  .vozb-doca { left: calc(292px + (100% - 292px) / 2); bottom: 36px; width: min(calc(100% - 340px), 560px); }
+  /* a Bolinha flutua no canto de baixo, à direita */
+  .nav { display: flex; left: auto; right: 28px; bottom: 28px; width: auto; transform: none; z-index: 30; }
+  .nav .nav-pill { display: none; }
+  .nav.mini { transform: none; }
+  .nav-mic { width: 72px; height: 72px; }
+  .nav-mic .bolinha { width: 72px; height: 72px; }
+}
+
+/* ===== Entradas suaves (fade + subida curta, em cascata) ===== */
+@keyframes entra { from { opacity: 0; transform: translateY(12px); } }
+@keyframes entra-leve { from { opacity: 0; transform: translateY(6px); } }
+main.app > .page > *, main.app > .page > .cols > .col > * { animation: entra .5s cubic-bezier(.2, .8, .2, 1) backwards; }
+main.app > .page > :nth-child(1) { animation-delay: 0s; } main.app > .page > :nth-child(2) { animation-delay: .04s; }
+main.app > .page > :nth-child(3) { animation-delay: .08s; } main.app > .page > :nth-child(4) { animation-delay: .12s; }
+main.app > .page > :nth-child(5) { animation-delay: .16s; } main.app > .page > :nth-child(n+6) { animation-delay: .2s; }
+main.app > .page > .cols > .col > :nth-child(1) { animation-delay: .06s; } main.app > .page > .cols > .col > :nth-child(2) { animation-delay: .11s; }
+main.app > .page > .cols > .col > :nth-child(3) { animation-delay: .16s; } main.app > .page > .cols > .col > :nth-child(4) { animation-delay: .21s; }
+main.app > .page > .cols > .col > :nth-child(5) { animation-delay: .26s; } main.app > .page > .cols > .col > :nth-child(n+6) { animation-delay: .3s; }
+main.app > .page > .cols { animation: none; }
+.panel .txn, .tl-row, .bub { animation: entra-leve .4s cubic-bezier(.2, .8, .2, 1) backwards; }
+.panel .txn:nth-child(2), .tl-row:nth-child(2) { animation-delay: .03s; } .panel .txn:nth-child(3), .tl-row:nth-child(3) { animation-delay: .06s; }
+.panel .txn:nth-child(4), .tl-row:nth-child(4) { animation-delay: .09s; } .panel .txn:nth-child(5), .tl-row:nth-child(5) { animation-delay: .12s; }
+.panel .txn:nth-child(n+6), .tl-row:nth-child(n+6) { animation-delay: .15s; }
+.dica-instalar { animation: entra .5s cubic-bezier(.2, .8, .2, 1) backwards; }
+.toast { animation: toast-entra .38s cubic-bezier(.2, 1.3, .4, 1) both; }
+@keyframes toast-entra { from { opacity: 0; transform: translateX(-50%) translateY(14px) scale(.96); } to { opacity: 1; transform: translateX(-50%); } }
+.sheet { animation-timing-function: cubic-bezier(.2, .9, .25, 1) !important; }
+@media (prefers-reduced-motion: reduce) { main.app *, .toast, .dica-instalar { animation: none !important; } }
