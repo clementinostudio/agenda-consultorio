@@ -1153,3 +1153,16 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .conf-wa:active, .conf-copy:active { transform: scale(.95); }
 
 @media (prefers-reduced-motion: reduce) { .scrim::before, .sheet, .alerta::before, .alerta-box { animation: none !important; } }
+
+/* ===== Sem efeito de vidro (Perfil → Aparência e fundo → Efeito de vidro) =====
+   Tudo fica sólido: nada de transparência nem desfoque (mais nítido e mais leve para o celular).
+   A foto de fundo, se tiver, continua aparecendo atrás dos cartões. */
+.shell.solido :is(.topo-fixo .icon-btn.redondo, .vozb-card, .vozb-aviso, .pill-btn:not(.forte), .side, .perfil-top, .push, .icon-btn) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.shell.solido :is(.vozb-card, .vozb-aviso) { background: var(--card); background-image: none; border: 1px solid var(--line); box-shadow: 0 12px 30px rgba(0, 0, 0, .25); }
+.shell.solido .pill-btn:not(.forte) { background: var(--surface-2); background-image: none; border: 1px solid var(--line); box-shadow: none; }
+.shell.solido .topo-fixo .icon-btn.redondo { background: var(--surface-2); background-image: none; border: 1px solid var(--line); box-shadow: none; }
+.shell.solido .side { background: var(--surface); }
+.shell.solido .perfil-top { background: var(--bg); }
+.shell.solido :is(.perfil-lista, .perfil-hero) { box-shadow: none; }
+.shell.com-foto:not(.glass) :is(.hello-t, .top h1, .top .eyebrow, .day-head, .section-title, .talk-who) { text-shadow: 0 1px 14px var(--g-shadow); }
+.shell.com-foto .app { position: relative; z-index: 1; }

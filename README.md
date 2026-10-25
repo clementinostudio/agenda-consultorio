@@ -141,6 +141,10 @@ Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da
 - Consultório: "Felipe veio", "Felipe veio e pagou", "a Ana faltou", "Júlia pagou", "remarca o Pedro pra quinta às 15h".
 - Empresas conhecidas (Uber, 99, iFood, Netflix, Amazon, mercados, farmácias, postos, bancos...) entram com o nome certo, a categoria certa e a logo oficial, que vem do ícone do próprio site da empresa e fica guardada no aparelho. A lista fica em `MARCAS`, no `App.jsx`.
 - Se o aparelho não liberar o reconhecimento (acontece em alguns iPhones com o app instalado), o app abre o teclado: toque no microfone do teclado e fale.
+- Pode pausar no meio da frase: o app só encerra quando a frase faz sentido (1,2 s depois da última palavra) ou depois de uma pausa maior. Toque na Bolinha para terminar na hora.
+- Se faltar algo ("gastei no uber"), toque em **Completar falando** e diga só o que faltou ("30").
+- Cada toque é uma tentativa nova: o microfone nunca fica travado. O teclado só entra quando o aparelho nega o microfone.
+- Em Perfil → Aparência e fundo dá para desligar o **Efeito de vidro** (tudo fica sólido, a foto de fundo continua atrás).
 
 ### Página de apresentação (landing page)
 Fica em `sobre/index.html` e é publicada junto com o app: `https://SEU-USUARIO.github.io/agenda-consultorio/sobre/`. Quem abre o endereço do app sem estar logado (pelo navegador) cai primeiro nela; quem já está logado ou abre pelo app instalado vai direto para o app. Os botões dela levam para `#criar` (criar conta), `#entrar` (entrar) e `#demo` (ver a demonstração). Os textos estão direto no HTML; o visual fica em `src/landing.css` e as animações (abas, acordeão, demonstração da fala, iPhone que inclina com o mouse) em `src/landing.js`, sem bibliotecas. As telas do app que aparecem dentro do iPhone ficam em `public/landing/`.

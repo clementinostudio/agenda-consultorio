@@ -762,80 +762,170 @@ function interpretarVarios(frase) {
 
 /* ---------- Falar: reconhecimento de voz do próprio aparelho ----------
    Sem servidor e sem API: usa o reconhecimento de voz que já vem no navegador (o mesmo do ditado).
-   Ele para sozinho quando você termina de falar. Se o aparelho não liberar (alguns iPhones com o app
-   instalado na tela inicial), o app abre o teclado: aí é só tocar no microfone do teclado e falar. */
+   Como ficou mais confiável:
+   - Uma instância só, reaproveitada a cada toque (criar várias seguidas trava o reconhecimento no iPhone e no Android).
+     Se ela ainda estiver ocupada, é descartada e nasce outra, sempre dentro do toque (o iPhone exige).
+   - O app decide quando você terminou: se a frase já faz sentido ("gastei 30 no uber"), encerra 1,2 s depois
+     da última palavra; se ainda falta algo (o valor, por ex.), espera um pouco mais. Pausas no meio não cortam a frase.
+   - Pede várias interpretações ao aparelho e fica com a primeira que o app entende.
+   - Nada de travar o microfone por horas: cada toque é uma tentativa nova. O teclado só entra quando
+     o aparelho realmente não deixa (permissão negada ou recurso indisponível), e o botão "Tentar a voz" volta.
+   Se o aparelho não tiver reconhecimento (alguns iPhones com o app instalado), o app abre o teclado:
+   aí é só tocar no microfone do teclado e falar. */
 const SRec = () => window.SpeechRecognition || window.webkitSpeechRecognition;
-const K_VOZ_TECLADO = "agenda-voz-teclado"; // { falhas, ate }: quando o reconhecimento falha seguido, usa o teclado por umas horas
-const vozTravada = () => { const v = lerJSON(K_VOZ_TECLADO, null); return !!(v && v.falhas >= 2 && Date.now() < (v.ate || 0)); };
-const marcarFalhaVoz = () => { const v = lerJSON(K_VOZ_TECLADO, null); const f = ((v && v.falhas) || 0) + 1; gravar(K_VOZ_TECLADO, { falhas: f, ate: Date.now() + 6 * 36e5 }); return f; };
-const vozOk = () => apagar(K_VOZ_TECLADO);
-const MSG_TECLADO = "O aparelho não está liberando o reconhecimento de voz agora. Use o microfone do teclado: funciona igual.";
+try { localStorage.removeItem("agenda-voz-teclado"); } catch (e) {} // limpa a trava antiga de 6 horas
+let VOZ_BLOQUEADA = false; // o aparelho negou o microfone nesta abertura do app (volta ao tocar em "Tentar a voz")
+const vozTravada = () => VOZ_BLOQUEADA;
+const vozOk = () => { VOZ_BLOQUEADA = false; };
+const MSG_TECLADO = "O aparelho não liberou o reconhecimento de voz. Use o microfone do teclado: funciona igual.";
+const normVoz = t => semAcento(String(t || "").toLowerCase()).replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+// Junta os pedaços que o aparelho devolve. Alguns aparelhos repetem a frase inteira a cada pedaço
+// (Android com escuta contínua): aí fica só a versão mais completa, sem duplicar.
+function juntarFala(results, k = -1, j = 0) {
+  const finais = []; let interino = "";
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]; const alt = r[i === k ? j : 0] || r[0];
+    const t = (alt && alt.transcript || "").trim(); if (!t) continue;
+    if (r.isFinal) {
+      const acc = normVoz(finais.join(" ")), nt = normVoz(t);
+      if (acc && nt.startsWith(acc)) { finais.length = 0; finais.push(t); }
+      else if (!(acc && acc.endsWith(nt))) finais.push(t);
+    } else interino = interino ? interino + " " + t : t;
+  }
+  let txt = finais.join(" ");
+  if (interino) { const a = normVoz(txt), b = normVoz(interino); txt = a && b.startsWith(a) ? interino : a && a.endsWith(b) ? txt : (txt + " " + interino).trim(); }
+  return txt.replace(/\s+/g, " ").trim();
+}
+// as outras interpretações do último pedaço final (ex.: "trinta" ouvido como "trinta" ou "30")
+function alternativasFala(results) {
+  let k = -1; for (let i = results.length - 1; i >= 0; i--) if (results[i].isFinal) { k = i; break; }
+  if (k < 0) return [];
+  const out = []; for (let j = 1; j < results[k].length; j++) { const t = juntarFala(results, k, j); if (t && !out.includes(t)) out.push(t); }
+  return out;
+}
 
-// Reconhecimento de voz do aparelho, com proteções para nunca ficar "travado ouvindo"
-function useFalaNativa({ onParcial, onFinal, onFalhou }) {
+// O motor: guarda a instância e liga cada uma à "sessão" (um toque na Bolinha) que a está usando
+const MOTOR = { rec: null, rodando: false };
+function pegarReconhecedor() {
+  const SR = SRec(); if (!SR) return null;
+  if (MOTOR.rec && MOTOR.rodando) { const velho = MOTOR.rec; velho._s = null; try { velho.abort(); } catch (e) {} MOTOR.rec = null; }
+  if (!MOTOR.rec) {
+    const rec = new SR();
+    rec.lang = "pt-BR"; rec.interimResults = true; rec.maxAlternatives = 4;
+    // contínuo: você pode pausar no meio ("gastei 30… no mercado") sem a frase ser cortada; quem encerra é o app
+    rec.continuous = true;
+    const ev = nome => (...a) => { const s = rec._s; if (s && s[nome]) s[nome](...a); };
+    rec.onstart = ev("comecou"); rec.onaudiostart = ev("audio"); rec.onspeechstart = ev("fala");
+    rec.onresult = ev("resultado"); rec.onerror = ev("erro");
+    rec.onend = (...a) => { if (MOTOR.rec === rec) MOTOR.rodando = false; const s = rec._s; rec._s = null; if (s && s.terminou) s.terminou(...a); };
+    MOTOR.rec = rec;
+  }
+  return MOTOR.rec;
+}
+const descartarReconhecedor = () => { const r = MOTOR.rec; if (r) { r._s = null; try { r.abort(); } catch (e) {} } MOTOR.rec = null; MOTOR.rodando = false; };
+
+function useFalaNativa({ onParcial, onFinal, onFalhou, completo }) {
   const [estado, setEstado] = useState("parado"); // parado | ouvindo | falando | erro
   const [erro, setErro] = useState("");
   const [nivel, setNivel] = useState(0);
-  const r = useRef({});
-  const cb = useRef({}); cb.current = { onParcial, onFinal, onFalhou };
-  const limparTimers = x => { clearInterval(x.decai); clearTimeout(x.vigia); clearTimeout(x.vigia2); clearTimeout(x.teto); clearTimeout(x.forca); };
-  const limpar = () => { const x = r.current; x.fim = true; limparTimers(x); try { x.rec && x.rec.abort(); } catch (e) {} r.current = {}; };
-  useEffect(() => limpar, []);
-  const falhar = (msg, teclado) => { limpar(); setNivel(0); setErro(msg); setEstado("erro"); vibrar("aviso"); if (teclado) cb.current.onFalhou(); };
+  const sess = useRef(null);
+  const cb = useRef({}); cb.current = { onParcial, onFinal, onFalhou, completo };
+  const limparTimers = x => { clearInterval(x.decai); ["vigiaInicio", "vigiaSilencio", "fimFala", "teto", "forca"].forEach(k => clearTimeout(x[k])); };
+  const encerrar = x => { if (!x || x.acabou) return false; x.acabou = true; limparTimers(x); if (sess.current === x) sess.current = null; setNivel(0); return true; };
+  const falhar = (x, msg, teclado) => {
+    if (x && !encerrar(x)) return;
+    if (x && x.rec) { x.rec._s = null; try { x.rec.abort(); } catch (e) {} }
+    setErro(msg); setEstado("erro"); vibrar("aviso");
+    if (teclado) cb.current.onFalhou();
+  };
+  // termina com o que ouviu (ou avisa que não ouviu nada)
+  const finalizar = (x, msgVazio) => {
+    if (!encerrar(x)) return;
+    if (x.rec && x.rec._s === x) { x.rec._s = null; try { x.rec.abort(); } catch (e) {} }
+    const t = x.texto.trim();
+    if (t) { setEstado("parado"); cb.current.onFinal(t, x.alts || []); }
+    else { setErro(msgVazio || "Não ouvi nada. Toque na Bolinha e fale de novo."); setEstado("erro"); vibrar("aviso"); }
+  };
+  // pede para o aparelho fechar a frase; se ele demorar, fica com o que já chegou
+  const pedirFim = x => {
+    if (!x || x.acabou || x.parando) return; x.parando = true;
+    clearTimeout(x.fimFala); clearTimeout(x.vigiaSilencio);
+    try { x.rec.stop(); } catch (e) {}
+    x.forca = setTimeout(() => finalizar(x), 1100);
+  };
+  useEffect(() => () => { const x = sess.current; if (x) { encerrar(x); if (x.rec) { x.rec._s = null; try { x.rec.abort(); } catch (e) {} } } }, []);
+
+  // chamado direto no toque: o rec.start() acontece aqui mesmo, sem esperar nada (exigência do iPhone)
   const iniciar = () => {
-    const tinha = !!r.current.rec;
-    limpar(); setErro(""); setNivel(0);
-    const SR = SRec();
-    if (!SR) return false;
-    const abrir = () => {
-      const rec = new SR();
-      rec.lang = "pt-BR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
-      const x = r.current = { rec, texto: "", fim: false, audio: false, ouviu: false };
-      // termina de um jeito só, aconteça o que acontecer
-      x.terminar = (t, msgVazio) => {
-        if (x.fim) return; x.fim = true; limparTimers(x);
-        try { rec.abort(); } catch (e) {}
-        if (r.current === x) r.current = {};
-        setNivel(0);
-        if (t) { setEstado("parado"); cb.current.onFinal(t); } else falhar(msgVazio || "Não ouvi nada. Toque na Bolinha e fale de novo.");
-      };
-      const travou = () => { if (x.fim) return; x.fim = true; limparTimers(x); try { rec.abort(); } catch (e) {} const f = marcarFalhaVoz(); falhar(f >= 2 ? MSG_TECLADO : "O microfone não respondeu. Toque na Bolinha de novo.", f >= 2); };
-      x.decai = setInterval(() => setNivel(n => n > .14 ? n * .8 : .06 + Math.random() * .06), 110);
-      x.vigia = setTimeout(() => { if (!x.audio && !x.ouviu) travou(); }, 4500);             // o microfone nem abriu
-      x.vigia2 = setTimeout(() => { if (!x.ouviu) { if (x.audio) { const f = marcarFalhaVoz(); if (f >= 2) return travou(); } x.terminar(""); } }, 9000); // abriu mas nada chegou
-      x.teto = setTimeout(() => { try { rec.stop(); } catch (e) {} x.forca = setTimeout(() => x.terminar(x.texto.trim()), 1500); }, 20000);
-      rec.onstart = rec.onaudiostart = () => { x.audio = true; };
-      rec.onspeechstart = () => setEstado("falando");
-      rec.onresult = e => {
-        if (x.fim) return;
-        x.ouviu = true; clearTimeout(x.vigia); clearTimeout(x.vigia2); vozOk();
-        x.texto = [...e.results].map(y => y[0].transcript).join(" ");
-        setEstado("falando"); setNivel(.55 + Math.random() * .45);
-        cb.current.onParcial(x.texto);
-      };
-      rec.onerror = e => {
-        if (x.fim || e.error === "aborted") return;
-        if (e.error === "no-speech") return x.terminar(x.texto.trim());
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") { x.fim = true; limparTimers(x); gravar(K_VOZ_TECLADO, { falhas: 2, ate: Date.now() + 6 * 36e5 }); return falhar("O microfone não foi liberado para o app. Use o microfone do teclado: funciona igual.", true); }
-        if (e.error === "network") return x.terminar(x.texto.trim(), "Sem internet: o reconhecimento de voz do aparelho precisa de conexão. Toque em Teclado.");
-        if (e.error === "audio-capture") return x.terminar(x.texto.trim(), "O microfone está ocupado por outro app. Feche o outro app e tente de novo.");
-        x.terminar(x.texto.trim(), "Não consegui ouvir agora. Toque na Bolinha para tentar de novo.");
-      };
-      rec.onend = () => x.terminar(x.texto.trim());
-      try { rec.start(); setEstado("ouvindo"); }
-      catch (e) { x.fim = true; limparTimers(x); r.current = {}; falhar("Não consegui abrir o microfone. Toque na Bolinha de novo."); }
+    const velho = sess.current; if (velho) { encerrar(velho); if (velho.rec) velho.rec._s = null; }
+    setErro(""); setNivel(0);
+    const rec = pegarReconhecedor();
+    if (!rec) return false;
+    const x = { rec, texto: "", alts: [], acabou: false, parando: false, abriu: false, ouviu: false, tentativas: 0, t0: Date.now() };
+    sess.current = x;
+    const recomecar = () => { // nova tentativa silenciosa (sem toque: funciona no Android; no iPhone, se falhar, avisa)
+      x.tentativas++; x.parando = false;
+      try { rec._s = x; rec.start(); MOTOR.rodando = true; x.t0 = Date.now(); armarInicio(); return true; } catch (e) { return false; }
     };
-    if (tinha) setTimeout(abrir, 180); else abrir();
+    const armarInicio = () => { clearTimeout(x.vigiaInicio); x.vigiaInicio = setTimeout(() => { if (!x.abriu && !x.acabou) { descartarReconhecedor(); falhar(x, "O microfone não abriu. Toque na Bolinha de novo."); } }, 8000); };
+    x.comecou = () => { x.abriu = true; clearTimeout(x.vigiaInicio); setEstado(e => e === "falando" ? e : "ouvindo"); };
+    x.audio = () => { x.abriu = true; clearTimeout(x.vigiaInicio); };
+    x.fala = () => { setEstado("falando"); };
+    x.resultado = e => {
+      if (x.acabou) return;
+      x.abriu = true; x.ouviu = true; clearTimeout(x.vigiaInicio); clearTimeout(x.vigiaSilencio);
+      const t = juntarFala(e.results);
+      if (t !== x.texto) { x.texto = t; cb.current.onParcial(t); }
+      const alts = alternativasFala(e.results); if (alts.length) x.alts = alts;
+      setEstado("falando"); setNivel(.55 + Math.random() * .45);
+      // fim da fala: decide pelo sentido da frase, não só pelo silêncio
+      clearTimeout(x.fimFala);
+      const ok = cb.current.completo ? cb.current.completo(t) : false;
+      x.fimFala = setTimeout(() => pedirFim(x), ok ? 1200 : 2600);
+    };
+    x.erro = ev => {
+      if (x.acabou) return;
+      const code = (ev && ev.error) || String(ev || "");
+      x.codigo = code;
+      if (code === "aborted") return; // o onend vem logo depois e resolve
+      if (code === "no-speech") return; // idem: termina com o que tiver
+      if (code === "not-allowed" || code === "service-not-allowed") {
+        VOZ_BLOQUEADA = true; descartarReconhecedor();
+        return falhar(x, code === "not-allowed" && !ehIOS() ? "O microfone está bloqueado para o app. Libere em Configurações do navegador → Microfone, ou use o microfone do teclado." : MSG_TECLADO, true);
+      }
+      if (code === "network" && !x.texto && x.tentativas < 1) { x.recomecarNoFim = true; return; }
+      if (code === "network") { x.msgFim = "Sem internet: o reconhecimento de voz do aparelho precisa de conexão. Use o teclado."; return; }
+      if (code === "audio-capture") { descartarReconhecedor(); x.msgFim = "O microfone está ocupado por outro app (ligação, gravador…). Feche e tente de novo."; return; }
+      if (code === "language-not-supported") { x.msgFim = "Este aparelho não reconhece português pela voz. Use o microfone do teclado."; return; }
+      x.msgFim = `Não consegui ouvir agora (${code}). Toque na Bolinha para tentar de novo.`;
+    };
+    x.terminou = () => {
+      if (x.acabou) return;
+      clearTimeout(x.forca);
+      // o aparelho fechou sozinho logo de cara, sem ouvir nada (acontece no iPhone e em rede ruim): tenta de novo uma vez
+      if (!x.texto && !x.parando && (x.recomecarNoFim || (Date.now() - x.t0 < 1500 && !x.codigo)) && x.tentativas < 1) { x.recomecarNoFim = false; x.codigo = ""; if (recomecar()) return; }
+      // escuta contínua: se o aparelho encerrou no meio (pausa longa) e já tem frase, termina com ela
+      finalizar(x, x.msgFim);
+    };
+    x.decai = setInterval(() => setNivel(n => n > .14 ? n * .8 : .06 + Math.random() * .06), 110);
+    // abriu mas ninguém falou: encerra com calma
+    x.vigiaSilencio = setTimeout(() => { if (!x.ouviu) pedirFim(x); }, 9000);
+    x.teto = setTimeout(() => pedirFim(x), 30000);
+    try { rec._s = x; rec.start(); MOTOR.rodando = true; }
+    catch (e) {
+      // ainda estava ocupada: descarta e tenta com uma nova, no mesmo toque
+      descartarReconhecedor();
+      const novo = pegarReconhecedor(); x.rec = novo;
+      try { novo._s = x; novo.start(); MOTOR.rodando = true; }
+      catch (e2) { falhar(x, "Não consegui abrir o microfone. Toque na Bolinha de novo."); return true; }
+    }
+    armarInicio();
     setEstado("ouvindo");
     return true;
   };
-  // terminar agora: pede para parar e, se o aparelho não responder em 1,5 s, termina com o que já ouviu
-  const parar = () => {
-    const x = r.current; if (!x.rec || x.fim) return;
-    try { x.rec.stop(); } catch (e) {}
-    clearTimeout(x.forca); x.forca = setTimeout(() => x.terminar && x.terminar(x.texto.trim()), 1500);
-  };
-  const cancelar = () => { limpar(); setNivel(0); setErro(""); setEstado("parado"); };
+  // terminar agora (toque na Bolinha enquanto ouve)
+  const parar = () => { const x = sess.current; if (x) pedirFim(x); };
+  const cancelar = () => { const x = sess.current; if (x) { encerrar(x); if (x.rec) { x.rec._s = null; try { x.rec.abort(); } catch (e) {} } } setNivel(0); setErro(""); setEstado("parado"); };
   return { estado, erro, nivel, iniciar, parar, cancelar };
 }
 
@@ -2480,8 +2570,19 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     if (c && (c.ok || !itens.some(i => i.valor > 0))) return { tipo: "consult", c };
     return { tipo: "gastos", itens };
   };
+  const okDe = r => r.tipo === "consult" ? r.c.ok : (r.itens.length > 0 && r.itens.every(i => i.valor > 0) && usaPessoal);
+  // "Falar de novo" depois de faltar algo completa a frase anterior ("gastei no uber" + "30")
+  const base = useRef("");
+  const comBase = t => base.current ? (base.current + " " + t).trim() : t;
+  const melhor = (t, alts = []) => {
+    const cands = [t, ...alts];
+    const lista = base.current ? [...cands.map(comBase), ...cands] : cands;
+    return lista.find(c => okDe(entender(c))) || comBase(t);
+  };
+  const textoRef = useRef(""); textoRef.current = texto;
   const aplicar = t => { setTexto(t); setRes(entender(t)); };
-  const concluir = t => {
+  const concluir = (t0, alts) => {
+    const t = alts ? melhor(t0, alts) : t0;
     aplicar(t); setAviso("");
     if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la)\b/.test(semAcento(t))) { fechar(); return; }
     const r = entender(t);
@@ -2493,25 +2594,32 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     if (ok) { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); }
     else { setAviso(msg); setFase("faltando"); vibrar("aviso"); }
   };
-  const fala = useFalaNativa({ onParcial: aplicar, onFinal: concluir, onFalhou: () => setFase("teclado") });
+  const fala = useFalaNativa({
+    onParcial: t => aplicar(comBase(t)),
+    onFinal: (t, alts) => concluir(t, alts || []),
+    onFalhou: () => { setFase("teclado"); setTimeout(() => tecRef.current && tecRef.current.focus(), 60); },
+    completo: t => okDe(entender(comBase(t))),
+  });
   const abrirTeclado = () => { fala.cancelar(); setAviso(""); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
   // chamado direto no toque (o iPhone só libera microfone e teclado dentro do toque)
-  const comecar = () => {
+  const comecar = continuar => {
     clearTimeout(ocioso.current);
-    setTexto(""); setRes(null); setAviso(""); setAtivo(true);
+    base.current = continuar === true && textoRef.current ? textoRef.current : "";
+    if (!base.current) { setTexto(""); setRes(null); }
+    setAviso(""); setAtivo(true);
     if (!SRec() || vozTravada()) { abrirTeclado(); return; }
     setFase("ouvindo");
     if (tecRef.current) tecRef.current.blur();
     fala.iniciar();
   };
-  const fechar = () => { fala.cancelar(); clearTimeout(ocioso.current); if (tecRef.current) tecRef.current.blur(); setAtivo(false); setFase("ouvindo"); setAviso(""); };
+  const fechar = () => { fala.cancelar(); clearTimeout(ocioso.current); base.current = ""; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); };
   const salvar = () => { const r = res; fechar(); if (!r) return; if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens); };
   const tocar = () => {
     if (!ativo) return comecar();
     if (fase === "contando") return salvar();
     if (fase === "teclado") { const t = tecRef.current ? tecRef.current.value : ""; return t.trim() ? concluir(t) : fechar(); }
     if (fala.estado === "ouvindo" || fala.estado === "falando") return fala.parar();
-    comecar();
+    comecar(fase === "faltando");
   };
   api.current = { tocar, comecar, fechar };
   // conta para a barra (e para o mascote) o que está acontecendo
@@ -2550,7 +2658,9 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const classe = fase === "contando" ? "pronto" : fase === "faltando" || est === "erro" ? "erro" : est;
   const status = fase === "contando" ? `Entendi · salvando em ${conta}`
     : fase === "teclado" ? "Toque no microfone do teclado e fale"
-    : fase === "faltando" ? "Faltou algo" : est === "erro" ? "Não deu para ouvir" : est === "falando" ? "Ouvindo…" : "Pode falar";
+    : fase === "faltando" ? "Faltou algo" : est === "erro" ? "Não deu para ouvir"
+    : base.current ? (est === "falando" ? "Ouvindo… completando a frase" : "Complete a frase")
+    : est === "falando" ? "Ouvindo… toque na Bolinha quando terminar" : "Pode falar";
   const dica = `Ex.: “gastei 30 no uber”${db.patients.some(p => p.active) ? ` ou “${primeiro(db.patients.find(p => p.active).name)} veio”` : ""}`;
   return (
     <>
@@ -2590,7 +2700,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
           <div className="vozb-acoes">
             {fase === "contando" && <button className="pill-btn forte" onClick={salvar} style={{ "--k": conta / 3 }}><I.check /> Salvar</button>}
             {fase === "contando" && um && <button className="pill-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
-            {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn forte" onClick={comecar}><I.mic /> Falar de novo</button>}
+            {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn forte" onClick={() => comecar(fase === "faltando")}><I.mic /> {fase === "faltando" ? "Completar falando" : "Falar de novo"}</button>}
             {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn" onClick={abrirTeclado}>Teclado</button>}
             {fase === "teclado" && SRec() && <button className="pill-btn" onClick={() => { vozOk(); comecar(); }}><I.mic /> Tentar a voz</button>}
             <button className="pill-btn" onClick={fechar}>Cancelar</button>
@@ -3137,6 +3247,8 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act }) {
           <div className="fields"><Field label="Aparência"><Seg value={tema.modo} onChange={tema.setModo} options={[{ v: "dark", l: "Escuro" }, { v: "light", l: "Claro" }, { v: "auto", l: "Do aparelho" }]} /></Field></div>
           <h3 className="section-title">Fundo do app</h3>
           <FundoPicker fundo={conta.fundo} meus={act.meusFundos} onChange={act.setFundo} onAdd={act.addFundo} onUpdate={act.updFundo} onDelete={act.delFundo} />
+          <Toggle on={conta.vidro !== false} onClick={() => act.setVidro(conta.vidro === false)}>Efeito de vidro</Toggle>
+          <div className="hint">{conta.vidro === false ? "Desligado: cartões, botões e a fala ficam sólidos, mais nítidos e mais leves no celular. A foto de fundo continua aparecendo atrás." : "Ligado: cartões e botões ficam transparentes, deixando a foto de fundo aparecer por trás. Desligue se preferir tudo sólido."}</div>
           <Toggle on={vib} onClick={() => { setVib(!vib); VIBRAR = !vib; if (!vib) vibrar("ok"); }}>Vibrar nos toques</Toggle>
           <div className="hint">No iPhone a vibração é bem leve (o iPhone só deixa apps da web darem um toquinho).</div>
         </div>}
@@ -3937,6 +4049,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     adiarReajuste: pid => { setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, reajusteAdiado: addDays(todayISO(), 180) } : p) })); notify("Combinado: lembro de novo em 6 meses"); },
     exportar: chave => exportarMes(db, chave, act),
     setFundo: f => onAtualizar({ fundo: f }),
+    setVidro: v => onAtualizar({ vidro: v }),
     addFundo: async img => { const item = { id: uid(), dono: conta.email, img, criado: Date.now() }; await IDB.salvar(item); setMeusFundos(l => [...l, item]); onAtualizar({ fundo: { veu: (conta.fundo && conta.fundo.veu) || "medio", id: "u:" + item.id } }); notify("Fundo adicionado"); },
     updFundo: async (id, img) => { const velho = meusFundos.find(m => m.id === id); const item = { ...velho, img }; await IDB.salvar(item); setMeusFundos(l => l.map(m => m.id === id ? item : m)); notify("Fundo ajustado"); },
     delFundo: async id => { await IDB.apagar(id).catch(() => {}); setMeusFundos(l => l.filter(m => m.id !== id)); if (conta.fundo && conta.fundo.id === "u:" + id) onAtualizar({ fundo: null }); notify("Fundo excluído"); },
@@ -4028,7 +4141,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   if (!saindo) paineisCong.current = paineis;
 
   return (
-    <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " glass" : "")} data-mode={modoEf}>
+    <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " com-foto" + (conta.vidro !== false ? " glass" : "") : "") + (conta.vidro === false ? " solido" : "")} data-mode={modoEf}>
       {conta.fundo && imagemFundo(conta.fundo, meusFundos) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo, meusFundos)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
       <aside className="side" aria-label="Menu">
         <div className="side-brand"><i><I.logo /></i>Agenda</div>
