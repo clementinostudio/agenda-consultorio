@@ -135,6 +135,8 @@ bash servidor-avisos/instalar-avisos.sh
 O comando abre o navegador para você entrar na Cloudflare (crie a conta grátis se não tiver), publica o servidor e avisa o GitHub do endereço. Depois, no celular: abra o app pelo ícone → Ajustes → Avisos → **Ligar avisos com o app fechado** → Permitir. No iPhone precisa do iOS 16.4 ou mais novo e do app instalado na tela inicial. As chaves ficam em `servidor-avisos/.chaves.json`, que nunca vai para o GitHub (não apague: sem elas os aparelhos precisam ligar os avisos de novo).
 
 ### Falar (em qualquer tela)
+**Fala pelo servidor (o jeito mais confiável):** com o servidor de avisos instalado (`bash servidor-avisos/instalar-avisos.sh`), o próprio app grava o que você fala, percebe sozinho quando você parou (1,1 s de silêncio), corta o silêncio e manda um áudio curtinho para o **seu** servidor na Cloudflare, que transcreve com o Whisper (Workers AI, dentro da cota grátis diária). Funciona igual no iPhone com o app instalado e no Android. O áudio não fica guardado; vão junto só os primeiros nomes dos pacientes, para o Whisper acertar a grafia. Sem o servidor, o app usa o reconhecimento do próprio aparelho.
+
 Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da tela e tudo aparece ali embaixo, sem abrir janela. Usa o reconhecimento de voz do próprio aparelho, sem servidor.
 
 - Gastos e entradas: "gastei 30 no uber", "comprei 120 na amazon e 54 e 90 no ifood", "recebi 200 de pix".

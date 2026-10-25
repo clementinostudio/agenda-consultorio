@@ -3,5 +3,7 @@
   "name": "agenda-avisos",
   "main": "src/index.js",
   "compatibility_date": "2026-09-01",
+  // Workers AI: transcreve a fala do app (Whisper), dentro da cota grátis da Cloudflare
+  "ai": { "binding": "AI" },
   "triggers": { "crons": ["* * * * *"] }
 }

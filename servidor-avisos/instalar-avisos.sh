@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Liga os avisos com o app fechado (iPhone e Android).
+# Liga os avisos com o app fechado (iPhone e Android) e a fala pelo servidor (Whisper, grátis na Cloudflare).
 # Rode da pasta do projeto:   bash servidor-avisos/instalar-avisos.sh
 # Pode rodar de novo quando quiser: ele reaproveita o que já existe.
 set -e
@@ -69,7 +69,7 @@ curl -fsS "$URL/chave" >/dev/null && echo "Servidor respondendo em $URL" || echo
 cd ..
 if gh variable set AVISOS_URL --body "$URL" 2>/dev/null; then
   gh workflow run deploy.yml >/dev/null 2>&1 && sleep 8 && gh run watch "$(gh run list --workflow=deploy.yml -L1 --json databaseId -q '.[0].databaseId')" || true
-  verde "Pronto! Avisos com o app fechado ligados."
+  verde "Pronto! Avisos com o app fechado e fala pelo servidor ligados."
   echo "No iPhone: feche e abra o app pelo ícone, vá em Ajustes > Avisos e toque em 'Ligar avisos com o app fechado'."
 else
   verde "Servidor pronto em: $URL"

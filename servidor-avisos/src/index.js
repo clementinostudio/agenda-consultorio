@@ -7,6 +7,8 @@
   - O app manda a lista dos próximos avisos (horário + texto) para /agendar.
   - A cada minuto o servidor confere a lista e envia os avisos daquele minuto.
   - O texto vai criptografado de ponta a ponta até o seu aparelho (RFC 8291).
+  - /transcrever: recebe a fala gravada no app (WAV curtinho) e devolve o texto, usando o
+    Whisper do Workers AI (cota grátis diária da Cloudflare). Nada é guardado.
 */
 
 const CHAVE = "dados"; // tudo fica numa chave só do KV (um app pessoal, poucos aparelhos)
@@ -75,6 +77,22 @@ export default {
 
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
+
+    // Transcreve a fala do app (Whisper na própria Cloudflare). O áudio não fica guardado em lugar nenhum.
+    if (url.pathname === "/transcrever") {
+      if (!permitida) return json({ erro: "Origem não permitida" }, 403);
+      if (!env.AI) return json({ erro: "sem-ia" }, 501);
+      const audio = typeof b.audio === "string" ? b.audio : "";
+      if (audio.length < 2000 || audio.length > 2500000) return json({ erro: "Áudio vazio ou grande demais" }, 400);
+      const entrada = { audio, task: "transcribe", language: "pt", condition_on_previous_text: false };
+      const prompt = limpar(b.prompt, 700); if (prompt) entrada.initial_prompt = prompt;
+      try {
+        const r = await env.AI.run("@cf/openai/whisper-large-v3-turbo", entrada);
+        return json({ ok: true, texto: String((r && r.text) || "").trim() });
+      } catch (e) {
+        return json({ erro: "Falha ao transcrever: " + String((e && e.message) || e).slice(0, 140) }, 502);
+      }
+    }
 
     const id = limpar(b.id, 64);
     if (!id) return json({ erro: "Falta o id" }, 400);

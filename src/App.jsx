@@ -929,6 +929,148 @@ function useFalaNativa({ onParcial, onFinal, onFalhou, completo }) {
   return { estado, erro, nivel, iniciar, parar, cancelar };
 }
 
+/* ---------- Falar pelo servidor (Whisper na Cloudflare) ----------
+   O jeito mais confiável, em qualquer celular (inclusive iPhone com o app instalado):
+   o próprio app grava o áudio, percebe sozinho quando você parou de falar (medindo o volume de verdade),
+   corta o silêncio, manda um áudio curtinho para o SEU servidor na Cloudflare e recebe o texto.
+   Sem servidor configurado (ou se ele estiver desatualizado), usa o reconhecimento do aparelho. */
+let AUDIO_CTX_VOZ = null;
+let VOZ_SERVIDOR_FALHOU = false; // o servidor ainda não tem a rota de fala: nesta abertura do app usa a voz do aparelho
+const temGravador = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && !!(window.AudioContext || window.webkitAudioContext);
+const vozPeloServidor = () => !VOZ_SERVIDOR_FALHOU && !!servidorAvisos() && temGravador();
+// frases que o Whisper "inventa" quando só tem silêncio ou ruído
+const ALUCINA = /amara\.org|legendas? (pela|por|da)|inscreva-se|obrigad[oa] por assistir|^\s*(obrigad[oa]|tchau)[.!]?\s*$/i;
+const limparTranscricao = t => {
+  let s = String(t || "").replace(/\s+/g, " ").trim();
+  if (!s || ALUCINA.test(s)) return "";
+  s = s.replace(/R\$\s*/gi, "").replace(/(\d)\.(\d{3})(?!\d)/g, "$1$2").replace(/[.!?…]+(\s|$)/g, "$1").replace(/[“”"]/g, "").trim();
+  return s ? s.charAt(0).toLowerCase() + s.slice(1) : "";
+};
+const paraBase64 = u8 => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+// junta os pedaços gravados, corta o silêncio das pontas, ajusta o volume e gera um WAV 16 kHz mono (o formato que o Whisper usa)
+function montarWav(x, manual) {
+  const n = x.chunks.length; if (!n) return null;
+  let ini = x.fala.indexOf(true), fim = x.fala.lastIndexOf(true);
+  if (ini < 0) { if (!manual) return null; ini = 0; fim = n - 1; }
+  const pad1 = Math.ceil(350 / x.msBloco), pad2 = Math.ceil(500 / x.msBloco);
+  const pedacos = x.chunks.slice(Math.max(0, ini - pad1), Math.min(n, fim + pad2 + 1));
+  let total = 0; for (const c of pedacos) total += c.length;
+  if (total < x.taxa * .35) return null;
+  const pcm = new Float32Array(total); let o = 0; for (const c of pedacos) { pcm.set(c, o); o += c.length; }
+  let pico = 0; for (let i = 0; i < pcm.length; i++) { const a = Math.abs(pcm[i]); if (a > pico) pico = a; }
+  const ganho = pico > 0 ? Math.min(8, .9 / pico) : 1;
+  const r = x.taxa / 16000, m = Math.floor(pcm.length / r), out = new Int16Array(m);
+  for (let i = 0; i < m; i++) {
+    const a = Math.floor(i * r), b = Math.max(a + 1, Math.min(pcm.length, Math.floor((i + 1) * r)));
+    let soma = 0; for (let j = a; j < b; j++) soma += pcm[j];
+    out[i] = Math.max(-1, Math.min(1, (soma / (b - a)) * ganho)) * 0x7fff;
+  }
+  const buf = new ArrayBuffer(44 + m * 2), dv = new DataView(buf);
+  const w = (p, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(p + i, t.charCodeAt(i)); };
+  w(0, "RIFF"); dv.setUint32(4, 36 + m * 2, true); w(8, "WAVE"); w(12, "fmt "); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, "data"); dv.setUint32(40, m * 2, true);
+  new Int16Array(buf, 44).set(out);
+  return new Uint8Array(buf);
+}
+
+function useFalaServidor({ onFinal, onFalhou, prompt }) {
+  const [estado, setEstado] = useState("parado"); // parado | ouvindo | falando | processando | erro
+  const [erro, setErro] = useState("");
+  const [nivel, setNivel] = useState(0);
+  const atual = useRef(null);
+  const cb = useRef({}); cb.current = { onFinal, onFalhou, prompt };
+  const soltar = x => {
+    if (!x || x.solto) return; x.solto = true;
+    clearTimeout(x.teto); clearTimeout(x.semFala); clearTimeout(x.vigiaAudio);
+    try { if (x.proc) { x.proc.onaudioprocess = null; x.proc.disconnect(); } if (x.fonte) x.fonte.disconnect(); } catch (e) {}
+    if (x.stream) x.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+  };
+  useEffect(() => () => { const x = atual.current; if (x) { x.cancelado = true; soltar(x); } }, []);
+  const falhar = (x, msg) => { if (x && x.cancelado) return; setNivel(0); setErro(msg); setEstado("erro"); vibrar("aviso"); };
+  const terminar = async (x, manual) => {
+    if (!x || x.encerrado) return; x.encerrado = true;
+    soltar(x); setNivel(0);
+    if (!x.falou && !manual) return falhar(x, "Não ouvi nada. Toque na Bolinha e fale de novo.");
+    const wav = x.chunks.length ? montarWav(x, manual) : null;
+    if (!wav) return falhar(x, "Não ouvi nada. Toque na Bolinha e fale de novo.");
+    setEstado("processando");
+    const ctrl = new AbortController(); const tempo = setTimeout(() => ctrl.abort(), 20000);
+    try {
+      const r = await fetch(`${servidorAvisos()}/transcrever`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio: paraBase64(wav), prompt: cb.current.prompt || "" }), signal: ctrl.signal });
+      const j = await r.json().catch(() => ({}));
+      if (x.cancelado) return;
+      if (r.status === 404 || r.status === 501 || j.erro === "sem-ia") { VOZ_SERVIDOR_FALHOU = true; return falhar(x, "Seu servidor ainda não sabe transcrever a fala. No computador, rode de novo: bash servidor-avisos/instalar-avisos.sh. Por enquanto, toque na Bolinha que eu uso a voz do aparelho."); }
+      if (!r.ok || !j.ok) throw new Error(j.erro || "HTTP " + r.status);
+      const t = limparTranscricao(j.texto);
+      if (!t) return falhar(x, "Não entendi. Toque na Bolinha e fale de novo, um pouco mais perto do celular.");
+      setEstado("parado"); cb.current.onFinal(t);
+    } catch (e) {
+      if (x.cancelado) return;
+      falhar(x, navigator.onLine === false ? "Sem internet agora. Use o teclado, ou tente de novo quando a conexão voltar."
+        : e && e.name === "AbortError" ? "O servidor demorou demais para responder. Toque na Bolinha para tentar de novo."
+        : `Não consegui transcrever agora (${String((e && e.message) || e).slice(0, 60)}). Toque na Bolinha para tentar de novo.`);
+    } finally { clearTimeout(tempo); }
+  };
+  // chamado direto no toque: o áudio do iPhone só liga dentro do toque
+  const iniciar = () => {
+    const velho = atual.current; if (velho) { velho.cancelado = true; soltar(velho); }
+    setErro(""); setNivel(0);
+    const AC = window.AudioContext || window.webkitAudioContext;
+    try { if (!AUDIO_CTX_VOZ || AUDIO_CTX_VOZ.state === "closed") AUDIO_CTX_VOZ = new AC(); if (AUDIO_CTX_VOZ.state !== "running") AUDIO_CTX_VOZ.resume().catch(() => {}); }
+    catch (e) { return false; }
+    const ctx = AUDIO_CTX_VOZ;
+    const x = { chunks: [], fala: [], falou: false, ruido: 0, nRuido: 0, falaMs: 0, silencio: 0, taxa: ctx.sampleRate, msBloco: 4096 / ctx.sampleRate * 1000 };
+    atual.current = x; setEstado("ouvindo");
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }).then(stream => {
+      if (x.cancelado || x.encerrado) { stream.getTracks().forEach(t => t.stop()); return; }
+      x.stream = stream;
+      // liga o microfone ao medidor de volume; no iPhone o áudio às vezes "congela" quando o microfone abre:
+      // se nenhum som chegar em 1,5 s, recria o áudio e liga de novo (uma vez)
+      const ligar = c => {
+        if (c.state !== "running") c.resume().catch(() => {});
+        try { if (x.proc) { x.proc.onaudioprocess = null; x.proc.disconnect(); } if (x.fonte) x.fonte.disconnect(); } catch (e) {}
+        const fonte = c.createMediaStreamSource(stream), proc = c.createScriptProcessor(4096, 1, 1);
+        x.fonte = fonte; x.proc = proc; x.taxa = c.sampleRate; x.msBloco = 4096 / c.sampleRate * 1000;
+        proc.onaudioprocess = processar;
+        fonte.connect(proc); proc.connect(c.destination);
+      };
+      const processar = e => {
+        if (x.solto) return;
+        const c = new Float32Array(e.inputBuffer.getChannelData(0)); x.chunks.push(c);
+        let q = 0; for (let i = 0; i < c.length; i++) q += c[i] * c[i];
+        const rms = Math.sqrt(q / c.length);
+        // primeiros ~350 ms: mede o barulho do ambiente
+        if (x.nRuido < 4) { x.ruido = (x.ruido * x.nRuido + rms) / (x.nRuido + 1); x.nRuido++; x.fala.push(false); setNivel(.08); return; }
+        const limiar = Math.min(.05, Math.max(.008, Math.min(x.ruido, .02) * 2.8));
+        const voz = rms > limiar; x.fala.push(voz);
+        if (!voz) x.ruido = x.ruido * .92 + rms * .08;
+        setNivel(Math.min(1, .08 + rms / (limiar * 5)));
+        if (voz) { x.falaMs += x.msBloco; x.silencio = 0; if (!x.falou && x.falaMs >= 160) { x.falou = true; clearTimeout(x.semFala); setEstado("falando"); } }
+        else if (x.falou) { x.silencio += x.msBloco; if (x.silencio >= 1100) terminar(x); } // 1,1 s calado depois de falar: terminou
+      };
+      ligar(ctx);
+      x.vigiaAudio = setTimeout(() => {
+        if (x.solto || x.chunks.length) return;
+        try { const AC2 = window.AudioContext || window.webkitAudioContext; try { ctx.close(); } catch (e) {} AUDIO_CTX_VOZ = new AC2(); ligar(AUDIO_CTX_VOZ); } catch (e) {}
+      }, 1500);
+      x.semFala = setTimeout(() => { if (!x.falou) terminar(x); }, 8000);
+      x.teto = setTimeout(() => terminar(x, true), 25000);
+    }).catch(err => {
+      if (x.cancelado) return;
+      x.encerrado = true; soltar(x);
+      const n = err && err.name;
+      if (n === "NotAllowedError" || n === "SecurityError") { falhar(x, "O microfone não foi liberado para o app. Toque em Permitir quando o celular perguntar, ou libere em Ajustes do aparelho → Safari/Chrome → Microfone. Enquanto isso, use o microfone do teclado."); cb.current.onFalhou(); }
+      else if (n === "NotFoundError") falhar(x, "Não achei microfone neste aparelho.");
+      else if (n === "NotReadableError" || n === "AbortError") falhar(x, "O microfone está ocupado por outro app (ligação, gravador…). Feche e tente de novo.");
+      else falhar(x, `Não consegui abrir o microfone (${n || "erro"}). Toque na Bolinha de novo.`);
+    });
+    return true;
+  };
+  const parar = () => { const x = atual.current; if (x && !x.encerrado) terminar(x, true); };
+  const cancelar = () => { const x = atual.current; if (x) { x.cancelado = true; x.encerrado = true; soltar(x); } setNivel(0); setErro(""); setEstado("parado"); };
+  return { estado, erro, nivel, iniciar, parar, cancelar };
+}
+
 // Avisos: banner dentro do app + som + vibração; notificação do sistema quando o aparelho permitir
 let audioCtx = null;
 function tocarSom() {
@@ -2594,30 +2736,42 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     if (ok) { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); }
     else { setAviso(msg); setFase("faltando"); vibrar("aviso"); }
   };
-  const fala = useFalaNativa({
+  const irTeclado = () => { setFase("teclado"); setTimeout(() => tecRef.current && tecRef.current.focus(), 60); };
+  const nat = useFalaNativa({
     onParcial: t => aplicar(comBase(t)),
     onFinal: (t, alts) => concluir(t, alts || []),
-    onFalhou: () => { setFase("teclado"); setTimeout(() => tecRef.current && tecRef.current.focus(), 60); },
+    onFalhou: irTeclado,
     completo: t => okDe(entender(comBase(t))),
   });
-  const abrirTeclado = () => { fala.cancelar(); setAviso(""); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
+  // dica para o Whisper: como as frases costumam ser e os nomes dos pacientes (só o primeiro nome)
+  const nomesVoz = [...new Set(db.patients.filter(p => p.active).map(p => primeiro(p.name)))].slice(0, 40);
+  const promptVoz = "Anotação falada em português do Brasil, sobre gastos ou atendimentos. Exemplos: gastei 30 reais no Uber. Comprei 54,90 no iFood e 120 na Amazon. Recebi 200 de Pix. Felipe veio e pagou. A Ana faltou. Remarca o Pedro pra quinta às 15h."
+    + (nomesVoz.length ? ` Nomes: ${nomesVoz.join(", ")}.` : "");
+  const srv = useFalaServidor({ onFinal: t => concluir(t, []), onFalhou: irTeclado, prompt: promptVoz });
+  const pelaRede = useRef(false);
+  const fala = pelaRede.current ? srv : nat;
+  const pararTudo = () => { nat.cancelar(); srv.cancelar(); };
+  const abrirTeclado = () => { pararTudo(); setAviso(""); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
   // chamado direto no toque (o iPhone só libera microfone e teclado dentro do toque)
   const comecar = continuar => {
     clearTimeout(ocioso.current);
     base.current = continuar === true && textoRef.current ? textoRef.current : "";
     if (!base.current) { setTexto(""); setRes(null); }
     setAviso(""); setAtivo(true);
-    if (!SRec() || vozTravada()) { abrirTeclado(); return; }
+    const rede = vozPeloServidor();
+    if (!rede && (!SRec() || vozTravada())) { abrirTeclado(); return; }
+    pararTudo(); pelaRede.current = rede;
     setFase("ouvindo");
     if (tecRef.current) tecRef.current.blur();
-    fala.iniciar();
+    if (!(rede ? srv : nat).iniciar()) abrirTeclado();
   };
-  const fechar = () => { fala.cancelar(); clearTimeout(ocioso.current); base.current = ""; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); };
+  const fechar = () => { pararTudo(); clearTimeout(ocioso.current); base.current = ""; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); };
   const salvar = () => { const r = res; fechar(); if (!r) return; if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens); };
   const tocar = () => {
     if (!ativo) return comecar();
     if (fase === "contando") return salvar();
     if (fase === "teclado") { const t = tecRef.current ? tecRef.current.value : ""; return t.trim() ? concluir(t) : fechar(); }
+    if (fala.estado === "processando") return; // já está transcrevendo: um segundo toque não atrapalha
     if (fala.estado === "ouvindo" || fala.estado === "falando") return fala.parar();
     comecar(fase === "faltando");
   };
@@ -2659,6 +2813,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const status = fase === "contando" ? `Entendi · salvando em ${conta}`
     : fase === "teclado" ? "Toque no microfone do teclado e fale"
     : fase === "faltando" ? "Faltou algo" : est === "erro" ? "Não deu para ouvir"
+    : est === "processando" ? "Entendendo…"
     : base.current ? (est === "falando" ? "Ouvindo… completando a frase" : "Complete a frase")
     : est === "falando" ? "Ouvindo… toque na Bolinha quando terminar" : "Pode falar";
   const dica = `Ex.: “gastei 30 no uber”${db.patients.some(p => p.active) ? ` ou “${primeiro(db.patients.find(p => p.active).name)} veio”` : ""}`;
@@ -2671,7 +2826,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
         <div className="vozb-sombra" aria-hidden="true"><i /><i /><i /></div>
         <div className="vozb-doca">
           <div className="vozb-status">{fase !== "contando" && fase !== "faltando" && est !== "erro" && <i className="vozb-ponto" />}{status}</div>
-          <p className={"vozb-fala" + (texto ? "" : " vazio")}>{texto || (est === "erro" ? fala.erro : fase === "teclado" ? "" : dica)}</p>
+          <p className={"vozb-fala" + (texto ? "" : " vazio")}>{texto || (est === "erro" ? fala.erro : est === "processando" ? "Transcrevendo o que você disse…" : fase === "teclado" ? "" : dica)}</p>
 
           {itens.length > 0 && (
             <div className="vozb-card">
@@ -2702,7 +2857,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
             {fase === "contando" && um && <button className="pill-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
             {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn forte" onClick={() => comecar(fase === "faltando")}><I.mic /> {fase === "faltando" ? "Completar falando" : "Falar de novo"}</button>}
             {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn" onClick={abrirTeclado}>Teclado</button>}
-            {fase === "teclado" && SRec() && <button className="pill-btn" onClick={() => { vozOk(); comecar(); }}><I.mic /> Tentar a voz</button>}
+            {fase === "teclado" && (SRec() || vozPeloServidor()) && <button className="pill-btn" onClick={() => { vozOk(); comecar(); }}><I.mic /> Tentar a voz</button>}
             <button className="pill-btn" onClick={fechar}>Cancelar</button>
           </div>
         </div>
