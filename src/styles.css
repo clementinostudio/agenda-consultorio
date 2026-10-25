@@ -862,55 +862,6 @@ input, textarea, [contenteditable] { -webkit-user-select: text; user-select: tex
 .dica-instalar .icon-btn { width: 34px; height: 34px; flex: none; }
 html { background: var(--bg); }
 
-/* Pingo, o mascote do microfone */
-.nav-mic { background: none; box-shadow: none; color: inherit; overflow: visible; }
-.nav-mic::before { content: ""; position: absolute; inset: 2px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--mode) 55%, transparent); opacity: 0; transform: scale(.9); transition: opacity .2s, transform .12s ease-out; }
-.nav-mic.on::before { opacity: 1; transform: scale(calc(1.06 + var(--voz-n, 0) * .16)); }
-.nav-mic .pingo svg, .pingo svg { width: 100%; height: 100%; overflow: visible; }
-.pingo { display: block; width: 64px; height: 64px; }
-.pingo * { transform-box: fill-box; }
-.pingo-sombra { fill: rgba(0, 0, 0, .38); transform-origin: center; animation: pingo-sombra 3.4s ease-in-out infinite; }
-.pingo-corpo { transform-box: view-box; transform-origin: 32px 54px; animation: pingo-flutua 3.4s ease-in-out infinite; transition: transform .12s ease-out; }
-.pingo-bola { fill: var(--mode); filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--mode) 40%, transparent)); }
-.pingo-brilho { fill: #fff; opacity: .32; }
-.pingo-broto { fill: color-mix(in srgb, var(--mode) 45%, #B9F5D0); transform-box: view-box; transform-origin: 33px 9px; animation: pingo-broto 4.2s ease-in-out infinite; }
-.pingo-haste { fill: none; stroke: color-mix(in srgb, var(--mode) 45%, #B9F5D0); stroke-width: 1.6; stroke-linecap: round; }
-.pingo-olhos { transform-box: view-box; transition: transform .28s cubic-bezier(.3, .7, .3, 1), opacity .15s; }
-.pingo-olho { fill: #0A0C11; transform-origin: center; transition: transform .08s ease; }
-.pingo-luz { fill: #fff; transition: opacity .08s; }
-.pingo-feliz, .pingo-sorriso { fill: none; stroke: #0A0C11; stroke-linecap: round; }
-.pingo-feliz { stroke-width: 2.4; opacity: 0; }
-.pingo-sorriso { stroke-width: 1.9; opacity: 0; transition: opacity .2s; }
-.pingo-boca { fill: #0A0C11; opacity: 0; transform-origin: center; transition: opacity .15s, transform .1s ease-out; }
-.pingo-bochecha { fill: #FF8FB1; opacity: 0; transition: opacity .2s; }
-.pingo-rosto { transform-box: view-box; transform-origin: 32px 34px; transition: transform .3s ease; }
-.olha-e .pingo-olhos { transform: translate(-3.6px, .4px); }
-.olha-d .pingo-olhos { transform: translate(3.6px, .4px); }
-.olha-b .pingo-olhos { transform: translate(0, 2.6px); }
-.olha-cima .pingo-olhos { transform: translate(0, -3px); }
-.pisca .pingo-olho { transform: scaleY(.1); }
-.pisca .pingo-luz { opacity: 0; }
-.pingo.parado .pingo-sorriso { opacity: 1; }
-.pingo.ouvindo .pingo-olho { transform: scale(1.14); }
-.pingo.ouvindo.pisca .pingo-olho { transform: scale(1.14, .1); }
-.pingo.ouvindo .pingo-boca { opacity: 1; transform: scale(.6); }
-.pingo.falando .pingo-corpo { animation: none; transform: translateY(-2px) scale(calc(1 + var(--voz-n, 0) * .07), calc(1 + var(--voz-n, 0) * .12)); }
-.pingo.falando .pingo-olho { transform: scale(1.1); }
-.pingo.falando .pingo-boca { opacity: 1; transform: scale(calc(.75 + var(--voz-n, 0) * .35), calc(.45 + var(--voz-n, 0) * 1.5)); }
-.pingo.feliz .pingo-olhos { opacity: 0; }
-.pingo.feliz .pingo-feliz, .pingo.feliz .pingo-sorriso { opacity: 1; }
-.pingo.feliz .pingo-bochecha { opacity: .85; }
-.pingo.feliz .pingo-corpo { animation: pingo-pula .55s cubic-bezier(.3, 1.5, .5, 1) 1, pingo-flutua 3.4s ease-in-out .55s infinite; }
-.pingo.confuso .pingo-rosto { transform: rotate(-9deg); }
-.pingo.confuso .pingo-olho { transform: scaleY(.55); }
-.pingo.confuso .pingo-boca { opacity: 1; transform: translate(2px, 0) scale(.45, .35); }
-.pingo.confuso .pingo-broto { animation: pingo-broto-murcha .4s ease forwards; }
-@keyframes pingo-flutua { 50% { transform: translateY(-3px); } }
-@keyframes pingo-sombra { 50% { transform: scaleX(.8); opacity: .55; } }
-@keyframes pingo-broto { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-14deg); } }
-@keyframes pingo-broto-murcha { to { transform: rotate(28deg); } }
-@keyframes pingo-pula { 0% { transform: none; } 35% { transform: translateY(-7px) scale(.94, 1.08); } 65% { transform: translateY(0) scale(1.08, .92); } 100% { transform: none; } }
-@media (prefers-reduced-motion: reduce) { .pingo-corpo, .pingo-sombra, .pingo-broto { animation: none !important; } }
 /* ponto de "ouvindo" na doca: simples, cresce com a voz */
 .vozb-ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--mode); display: inline-block; transform: scale(calc(1 + var(--n, 0) * 1.1)); transition: transform .1s ease-out; box-shadow: 0 0 0 4px color-mix(in srgb, var(--mode) 18%, transparent); }
 /* puxar para recarregar */
@@ -974,3 +925,43 @@ main.app.puxando { transition: none; }
 .shell.glass .pend { background-color: var(--g-amber); }
 /* O perfil e a fala, quando há foto de fundo, também ficam de vidro */
 .perfil-lista, .perfil-hero { background-image: var(--ruido), var(--vidro-brilho); box-shadow: var(--vidro-sombra); }
+
+/* Bolinha, o mascote do microfone (minimalista: só a bola e os olhos) */
+.nav-mic { background: none; box-shadow: none; color: inherit; overflow: visible; }
+.nav-mic::before { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--mode) 55%, transparent); opacity: 0; transform: scale(.9); transition: opacity .2s, transform .12s ease-out; }
+.nav-mic.on::before { opacity: 1; transform: scale(calc(1.08 + var(--voz-n, 0) * .16)); }
+.bolinha { display: block; width: 64px; height: 64px; }
+.nav-mic .bolinha svg, .bolinha svg { width: 100%; height: 100%; overflow: visible; }
+.bolinha svg * { transform-box: view-box; }
+.b-sombra { fill: rgba(0, 0, 0, .3); transform-origin: 32px 61px; animation: b-sombra 3.6s ease-in-out infinite; }
+.b-corpo { transform-origin: 32px 52px; animation: b-flutua 3.6s ease-in-out infinite; transition: transform .14s ease-out; }
+.b-bola { fill: var(--mode); }
+.b-olhos { transition: transform .26s cubic-bezier(.3, .7, .3, 1), opacity .12s; }
+.b-olho { fill: #fff; transition: transform .09s ease, opacity .1s; }
+.b-oe { transform-origin: 24.5px 29.5px; } .b-od { transform-origin: 39.5px 29.5px; }
+.b-feliz { fill: none; stroke: #fff; stroke-width: 3.6; stroke-linecap: round; opacity: 0; transition: opacity .12s; }
+.olha-e .b-olhos { transform: translate(-4px, .5px); }
+.olha-d .b-olhos { transform: translate(4px, .5px); }
+.olha-b .b-olhos { transform: translate(0, 3px); }
+.olha-cima .b-olhos { transform: translate(0, -3px); }
+.pisca .b-olho { transform: scaleY(.12); }
+.bolinha.cara-piscadinha .b-od { transform: scaleY(.12); }
+.bolinha.cara-espremido .b-olho { transform: scale(1.05, .45); }
+.bolinha.cara-arregalado .b-olho { transform: scale(1.12, 1.18); }
+.bolinha.cara-arregalado .b-corpo { animation: b-susto .4s ease-out; }
+.bolinha.cara-sono .b-olho { transform: scaleY(.3) translateY(4px); }
+.bolinha.cara-sono .b-corpo { animation-duration: 5s; }
+.bolinha.ouvindo .b-olho { transform: scale(1.08, 1.15); }
+.bolinha.ouvindo.pisca .b-olho { transform: scale(1.08, .12); }
+.bolinha.falando .b-corpo { animation: none; transform: translateY(-1.5px) scale(calc(1 + var(--voz-n, 0) * .05), calc(1 + var(--voz-n, 0) * .08)); }
+.bolinha.falando .b-olho { transform: scale(1.06, calc(.85 + var(--voz-n, 0) * .45)); }
+.bolinha.feliz .b-olhos { opacity: 0; } .bolinha.feliz .b-feliz { opacity: 1; }
+.bolinha.feliz .b-corpo { animation: b-pula .6s cubic-bezier(.3, 1.5, .5, 1) 1, b-flutua 3.6s ease-in-out .6s infinite; }
+.bolinha.confuso .b-corpo { animation: none; transform: rotate(-12deg); }
+.bolinha.confuso .b-oe { transform: scale(.75, .7); }
+.bolinha.confuso .b-od { transform: scale(1.05, 1.1); }
+@keyframes b-flutua { 50% { transform: translateY(-2.6px); } }
+@keyframes b-sombra { 50% { transform: scaleX(.8); opacity: .5; } }
+@keyframes b-pula { 0% { transform: none; } 35% { transform: translateY(-7px) scale(.94, 1.08); } 65% { transform: translateY(0) scale(1.08, .92); } 100% { transform: none; } }
+@keyframes b-susto { 30% { transform: translateY(-4px) scale(1.05); } }
+@media (prefers-reduced-motion: reduce) { .b-corpo, .b-sombra { animation: none !important; } }

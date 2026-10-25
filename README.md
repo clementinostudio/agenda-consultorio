@@ -143,7 +143,7 @@ Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da
 - Se o aparelho não liberar o reconhecimento (acontece em alguns iPhones com o app instalado), o app abre o teclado: toque no microfone do teclado e fale.
 
 ### Cara de app
-- Pingo, o mascote do microfone: flutua, pisca, olha para os lados, estica com a sua voz, fica feliz quando entende e confuso quando não entende.
+- Bolinha, o mascote do microfone: uma bola minimalista com dois olhinhos que flutua, pisca, olha em volta, faz caras sozinha, reage à sua voz, fica feliz quando entende e confusa quando não entende.
 - Puxe a tela para baixo no topo para recarregar (clima, feriados, avisos e versão nova do app).
 - Vidro no estilo Apple: desfoque com saturação, granulado sutil e borda reflexiva dupla, em quatro espessuras como os materiais do iOS.
 - Tela de abertura própria no iPhone, sem zoom de pinça, sem seleção de texto nos botões, toque que afunda, troca de tela animada e painéis que fecham arrastando para baixo.

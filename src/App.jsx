@@ -797,9 +797,9 @@ function useFalaNativa({ onParcial, onFinal, onFalhou }) {
         try { rec.abort(); } catch (e) {}
         if (r.current === x) r.current = {};
         setNivel(0);
-        if (t) { setEstado("parado"); cb.current.onFinal(t); } else falhar(msgVazio || "Não ouvi nada. Toque no mascote e fale de novo.");
+        if (t) { setEstado("parado"); cb.current.onFinal(t); } else falhar(msgVazio || "Não ouvi nada. Toque na Bolinha e fale de novo.");
       };
-      const travou = () => { if (x.fim) return; x.fim = true; limparTimers(x); try { rec.abort(); } catch (e) {} const f = marcarFalhaVoz(); falhar(f >= 2 ? MSG_TECLADO : "O microfone não respondeu. Toque no mascote de novo.", f >= 2); };
+      const travou = () => { if (x.fim) return; x.fim = true; limparTimers(x); try { rec.abort(); } catch (e) {} const f = marcarFalhaVoz(); falhar(f >= 2 ? MSG_TECLADO : "O microfone não respondeu. Toque na Bolinha de novo.", f >= 2); };
       x.decai = setInterval(() => setNivel(n => n > .14 ? n * .8 : .06 + Math.random() * .06), 110);
       x.vigia = setTimeout(() => { if (!x.audio && !x.ouviu) travou(); }, 4500);             // o microfone nem abriu
       x.vigia2 = setTimeout(() => { if (!x.ouviu) { if (x.audio) { const f = marcarFalhaVoz(); if (f >= 2) return travou(); } x.terminar(""); } }, 9000); // abriu mas nada chegou
@@ -819,11 +819,11 @@ function useFalaNativa({ onParcial, onFinal, onFalhou }) {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") { x.fim = true; limparTimers(x); gravar(K_VOZ_TECLADO, { falhas: 2, ate: Date.now() + 6 * 36e5 }); return falhar("O microfone não foi liberado para o app. Use o microfone do teclado: funciona igual.", true); }
         if (e.error === "network") return x.terminar(x.texto.trim(), "Sem internet: o reconhecimento de voz do aparelho precisa de conexão. Toque em Teclado.");
         if (e.error === "audio-capture") return x.terminar(x.texto.trim(), "O microfone está ocupado por outro app. Feche o outro app e tente de novo.");
-        x.terminar(x.texto.trim(), "Não consegui ouvir agora. Toque no mascote para tentar de novo.");
+        x.terminar(x.texto.trim(), "Não consegui ouvir agora. Toque na Bolinha para tentar de novo.");
       };
       rec.onend = () => x.terminar(x.texto.trim());
       try { rec.start(); setEstado("ouvindo"); }
-      catch (e) { x.fim = true; limparTimers(x); r.current = {}; falhar("Não consegui abrir o microfone. Toque no mascote de novo."); }
+      catch (e) { x.fim = true; limparTimers(x); r.current = {}; falhar("Não consegui abrir o microfone. Toque na Bolinha de novo."); }
     };
     if (tinha) setTimeout(abrir, 180); else abrir();
     setEstado("ouvindo");
@@ -2345,47 +2345,41 @@ function useContagem(alvo) {
 const quandoTxt = off => off === 2 ? "Anteontem" : off === 1 ? "Ontem" : "Hoje";
 const reais = v => (Math.round(v * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/* ---------- Pingo, o mascote do microfone ----------
-   Uma bolinha que flutua, pisca, olha para os lados e reage quando você fala:
-   - parado: flutua devagar, pisca e às vezes espia para um lado
-   - ouvindo: arregala os olhos e olha para cima (para o que você está falando)
-   - falando: estica e encolhe com a sua voz, com a boquinha abrindo
-   - entendeu: olhinhos felizes e bochechas
-   - não entendeu: olhos de lado, meio confuso */
-function Pingo({ estado = "" }) {
+/* ---------- Bolinha, o mascote do microfone ----------
+   Minimalista: uma bola com dois olhinhos em pílula. Toda a expressão está nos olhos.
+   - parado: flutua, pisca, olha em volta e às vezes faz uma cara (piscadinha, olhos espremidos, arregalados, sono)
+   - ouvindo: olhos crescem e olham para cima
+   - falando: os olhos pulam com a sua voz e a bola estica um pouco
+   - entendeu: olhos viram dois arquinhos felizes e ela dá um pulinho
+   - não entendeu: inclina, um olho fica menor (cara de "hã?") */
+const CARAS_BOLA = ["piscadinha", "espremido", "arregalado", "sono", "piscadinha", "espremido"];
+function Bolinha({ estado = "" }) {
   const [olhar, setOlhar] = useState("c");
   const [pisca, setPisca] = useState(false);
+  const [cara, setCara] = useState("");
   useEffect(() => {
-    let vivo = true, t1, t2;
-    const piscar = () => { t1 = setTimeout(() => { if (!vivo) return; setPisca(true); setTimeout(() => vivo && setPisca(false), 130); if (Math.random() < .25) setTimeout(() => { if (!vivo) return; setPisca(true); setTimeout(() => vivo && setPisca(false), 120); }, 260); piscar(); }, 2200 + Math.random() * 3800); };
-    const espiar = () => { t2 = setTimeout(() => { if (!vivo) return; const r = Math.random(); setOlhar(r < .3 ? "e" : r < .6 ? "d" : r < .72 ? "b" : "c"); setTimeout(() => vivo && setOlhar("c"), 900 + Math.random() * 900); espiar(); }, 3500 + Math.random() * 4000); };
-    piscar(); espiar();
-    return () => { vivo = false; clearTimeout(t1); clearTimeout(t2); };
+    let vivo = true; const ts = [];
+    const depois = (f, ms) => ts.push(setTimeout(() => vivo && f(), ms));
+    const piscar = () => depois(() => { setPisca(true); depois(() => setPisca(false), 120); if (Math.random() < .25) depois(() => { setPisca(true); depois(() => setPisca(false), 110); }, 240); piscar(); }, 2000 + Math.random() * 3500);
+    const espiar = () => depois(() => { const r = Math.random(); setOlhar(r < .3 ? "e" : r < .6 ? "d" : r < .72 ? "b" : r < .82 ? "cima" : "c"); depois(() => setOlhar("c"), 700 + Math.random() * 1000); espiar(); }, 2800 + Math.random() * 3200);
+    const careta = () => depois(() => { setCara(CARAS_BOLA[Math.floor(Math.random() * CARAS_BOLA.length)]); depois(() => setCara(""), 1400); careta(); }, 7000 + Math.random() * 6000);
+    piscar(); espiar(); careta();
+    return () => { vivo = false; ts.forEach(clearTimeout); };
   }, []);
   const modo = estado === "contando" ? "feliz" : estado === "faltando" || estado === "erro" ? "confuso" : estado === "falando" ? "falando" : estado === "ouvindo" || estado === "teclado" ? "ouvindo" : "parado";
-  const dir = modo === "ouvindo" || modo === "falando" ? "cima" : modo === "confuso" ? "e" : olhar;
+  const c = modo === "parado" ? cara : "";
+  const dir = modo === "ouvindo" || modo === "falando" ? "cima" : modo === "confuso" ? "d" : olhar;
   return (
-    <span className={`pingo ${modo} olha-${dir}${pisca && modo !== "feliz" ? " pisca" : ""}`} aria-hidden="true">
+    <span className={`bolinha ${modo}${c ? " cara-" + c : ""} olha-${dir}${pisca && modo !== "feliz" ? " pisca" : ""}`} aria-hidden="true">
       <svg viewBox="0 0 64 64">
-        <ellipse className="pingo-sombra" cx="32" cy="60" rx="15" ry="2.6" />
-        <g className="pingo-corpo">
-          <path className="pingo-broto" d="M33 9 C 33 5, 36 3, 39 3.5 C 38.5 6.5, 36 8.5, 33 9 Z" />
-          <path className="pingo-haste" d="M32 12 C 32 10, 32.5 9.5, 33 9" />
-          <circle className="pingo-bola" cx="32" cy="33" r="21" />
-          <ellipse className="pingo-brilho" cx="24.5" cy="23.5" rx="6.5" ry="4" transform="rotate(-28 24.5 23.5)" />
-          <g className="pingo-rosto">
-            <g className="pingo-olhos">
-              <ellipse className="pingo-olho" cx="25" cy="32" rx="3.1" ry="4.4" />
-              <ellipse className="pingo-olho" cx="39" cy="32" rx="3.1" ry="4.4" />
-              <circle className="pingo-luz" cx="26.1" cy="30.4" r="1.05" />
-              <circle className="pingo-luz" cx="40.1" cy="30.4" r="1.05" />
-            </g>
-            <path className="pingo-feliz" d="M21.5 33 Q25 28.5 28.5 33 M35.5 33 Q39 28.5 42.5 33" />
-            <ellipse className="pingo-boca" cx="32" cy="40.5" rx="2.4" ry="2" />
-            <path className="pingo-sorriso" d="M28.5 39 Q32 42.5 35.5 39" />
-            <ellipse className="pingo-bochecha" cx="20" cy="38.5" rx="3" ry="1.8" />
-            <ellipse className="pingo-bochecha" cx="44" cy="38.5" rx="3" ry="1.8" />
+        <ellipse className="b-sombra" cx="32" cy="61" rx="13" ry="2" />
+        <g className="b-corpo">
+          <circle className="b-bola" cx="32" cy="32" r="24" />
+          <g className="b-olhos">
+            <rect className="b-olho b-oe" x="21.5" y="23" width="6" height="13" rx="3" />
+            <rect className="b-olho b-od" x="36.5" y="23" width="6" height="13" rx="3" />
           </g>
+          <path className="b-feliz" d="M20.5 32 Q24.5 26.5 28.5 32 M35.5 32 Q39.5 26.5 43.5 32" />
         </g>
       </svg>
     </span>
@@ -3996,7 +3990,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
             </button>
           ))}
         </div>
-        <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Terminar" : "Falar"}><Pingo estado={vozAtiva} /></button>
+        <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Terminar" : "Falar"}><Bolinha estado={vozAtiva} /></button>
       </nav>
 
       {sheet && sheet.type === "session" && <SessionSheet key={sheet.item.patient.id + sheet.item.date + sheet.item.kind} db={db} item={sheet.item} onClose={close} act={act} />}
