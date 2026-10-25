@@ -1,6 +1,6 @@
 /*
-  Agenda do Consultório
-  ---------------------
+  Cais (antes: Agenda do Consultório)
+  -------------------------------------
   O app inteiro está neste arquivo, separado em seções numeradas (procure por "====").
   Para mudar textos, valores padrão, cores de paciente ou categorias, comece pela seção 1 (CONFIGURAÇÃO).
   Os estilos ficam em src/styles.css e as imagens de fundo em public/fundos/.
@@ -1261,6 +1261,13 @@ const vazio = () => ({ settings: { pix: "" }, patients: [], sessions: [], charge
    6. ÍCONES
    ========================================================= */
 const Svg = ({ children, sw = 1.8 }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{children}</svg>;
+// Logo do Cais: o C de enseada com o barquinho, branco que esmaece embaixo
+const Marca = () => (
+  <svg viewBox="0 0 512 512" aria-hidden="true">
+    <defs><linearGradient id="marca-g" x1="0" y1="120" x2="0" y2="392" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#fff" /><stop offset=".55" stopColor="#F4F1FF" stopOpacity=".95" /><stop offset="1" stopColor="#D9CCFF" stopOpacity=".6" /></linearGradient></defs>
+    <path d="M256 120A136 136 0 1 0 392 256H300A44 44 0 1 1 256 212Z" fill="url(#marca-g)" /><circle cx="340" cy="172" r="30" fill="url(#marca-g)" />
+  </svg>
+);
 const I = {
   home: () => <Svg><path d="M4 10.5L12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-3.5v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19z"/></Svg>,
   cal: () => <Svg><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></Svg>,
@@ -1695,7 +1702,7 @@ function Auth({ onLogin }) {
   };
   return (
     <main className="auth">
-      <div className="brand"><i><I.logo /></i>Agenda</div>
+      <div className="brand"><i><Marca /></i>Cais</div>
       <div className="auth-h">
         <div className="hi">{criar ? "Vamos começar!" : "Que bom te ver!"}</div>
         <h1>{criar ? "Criar conta" : "Entrar"}</h1>
@@ -3135,8 +3142,8 @@ const TXT_PUSH = {
   tempo: "Demorou demais para responder. Tente de novo.",
 };
 const textoNegado = () => ehIOS()
-  ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Agenda → Permitir Notificações. Depois volte aqui."
-  : "As notificações estão bloqueadas. Libere nas configurações do celular: Apps → Agenda (ou Chrome) → Notificações. Depois volte aqui.";
+  ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Cais → Permitir Notificações. Depois volte aqui."
+  : "As notificações estão bloqueadas. Libere nas configurações do celular: Apps → Cais (ou Chrome) → Notificações. Depois volte aqui.";
 
 function AvisosFechado({ act }) {
   const [ligado, setLigado] = useState(() => pushLigado());
@@ -4306,7 +4313,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " com-foto" + (conta.vidro !== false ? " glass" : "") : "") + (conta.vidro === false ? " solido" : "")} data-mode={modoEf}>
       {conta.fundo && imagemFundo(conta.fundo, meusFundos) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo, meusFundos)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
       <aside className="side" aria-label="Menu">
-        <div className="side-brand"><i><I.logo /></i>Agenda</div>
+        <div className="side-brand"><i><Marca /></i>Cais</div>
         {usaPessoal && <ModeSwitch modo={modo} setModo={act.setModo} block />}
         <nav className="side-nav">
           {abas.map(a => (

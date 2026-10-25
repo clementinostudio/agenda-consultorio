@@ -25,8 +25,8 @@ export default defineConfig({
       includeAssets: ["icons/favicon.svg", "icons/apple-touch-icon.png", "fundos/*.jpg"],
       manifest: {
         id: "agenda-do-consultorio",
-        name: "Agenda do Consultório",
-        short_name: "Agenda",
+        name: "Cais",
+        short_name: "Cais",
         description: "Sua agenda, seus pagamentos e suas contas num lugar só.",
         lang: "pt-BR",
         start_url: ".",
