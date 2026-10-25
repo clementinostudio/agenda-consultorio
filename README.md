@@ -147,7 +147,7 @@ Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da
 - A barra de baixo encolhe enquanto a tela rola e volta ao normal quando para.
 - Telas entram com fade e uma subida curta em cascata; ao falar, uma aurora de cores flui no pé da tela (no computador, passando por trás da barra lateral, com a Bolinha no canto).
 - Puxe a tela para baixo no topo para recarregar (clima, feriados, avisos e versão nova do app).
-- Vidro no estilo Apple: desfoque com saturação, granulado sutil e borda reflexiva dupla, em quatro espessuras como os materiais do iOS.
+- Vidro líquido no estilo do iOS 26: quase transparente, desfoque leve com saturação e brilho, linha finíssima e reflexos de luz nas quinas, sem granulado nem contorno grosso.
 - Tela de abertura própria no iPhone, sem zoom de pinça, sem seleção de texto nos botões, toque que afunda, troca de tela animada e painéis que fecham arrastando para baixo.
 - No Android, o Chrome instala como app de verdade (aparece na lista de apps e a opção é "Desinstalar"), com fotos do app na janela de instalação.
 - No iPhone, segurar o ícone sempre mostra "Remover Favorito": é o texto que o iOS usa para todo app instalado pelo Safari, e nenhum site consegue mudar.
