@@ -3,127 +3,230 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Agenda do Consultório · a agenda que lembra por você</title>
-    <meta name="description" content="Agenda para psicólogos e terapeutas: sessões que se repetem sozinhas, cobranças prontas, avisos na hora certa e gastos anotados falando. Pensada para quem tem TDAH." />
-    <meta name="theme-color" content="#0A0C11" />
+    <title>Agenda do Consultório · o consultório inteiro, sem esquecer nada</title>
+    <meta name="description" content="Agenda para psicólogos e terapeutas: sessões que se repetem sozinhas, cobranças prontas, avisos na hora certa e gastos anotados falando. Pensada para quem tem TDAH. Grátis." />
+    <meta name="theme-color" content="#07080C" />
     <meta property="og:title" content="Agenda do Consultório" />
-    <meta property="og:description" content="A agenda que lembra por você. Sessões, cobranças, avisos e gastos num lugar só." />
+    <meta property="og:description" content="O consultório inteiro na palma da mão. Sem esquecer nada." />
     <meta property="og:image" content="/screenshots/computador.png" />
     <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <style>html{background:#0A0C11}</style>
+    <style>html{background:#07080C}</style>
   </head>
   <body>
-    <div class="fundo" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="ceu" aria-hidden="true"></div>
 
     <header class="topo">
-      <a class="marca" href="./"><img src="/icons/icon-192.png" alt="" width="34" height="34" /><span>Agenda<span class="longo"> do Consultório</span></span></a>
-      <a class="botao pequeno" href="../#entrar">Entrar</a>
+      <a class="marca" href="./"><img src="/icons/icon-192.png" alt="" width="32" height="32" /><span>Agenda<span class="longo"> do Consultório</span></span></a>
+      <nav class="menu" aria-label="Seções">
+        <a href="#recursos">Recursos</a><a href="#tdah">Para quem tem TDAH</a><a href="#privacidade">Privacidade</a><a href="#instalar">Instalar</a>
+      </nav>
+      <div class="topo-acoes">
+        <a class="link-entrar" href="../#entrar">Entrar</a>
+        <a class="botao pequeno" href="../#criar">Criar conta</a>
+      </div>
     </header>
 
     <main>
-      <!-- Abertura -->
+      <!-- ABERTURA -->
       <section class="heroi">
-        <div class="heroi-texto">
-          <span class="selo">Para psicólogos e terapeutas · pensado para quem tem TDAH</span>
-          <h1>A agenda do consultório que <em>lembra por você.</em></h1>
-          <p class="lead">Sessões que se repetem sozinhas, cobranças prontas para mandar, avisos na hora certa e os gastos da casa anotados só falando. Tudo num lugar, sem planilha e sem esquecer.</p>
-          <div class="acoes">
-            <a class="botao" href="../#criar">Criar minha conta, é grátis</a>
-            <a class="botao fantasma" href="../#demo">Ver como funciona</a>
+        <div class="grade-fundo" aria-hidden="true"></div>
+        <div class="brilho" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="heroi-in">
+          <div class="heroi-texto">
+            <a class="selo" href="#fala"><b>Novo</b> Anote falando: “gastei 30 no uber” <span aria-hidden="true">→</span></a>
+            <h1>O consultório inteiro na palma da mão. <span class="grad">Sem esquecer nada.</span></h1>
+            <p class="lead">Sessões que se repetem sozinhas, cobranças prontas para mandar, avisos na hora certa e o dinheiro de casa em dia. Feito para psicólogos e terapeutas, pensado para quem tem TDAH.</p>
+            <form class="cadastro" action="../" data-cadastro>
+              <label class="sr" for="email-topo">Seu e-mail</label>
+              <input id="email-topo" type="email" name="email" placeholder="Seu e-mail" autocomplete="email" inputmode="email" />
+              <button class="botao" type="submit">Criar conta grátis</button>
+            </form>
+            <div class="sob-form">
+              <a class="link-seta" href="../#demo">Ver a demonstração sem cadastro <span aria-hidden="true">→</span></a>
+              <span class="ponto">Grátis · funciona sem internet</span>
+            </div>
           </div>
-          <ul class="garantias">
-            <li>Sem cartão de crédito</li><li><a href="#instalar">Como instalar no celular</a></li><li>Funciona sem internet</li><li>Seus dados ficam no seu aparelho</li>
-          </ul>
-        </div>
-        <div class="heroi-tela revela">
-          <div class="celular"><img src="/screenshots/inicio.png" alt="Tela inicial do app com o resumo do dia" width="390" height="844" /></div>
-          <div class="balao">“Felipe veio e pagou”</div>
+
+          <div class="palco revela">
+            <div class="iphone tilt" style="--w: 290px">
+              <i class="hw hw1"></i><i class="hw hw2"></i><i class="hw hw3"></i><i class="hw hw4"></i>
+              <div class="tela"><img src="/landing/inicio.jpg" alt="Tela inicial do app, com o resumo do dia" width="390" height="844" /><i class="ilha"></i><i class="reflexo"></i></div>
+            </div>
+            <div class="selo-vidro s1"><img src="/icons/icon-192.png" alt="" width="34" height="34" /><span><b>Sessão em 15 min</b><small>Às 14:00 · agora</small></span></div>
+            <div class="selo-vidro s2"><span class="num">R$ 1.222</span><span><b>Líquido no mês</b><small>já sem a sublocação</small></span></div>
+          </div>
         </div>
       </section>
 
-      <!-- Dor -->
-      <section class="dor revela">
-        <p>Esqueceu de marcar quem faltou? Não sabe quanto vai sobrar depois da sublocação? Lembrou da cobrança só no fim do mês?</p>
-        <p class="forte">O app cuida disso para você ficar com a cabeça no atendimento.</p>
+      <!-- FAIXA DE PROFISSÕES -->
+      <section class="faixa" aria-label="Para quem é">
+        <p>Feito para quem atende</p>
+        <div class="faixa-trilho" aria-hidden="true">
+          <div class="faixa-itens"><span>Psicologia</span><span>Psicanálise</span><span>Psiquiatria</span><span>Terapia ocupacional</span><span>Fonoaudiologia</span><span>Nutrição</span><span>Fisioterapia</span><span>Coaching</span><span>Psicopedagogia</span></div>
+          <div class="faixa-itens"><span>Psicologia</span><span>Psicanálise</span><span>Psiquiatria</span><span>Terapia ocupacional</span><span>Fonoaudiologia</span><span>Nutrição</span><span>Fisioterapia</span><span>Coaching</span><span>Psicopedagogia</span></div>
+        </div>
+        <p class="sr">Psicologia, psicanálise, psiquiatria, terapia ocupacional, fonoaudiologia, nutrição, fisioterapia, coaching e psicopedagogia.</p>
       </section>
 
-      <!-- Recursos -->
-      <section class="recursos">
-        <h2 class="revela">O que ele faz por você</h2>
-        <div class="grade">
-          <article class="cartao revela"><span class="ic">↻</span><h3>Agenda que se repete sozinha</h3><p>Semanal, quinzenal ou mensal. Marcou uma vez, as próximas sessões já aparecem no mesmo horário e valor.</p></article>
-          <article class="cartao revela"><span class="ic">R$</span><h3>Quanto sobra, de verdade</h3><p>Valor da sessão menos a sublocação, por dia e por mês. Meta do mês e uma reserva sugerida para o imposto.</p></article>
-          <article class="cartao revela"><span class="ic">✉</span><h3>Cobrança pronta</h3><p>Paciente que paga a cada 4 sessões? A mensagem de cobrança sai pronta, com a sua chave Pix, para mandar no WhatsApp.</p></article>
-          <article class="cartao revela"><span class="ic">◷</span><h3>Avisos na hora certa</h3><p>“Sessão em 15 minutos”, resumo do dia de manhã e o lembrete de fechar o dia. Sem nome de paciente na tela bloqueada.</p></article>
-          <article class="cartao revela"><span class="ic">●</span><h3>Fale e pronto</h3><p>Toque na Bolinha e diga “gastei 30 no uber” ou “Ana faltou”. Ele entende, mostra o que entendeu e salva sozinho.</p></article>
-          <article class="cartao revela"><span class="ic">⌂</span><h3>A casa também</h3><p>Modo Pessoal para gastos e contas fixas, com aviso antes de vencer e o que sobra no mês.</p></article>
+      <!-- FALA (demonstração animada) -->
+      <section class="fala" id="fala">
+        <div class="sec-cab revela">
+          <span class="rotulo azul">Fale e pronto</span>
+          <h2>Anotar é só falar.</h2>
+          <p>Toque na Bolinha e fale do jeito que falaria com alguém. Ela entende o valor, a empresa, a categoria, o paciente e a data, mostra o que entendeu e salva sozinha.</p>
+        </div>
+        <div class="fala-grade">
+          <div class="conversa revela" data-conversa aria-live="polite">
+            <div class="conversa-topo"><span class="bolinha-mini" aria-hidden="true"><i></i><i></i></span><b>Bolinha</b><small data-estado>ouvindo…</small></div>
+            <p class="dito" data-dito></p>
+            <div class="resultado" data-resultado hidden>
+              <span class="res-ic" data-res-ic></span>
+              <span class="res-tx"><b data-res-t></b><small data-res-s></small></span>
+              <b class="res-v" data-res-v></b>
+            </div>
+            <div class="pontinhos" aria-hidden="true"><i></i><i></i><i></i></div>
+          </div>
+          <div class="palco pequeno revela">
+            <div class="iphone tilt" style="--w: 250px">
+              <i class="hw hw1"></i><i class="hw hw2"></i><i class="hw hw3"></i><i class="hw hw4"></i>
+              <div class="tela"><img src="/landing/voz.jpg" alt="O app entendendo a frase gastei 30 reais no uber" loading="lazy" width="390" height="844" /><i class="ilha"></i><i class="reflexo"></i></div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- Fala -->
-      <section class="fala revela">
-        <div class="fala-texto">
-          <h2>Anotar é falar.</h2>
-          <p>Para quem tem TDAH, cada formulário é uma chance de deixar para depois. Aqui você toca uma vez e fala do jeito que falaria com alguém. A Bolinha escuta, entende a empresa, a categoria e a data, e anota.</p>
+      <!-- RECURSOS EM ABAS -->
+      <section class="recursos" id="recursos">
+        <div class="sec-cab centro revela">
+          <span class="rotulo roxo">Recursos</span>
+          <h2>Tudo o que o consultório pede, num lugar só.</h2>
         </div>
-        <div class="fala-demo" aria-hidden="true">
-          <div class="aurora"></div>
-          <div class="bolinha" aria-hidden="true"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="24" /><g class="olhos"><rect x="21.5" y="23" width="6" height="13" rx="3" /><rect x="36.5" y="23" width="6" height="13" rx="3" /></g></svg></div>
-          <p class="dito">gastei 54 e 90 no ifood ontem</p>
-          <div class="cartao-fala"><span class="cat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v8a2 2 0 0 0 2 2v8M5 3v5M9 3v5M16 21V3c-2 1-3 3-3 6v4h3"/></svg></span><span><b>iFood</b><small>Comida fora · Ontem</small></span><b class="valor">R$ 54,90</b></div>
-          <p class="dito pequeno">“remarca o Pedro pra quinta às 15h”</p>
+        <div class="abas revela" role="tablist" aria-label="Recursos">
+          <button role="tab" aria-selected="true" data-aba="0">Agenda</button>
+          <button role="tab" aria-selected="false" data-aba="1">Pacientes</button>
+          <button role="tab" aria-selected="false" data-aba="2">Dinheiro</button>
+          <button role="tab" aria-selected="false" data-aba="3">Rotina</button>
+          <button role="tab" aria-selected="false" data-aba="4">Casa</button>
+        </div>
+        <div class="aba-corpo revela">
+          <div class="aba-textos">
+            <article class="aba-painel ativo" data-painel="0"><h3>A agenda se repete sozinha.</h3><p>Semanal, quinzenal ou mensal: marcou uma vez, as próximas sessões já aparecem com o mesmo horário e valor. Feriados avisados, horários livres à mão.</p><ul><li>Marcar “veio” ou “faltou” com um toque</li><li>Remarcar e desfazer sem medo</li><li>Linha do tempo do dia com os intervalos livres</li></ul></article>
+            <article class="aba-painel" data-painel="1"><h3>Cada paciente com a sua cor.</h3><p>Frequência, valor, sublocação, pacote e contato no mesmo lugar, mais uma lista de espera para quando abrir um horário.</p><ul><li>Pacotes de sessões com cobrança automática</li><li>Aniversários lembrados</li><li>Mensagem de confirmação pronta para o WhatsApp</li></ul></article>
+            <article class="aba-painel" data-painel="2"><h3>Quanto sobra, de verdade.</h3><p>Valor da sessão menos a sublocação, por dia e por mês. Meta do mês, quanto falta receber e uma reserva sugerida para o imposto.</p><ul><li>Cobrança pronta com a sua chave Pix</li><li>Faltas cobradas, se você quiser</li><li>Planilha do mês para o contador</li></ul></article>
+            <article class="aba-painel" data-painel="3"><h3>Fechar o dia em 2 minutos.</h3><p>No fim do dia, o app mostra só o que falta: quem veio, quem faltou e o que cobrar. Um passo de cada vez.</p><ul><li>Resumo do dia de manhã</li><li>Aviso antes de cada sessão</li><li>Revisão da semana</li></ul></article>
+            <article class="aba-painel" data-painel="4"><h3>A casa também entra.</h3><p>No modo Pessoal, os gastos do dia a dia e as contas fixas, com aviso antes de vencer e o que sobra no mês, separado do consultório.</p><ul><li>Gastos anotados falando</li><li>Contas e assinaturas com aviso</li><li>Logo das empresas reconhecida sozinha</li></ul></article>
+          </div>
+          <div class="palco pequeno">
+            <div class="iphone tilt" style="--w: 270px">
+              <i class="hw hw1"></i><i class="hw hw2"></i><i class="hw hw3"></i><i class="hw hw4"></i>
+              <div class="tela troca">
+                <img class="ativo" data-tela="0" src="/landing/agenda.jpg" alt="Agenda do dia" loading="lazy" width="390" height="844" />
+                <img data-tela="1" src="/landing/pacientes.jpg" alt="Lista de pacientes" loading="lazy" width="390" height="844" />
+                <img data-tela="2" src="/landing/financas.jpg" alt="Finanças do mês" loading="lazy" width="390" height="844" />
+                <img data-tela="3" src="/landing/fechar.jpg" alt="Fechar o dia" loading="lazy" width="390" height="844" />
+                <img data-tela="4" src="/landing/pessoal.jpg" alt="Modo Pessoal" loading="lazy" width="390" height="844" />
+                <i class="ilha"></i><i class="reflexo"></i>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- Telas -->
-      <section class="telas">
-        <h2 class="revela">Bonito, calmo e direto ao ponto</h2>
-        <p class="sub revela">Modo escuro e claro, fundo com foto e efeito de vidro, e o essencial sempre na frente.</p>
-        <div class="fileira">
-          <figure class="revela"><div class="celular"><img src="/screenshots/agenda.png" alt="Agenda do dia" loading="lazy" width="390" height="844" /></div><figcaption>A agenda do dia</figcaption></figure>
-          <figure class="revela"><div class="celular"><img src="/screenshots/inicio.png" alt="Resumo do dia" loading="lazy" width="390" height="844" /></div><figcaption>O que importa hoje</figcaption></figure>
-          <figure class="revela"><div class="celular"><img src="/screenshots/pessoal.png" alt="Modo Pessoal" loading="lazy" width="390" height="844" /></div><figcaption>Gastos e contas da casa</figcaption></figure>
+      <!-- TDAH: acordeão com tela sincronizada -->
+      <section class="tdah" id="tdah">
+        <div class="tdah-grade">
+          <div>
+            <div class="sec-cab revela">
+              <span class="rotulo verde">Pensado para quem tem TDAH</span>
+              <h2>Menos coisa na cabeça. Mais cabeça no atendimento.</h2>
+            </div>
+            <div class="acordeao revela" data-acordeao>
+              <div class="ac-item aberto" data-ac="0"><button aria-expanded="true"><span>Só o agora</span><i aria-hidden="true"></i></button><div class="ac-corpo"><p>Uma tela que mostra só a próxima coisa a fazer. Sem lista enorme, sem distração.</p></div><span class="ac-barra" aria-hidden="true"></span></div>
+              <div class="ac-item" data-ac="1"><button aria-expanded="false"><span>Horários livres para encaixar</span><i aria-hidden="true"></i></button><div class="ac-corpo"><p>Os próximos horários vagos, prontos para mandar a quem está na lista de espera.</p></div><span class="ac-barra" aria-hidden="true"></span></div>
+              <div class="ac-item" data-ac="2"><button aria-expanded="false"><span>Contas que avisam antes</span><i aria-hidden="true"></i></button><div class="ac-corpo"><p>Luz, aluguel e assinaturas avisam antes de vencer e somem da cabeça depois de pagas.</p></div><span class="ac-barra" aria-hidden="true"></span></div>
+              <div class="ac-item" data-ac="3"><button aria-expanded="false"><span>Do seu jeito</span><i aria-hidden="true"></i></button><div class="ac-corpo"><p>Paciente, cliente ou analisando; escuro ou claro; fundo com foto e efeito de vidro. Tudo salva sozinho.</p></div><span class="ac-barra" aria-hidden="true"></span></div>
+            </div>
+          </div>
+          <div class="palco pequeno revela">
+            <div class="iphone tilt" style="--w: 270px">
+              <i class="hw hw1"></i><i class="hw hw2"></i><i class="hw hw3"></i><i class="hw hw4"></i>
+              <div class="tela troca">
+                <img class="ativo" data-ac-tela="0" src="/landing/agora.jpg" alt="Tela Só o agora" loading="lazy" width="390" height="844" />
+                <img data-ac-tela="1" src="/landing/livres.jpg" alt="Horários livres" loading="lazy" width="390" height="844" />
+                <img data-ac-tela="2" src="/landing/contas.jpg" alt="Contas fixas" loading="lazy" width="390" height="844" />
+                <img data-ac-tela="3" src="/landing/perfil.jpg" alt="Perfil e ajustes" loading="lazy" width="390" height="844" />
+                <i class="ilha"></i><i class="reflexo"></i>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="desk revela"><img src="/screenshots/computador.png" alt="O app no computador" loading="lazy" width="1280" height="800" /></div>
       </section>
 
-      <!-- Privacidade -->
-      <section class="privacidade revela">
-        <div>
+      <!-- NÚMEROS -->
+      <section class="numeros revela" aria-label="Em números">
+        <div><b>1 toque</b><span>para anotar falando</span></div>
+        <div><b>140+</b><span>empresas reconhecidas na fala</span></div>
+        <div><b>2 min</b><span>para fechar o dia</span></div>
+        <div><b>R$ 0</b><span>para usar</span></div>
+      </section>
+
+      <!-- PRIVACIDADE -->
+      <section class="privacidade" id="privacidade">
+        <div class="sec-cab centro revela">
+          <span class="rotulo verde">Privacidade</span>
           <h2>Seus pacientes ficam com você.</h2>
-          <p>Nomes, sessões e valores ficam guardados no seu próprio aparelho. Para os avisos chegarem com o app fechado, só o horário e o texto do aviso passam pelo servidor de avisos, e por padrão sem o nome do paciente.</p>
+          <p>Nomes, sessões e valores ficam guardados no seu próprio aparelho.</p>
         </div>
-        <ul>
-          <li>Dados no seu aparelho</li><li>Avisos discretos</li><li>Funciona offline</li><li>Planilha do mês para o contador</li>
-        </ul>
+        <div class="pilares">
+          <article class="revela"><span class="pil-ic">⌂</span><h3>No seu aparelho</h3><p>Os dados não vão para um servidor nosso. Para guardar uma cópia, exporte a planilha do mês.</p></article>
+          <article class="revela"><span class="pil-ic">◐</span><h3>Avisos discretos</h3><p>A tela bloqueada mostra “Sessão em 15 min”, sem o nome do paciente, a menos que você ligue essa opção.</p></article>
+          <article class="revela"><span class="pil-ic">↯</span><h3>Funciona offline</h3><p>Depois de instalado, a agenda abre e funciona mesmo sem internet.</p></article>
+        </div>
       </section>
 
-      <!-- Instalar -->
+      <!-- INSTALAR -->
       <section class="instalar" id="instalar">
-        <h2 class="revela">Instale em 10 segundos</h2>
-        <p class="sub revela">É um app da web: não precisa de loja. Depois de instalado, abre em tela cheia, como qualquer app.</p>
-        <div class="passos">
-          <div class="passo revela"><b>iPhone</b><ol><li>Abra o app no <strong>Safari</strong>.</li><li>Toque em <strong>Compartilhar</strong>.</li><li>Escolha <strong>Adicionar à Tela de Início</strong>.</li></ol><small>Para receber avisos, use o iOS 16.4 ou mais novo.</small></div>
-          <div class="passo revela"><b>Android</b><ol><li>Abra o app no <strong>Chrome</strong>.</li><li>Toque em <strong>Instalar app</strong> (ou no menu ⋮).</li><li>Pronto: ele aparece junto com os outros apps.</li></ol><small>Segure o ícone para ver os atalhos.</small></div>
-          <div class="passo revela"><b>Computador</b><ol><li>Abra o app no Chrome ou no Edge.</li><li>Clique no ícone de instalar na barra de endereço.</li><li>Ele abre numa janela só dele.</li></ol><small>Tudo se ajusta para telas grandes.</small></div>
+        <div class="sec-cab centro revela">
+          <span class="rotulo azul">Instalar</span>
+          <h2>Na tela inicial em 10 segundos.</h2>
+          <p>É um app da web: não precisa de loja. Depois de instalado, abre em tela cheia, como qualquer app.</p>
         </div>
-        <div class="acoes centro revela"><a class="botao" href="../#criar">Criar minha conta</a><a class="botao fantasma" href="../#entrar">Já tenho conta</a></div>
+        <div class="passos">
+          <article class="revela"><b>iPhone</b><ol><li>Abra no <strong>Safari</strong>.</li><li>Toque em <strong>Compartilhar</strong>.</li><li><strong>Adicionar à Tela de Início</strong>.</li></ol><small>Para os avisos, iOS 16.4 ou mais novo.</small></article>
+          <article class="revela"><b>Android</b><ol><li>Abra no <strong>Chrome</strong>.</li><li>Toque em <strong>Instalar app</strong>.</li><li>Ele aparece junto com os outros apps.</li></ol><small>Segure o ícone para ver os atalhos.</small></article>
+          <article class="revela"><b>Computador</b><ol><li>Abra no Chrome ou no Edge.</li><li>Clique em instalar, na barra de endereço.</li><li>Ele abre numa janela só dele.</li></ol><small>Tudo se ajusta para telas grandes.</small></article>
+        </div>
       </section>
 
-      <!-- Perguntas -->
+      <!-- PERGUNTAS -->
       <section class="faq">
         <h2 class="revela">Perguntas rápidas</h2>
         <details class="revela"><summary>Quanto custa?</summary><p>Nada. É de graça para usar.</p></details>
         <details class="revela"><summary>Preciso de internet?</summary><p>Só para abrir pela primeira vez e para coisas como clima e feriados. Depois de instalado, a agenda funciona offline.</p></details>
         <details class="revela"><summary>E se eu trocar de celular?</summary><p>Hoje os dados ficam no aparelho em que você usa o app. Exporte a planilha do mês para guardar uma cópia.</p></details>
-        <details class="revela"><summary>Serve para outras áreas além da psicologia?</summary><p>Sim: psicanálise, psiquiatria, terapia ocupacional, fonoaudiologia, nutrição, fisioterapia, coaching e outras. Você escolhe se chama de paciente, cliente ou analisando.</p></details>
+        <details class="revela"><summary>Serve para outras áreas além da psicologia?</summary><p>Sim. Você escolhe a sua área e se chama de paciente, cliente ou analisando.</p></details>
+      </section>
+
+      <!-- CHAMADA FINAL -->
+      <section class="final revela">
+        <div class="brilho baixo" aria-hidden="true"><i></i><i></i><i></i></div>
+        <h2>Comece hoje. Amanhã você já esquece menos.</h2>
+        <p>Grátis, em português e pronto em um minuto.</p>
+        <form class="cadastro centro" action="../" data-cadastro>
+          <label class="sr" for="email-fim">Seu e-mail</label>
+          <input id="email-fim" type="email" name="email" placeholder="Seu e-mail" autocomplete="email" inputmode="email" />
+          <button class="botao" type="submit">Criar conta grátis</button>
+        </form>
+        <a class="link-seta" href="../#demo">Ou veja a demonstração <span aria-hidden="true">→</span></a>
       </section>
     </main>
 
     <footer class="rodape">
-      <span><img src="/icons/icon-192.png" alt="" width="22" height="22" /> Agenda do Consultório</span>
-      <a href="../#entrar">Entrar</a>
+      <div class="rod-marca"><img src="/icons/icon-192.png" alt="" width="28" height="28" /><span>Agenda do Consultório</span><small>A agenda que lembra por você.</small></div>
+      <div class="rod-col"><b>Produto</b><a href="#recursos">Recursos</a><a href="#fala">Anotar falando</a><a href="#tdah">Para quem tem TDAH</a></div>
+      <div class="rod-col"><b>Conta</b><a href="../#criar">Criar conta</a><a href="../#entrar">Entrar</a><a href="../#demo">Demonstração</a></div>
+      <div class="rod-col"><b>Ajuda</b><a href="#instalar">Instalar</a><a href="#privacidade">Privacidade</a></div>
     </footer>
 
     <script type="module" src="/src/landing.js"></script>

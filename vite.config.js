@@ -61,7 +61,7 @@ export default defineConfig({
       workbox: {
         // Guarda o app para abrir offline (só as fontes .woff2 dos alfabetos latinos, para ficar leve)
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,woff2}"],
-        globIgnores: ["**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/splash/**", "**/screenshots/**"],
+        globIgnores: ["**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/splash/**", "**/screenshots/**", "**/landing/**"],
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/\/sobre\//], // a página de apresentação não é o app
         importScripts: ["sw-extra.js"], // abre o app ao tocar numa notificação

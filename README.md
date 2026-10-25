@@ -143,7 +143,7 @@ Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da
 - Se o aparelho não liberar o reconhecimento (acontece em alguns iPhones com o app instalado), o app abre o teclado: toque no microfone do teclado e fale.
 
 ### Página de apresentação (landing page)
-Fica em `sobre/index.html` e é publicada junto com o app: `https://SEU-USUARIO.github.io/agenda-consultorio/sobre/`. Quem abre o endereço do app sem estar logado (pelo navegador) cai primeiro nela; quem já está logado ou abre pelo app instalado vai direto para o app. Os botões dela levam para `#criar` (criar conta), `#entrar` (entrar) e `#demo` (ver a demonstração). Os textos estão direto no HTML; o visual fica em `src/landing.css`. As fotos do app vêm de `public/screenshots/`.
+Fica em `sobre/index.html` e é publicada junto com o app: `https://SEU-USUARIO.github.io/agenda-consultorio/sobre/`. Quem abre o endereço do app sem estar logado (pelo navegador) cai primeiro nela; quem já está logado ou abre pelo app instalado vai direto para o app. Os botões dela levam para `#criar` (criar conta), `#entrar` (entrar) e `#demo` (ver a demonstração). Os textos estão direto no HTML; o visual fica em `src/landing.css` e as animações (abas, acordeão, demonstração da fala, iPhone que inclina com o mouse) em `src/landing.js`, sem bibliotecas. As telas do app que aparecem dentro do iPhone ficam em `public/landing/`.
 
 ### Cara de app
 - Bolinha, o mascote do microfone: uma bola minimalista com dois olhinhos que flutua, pisca, olha em volta, faz caras sozinha, reage à sua voz, fica feliz quando entende e confusa quando não entende.

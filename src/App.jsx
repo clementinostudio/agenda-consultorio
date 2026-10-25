@@ -1368,7 +1368,7 @@ function AreaChart({ serie, cor }) {
 function Auth({ onLogin }) {
   const [modo, setModo] = useState(() => location.hash === "#criar" ? "criar" : "entrar");
   const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => { try { const e = sessionStorage.getItem("agenda-email") || ""; sessionStorage.removeItem("agenda-email"); return e; } catch (x) { return ""; } });
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState(null);
   const criar = modo === "criar";
