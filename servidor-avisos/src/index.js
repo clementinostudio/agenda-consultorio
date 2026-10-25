@@ -75,6 +75,26 @@ export default {
 
     if (url.pathname === "/" || url.pathname === "/chave") return json({ ok: true, chave: env.VAPID_PUBLIC });
 
+    // Índices do Banco Central (CDI, Selic, IPCA) para o app, quando o navegador não consegue consultar direto.
+    // Guarda a resposta por 6 horas para não chamar o Banco Central à toa.
+    if (url.pathname === "/indices") {
+      const cacheKey = new Request("https://cache.local/indices-v1");
+      const salvo = await caches.default.match(cacheKey);
+      if (salvo) return json(await salvo.json());
+      const serie = async n => {
+        const r = await fetch(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${n}/dados/ultimos/1?formato=json`, { headers: { Accept: "application/json" } });
+        const j = await r.json(); return Number(String(j[0].valor).replace(",", "."));
+      };
+      try {
+        const [cdi, selic, ipca] = await Promise.all([serie(4389), serie(432), serie(13522)]);
+        const corpo = { cdi, selic, ipca, quando: Date.now() };
+        ctx.waitUntil(caches.default.put(cacheKey, new Response(JSON.stringify(corpo), { headers: { "Cache-Control": "max-age=21600", "Content-Type": "application/json" } })));
+        return json(corpo);
+      } catch (e) {
+        return json({ erro: "Banco Central fora do ar" }, 502);
+      }
+    }
+
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
 

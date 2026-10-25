@@ -9,6 +9,7 @@
 */
 import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "./assets/porquinho.webp";
+import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -103,6 +104,7 @@ const termoDe = S => ({ S, s: S.toLowerCase(), P: S + "s", p: S.toLowerCase() + 
 let TERMO = termoDe("Paciente");
 let ESTILO = "detalhado"; // "curto" mostra menos frases no resumo
 let PERFIL = {};          // respostas do perfil, lidas por várias partes do app
+let VIAGEM = null;        // modo viagem do Pessoal (a fala assume a moeda da viagem)
 // Fundos que já vêm no app (arquivos em public/fundos/). Para adicionar um, coloque a imagem lá e inclua uma linha aqui.
 const FUNDOS = [["floresta", "Floresta"], ["mar", "Mar à noite"], ["estrada", "Entardecer"]]
   .map(([id, nome]) => ({ id, nome, img: `${BASE}fundos/${id}.jpg`, thumb: `${BASE}fundos/${id}-mini.jpg` }));
@@ -352,7 +354,7 @@ function conversa(db, now, act, perfil) {
 /* =========================================================
    4. REGRAS DO MODO PESSOAL
    ========================================================= */
-const pessoalVazio = () => ({ lanc: [], contas: [], incluirConsultorio: true });
+const pessoalVazio = () => ({ lanc: [], contas: [], caixinhas: [], incluirConsultorio: true });
 const vencimento = (conta, chave) => `${chave}-${pad(Math.min(conta.dia, diasNoMes(chave)))}`;
 function situacaoConta(conta, chave) {
   const t = todayISO();
@@ -483,6 +485,14 @@ function interpretarFala(frase) {
   // empresa conhecida: nome certo, categoria certa e a logo dela
   const marca = acharMarca(t);
   if (marca) { desc = marca.nome; if (!entrada) cat = marca.cat; }
+  // moeda estrangeira ("20 dólares no táxi", "€ 15", ou a moeda da viagem): guarda o original e converte para reais
+  const mo = moedaNaFala(t, VIAGEM);
+  if (mo) {
+    const valorOrig = mo.valor || valor, cotacao = cotacaoDe(mo.moeda);
+    const iof = !(VIAGEM && VIAGEM.moeda === mo.moeda && VIAGEM.iof === false);
+    if (desc && /^(Dolar|Dolares|Euro|Euros|Libra|Libras|Pesos?)\b/i.test(desc)) desc = "";
+    return { tipo: entrada ? "entrada" : "saida", valor: valorOrig ? emReais(valorOrig, mo.moeda, iof && !entrada, cotacao) : 0, cat, desc, off, marca: marca ? marca.id : null, moeda: mo.moeda, valorOrig, cotacao, iof: iof && !entrada };
+  }
   return { tipo: entrada ? "entrada" : "saida", valor, cat, desc, off, marca: marca ? marca.id : null };
 }
 
@@ -2568,7 +2578,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
                 <div key={i} className="vozb-linha">
                   <MarcaLogo key={it.marca || it.cat} marca={it.marca} cat={catDe(it.cat)} className="vozb-ic" />
                   <span className="vozb-txt"><b>{it.desc || catDe(it.cat).nome}</b><small>{catDe(it.cat).nome} · {quandoTxt(it.off)}{it.tipo === "entrada" ? " · entrada" : ""}</small></span>
-                  <b className={"vozb-v" + (it.tipo === "entrada" ? " in" : "")}>{it.tipo === "entrada" ? "+" : ""}{um ? `R$ ${reais(valorVisto)}` : brlReal(it.valor)}</b>
+                  <b className={"vozb-v" + (it.tipo === "entrada" ? " in" : "")}>{it.tipo === "entrada" ? "+" : ""}{um ? `R$ ${reais(valorVisto)}` : brlReal(it.valor)}</b>{it.moeda && <small className="vozb-moeda">{fmtMoeda(it.valorOrig, it.moeda)}{it.iof ? " + IOF" : ""}</small>}
                 </div>
               ))}
               {itens.length > 3 && <div className="vozb-mais">+ {itens.length - 3} · total {brlReal(soma(itens, i => i.valor))}</div>}
@@ -2603,6 +2613,9 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
 const LancSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.LancSheet })));
 
 const ContaSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.ContaSheet })));
+const CaixinhaSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.CaixinhaSheet })));
+const ParceladoSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ParceladoSheet })));
+const ViagemSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ViagemSheet })));
 
 // Meta do mês em arco (inspirado no "Retirement")
 function arco(cx, cy, r, a0, a1) {
@@ -2922,6 +2935,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const usaPessoal = perfil.pessoal !== false;
   const av = { ...AVISOS_PADRAO, ...(perfil.avisos || {}) };
   const [db, setDb] = useState(() => carregarDb(conta));
+  VIAGEM = (db.pessoal && db.pessoal.viagem) || null;
   const [modo, setModoSt] = useState(() => lerJSON(K.modo(conta.email), "consultorio"));
   const [tab, setTab] = useState(() => lerJSON(K.modo(conta.email), "consultorio") === "pessoal" ? "p-home" : "home");
   const [sheet, setSheet] = useState(null);
@@ -3003,10 +3017,31 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   }, [pendIcone]);
   // Pede ao navegador para não apagar os dados do app quando faltar espaço
   useEffect(() => { try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {} }, []);
+  // Cotações (câmbio, CDI, IPCA): busca ao abrir e ao voltar para o app. Quando chegam valores novos,
+  // as assinaturas cobradas em moeda estrangeira passam a mostrar o custo em reais do dia (com IOF).
+  useEffect(() => {
+    definirServidor(servidorAvisos());
+    if (!usaPessoal) return;
+    const recalc = () => setDb(d => {
+      const P = d.pessoal; if (!P || !P.contas.some(c => c.moeda && c.moeda !== "BRL")) return d;
+      let mudou = false;
+      const contas = P.contas.map(c => {
+        if (!c.moeda || c.moeda === "BRL" || !c.valorOrig) return c;
+        const v = emReais(c.valorOrig, c.moeda, c.iof !== false);
+        if (!(v > 0) || Math.abs(v - c.valor) < 0.01) return c;
+        mudou = true; return { ...c, valor: v };
+      });
+      return mudou ? { ...d, pessoal: { ...P, contas } } : d;
+    });
+    recalc(); window.addEventListener("cotacoes", recalc); atualizarCotacoes().catch(() => {});
+    const vis = () => { if (document.visibilityState === "visible") atualizarCotacoes().catch(() => {}); };
+    document.addEventListener("visibilitychange", vis);
+    return () => { window.removeEventListener("cotacoes", recalc); document.removeEventListener("visibilitychange", vis); };
+  }, [usaPessoal]);
   // Depois que o app abriu, deixa as outras telas prontas em segundo plano (abrem na hora, sem esperar)
   useEffect(() => {
-    const pre = () => ["perfil", "paineis", "recorte", "pessoal"].forEach(n => {
-      ({ perfil: () => import("./telas/perfil.jsx"), paineis: () => import("./telas/paineis.jsx"), recorte: () => import("./telas/recorte.jsx"), pessoal: () => import("./telas/pessoal.jsx") })[n]().catch(() => {});
+    const pre = () => ["perfil", "paineis", "recorte", "pessoal", "dinheiro"].forEach(n => {
+      ({ perfil: () => import("./telas/perfil.jsx"), paineis: () => import("./telas/paineis.jsx"), recorte: () => import("./telas/recorte.jsx"), pessoal: () => import("./telas/pessoal.jsx"), dinheiro: () => import("./telas/dinheiro.jsx") })[n]().catch(() => {});
     });
     const t = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(pre, { timeout: 3000 }) : pre()), 3500);
     return () => clearTimeout(t);
@@ -3198,12 +3233,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       }
     },
     salvarVoz: itens => {
-      const novos = itens.map(it => ({ id: uid(), tipo: it.tipo, valor: it.valor, cat: it.cat, desc: it.desc || "", marca: it.marca || null, data: addDays(todayISO(), -(it.off || 0)) }));
+      const novos = itens.map(it => ({ id: uid(), tipo: it.tipo, valor: it.valor, cat: it.cat, desc: it.desc || "", marca: it.marca || null, data: addDays(todayISO(), -(it.off || 0)), ...(it.moeda ? { moeda: it.moeda, valorOrig: it.valorOrig, cotacao: it.cotacao, iof: !!it.iof } : {}) }));
       const ids = new Set(novos.map(n => n.id));
       setP(P => ({ ...P, lanc: [...P.lanc, ...novos] }));
       close(); vibrar("ok");
       const n = novos[0];
-      notify(novos.length > 1 ? `${novos.length} anotações · ${brlReal(soma(novos, x => x.valor))}` : `Anotado: ${brlReal(n.valor)} em ${n.desc || catDe(n.cat).nome}`, () => setP(P => ({ ...P, lanc: P.lanc.filter(x => !ids.has(x.id)) })));
+      notify(novos.length > 1 ? `${novos.length} anotações · ${brlReal(soma(novos, x => x.valor))}` : `Anotado: ${n.moeda ? `${fmtMoeda(n.valorOrig, n.moeda)} (${brlReal(n.valor)})` : brlReal(n.valor)} em ${n.desc || catDe(n.cat).nome}`, () => setP(P => ({ ...P, lanc: P.lanc.filter(x => !ids.has(x.id)) })));
     },
     openItem: item => setSheet({ type: "session", item }),
     registrar: registrarE,
@@ -3259,10 +3294,24 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       const novoL = !db.pessoal.lanc.some(x => x.id === l.id);
       setP(P => ({ ...P, lanc: novoL ? [...P.lanc, l] : P.lanc.map(x => x.id === l.id ? l : x) }));
       vibrar("ok"); close();
-      notify(novoL ? `${l.tipo === "entrada" ? "Entrada" : "Gasto"} de ${brlReal(l.valor)} anotado` : "Lançamento atualizado", novoL ? () => setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== l.id) })) : undefined);
+      notify(novoL ? `${l.tipo === "entrada" ? "Entrada" : "Gasto"} de ${l.moeda ? `${fmtMoeda(l.valorOrig, l.moeda)} (${brlReal(l.valor)})` : brlReal(l.valor)} anotado` : "Lançamento atualizado", novoL ? () => setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== l.id) })) : undefined);
     },
     apagarLanc: id => { setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== id) })); close(); notify("Lançamento apagado"); },
     novaConta: () => setSheet({ type: "conta" }),
+    // Dinheiro rendendo: caixinhas, à vista ou parcelado, modo viagem
+    abrirCaixinha: id => setSheet({ type: "caixinha", id: id || null }),
+    salvarCaixinha: c => { setP(P => { const cx = P.caixinhas || []; return { ...P, caixinhas: cx.some(x => x.id === c.id) ? cx.map(x => x.id === c.id ? c : x) : [...cx, c] }; }); vibrar("ok"); notify(`Caixinha ${c.nome} salva`); },
+    apagarCaixinha: id => { setP(P => ({ ...P, caixinhas: (P.caixinhas || []).filter(x => x.id !== id) })); close(); notify("Caixinha apagada"); },
+    moverCaixinha: (id, valor) => {
+      const mov = { id: uid(), data: todayISO(), valor };
+      setP(P => ({ ...P, caixinhas: (P.caixinhas || []).map(x => x.id === id ? { ...x, movs: [...(x.movs || []), mov] } : x) }));
+      vibrar("ok");
+      notify(valor > 0 ? `Guardado: ${brlReal(valor)}` : `Retirado: ${brlReal(-valor)}`, () => setP(P => ({ ...P, caixinhas: (P.caixinhas || []).map(x => x.id === id ? { ...x, movs: (x.movs || []).filter(m => m.id !== mov.id) } : x) })));
+    },
+    abrirParcelado: () => setSheet({ type: "parcelado" }),
+    abrirViagem: () => setSheet({ type: "viagem" }),
+    iniciarViagem: (moeda, iof) => { setP(P => ({ ...P, viagem: { moeda, iof, desde: todayISO() } })); close(); vibrar("ok"); notify(`Modo viagem: ${MOEDAS[moeda].nome}. Pode falar os gastos na moeda de lá.`); },
+    encerrarViagem: () => { const v = db.pessoal.viagem; setP(P => { const { viagem, ...resto } = P; return resto; }); close(); notify("Modo viagem desligado", () => setP(P => ({ ...P, viagem: v }))); },
     editConta: id => setSheet({ type: "conta", id }),
     salvarConta: c => { setP(P => ({ ...P, contas: P.contas.some(x => x.id === c.id) ? P.contas.map(x => x.id === c.id ? c : x) : [...P.contas, c] })); close(); notify(`${c.nome} salva · vence todo dia ${c.dia}`); },
     apagarConta: id => { setP(P => ({ ...P, contas: P.contas.filter(x => x.id !== id) })); close(); notify("Conta apagada"); },
@@ -3312,7 +3361,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       {sheet && sheet.type === "livres" && <Suspense fallback={null}><LivresSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
-      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "caixinha" && <Suspense fallback={null}><CaixinhaSheet key={sheet.id || "nova"} cx={(db.pessoal.caixinhas || []).find(x => x.id === sheet.id) || null} act={act} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "parcelado" && <Suspense fallback={null}><ParceladoSheet onClose={close} /></Suspense>}
+      {sheet && sheet.type === "viagem" && <Suspense fallback={null}><ViagemSheet viagem={db.pessoal.viagem} lanc={db.pessoal.lanc} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "conta" && <Suspense fallback={null}><ContaSheet key={sheet.id || "nova"} inicial={contaSel} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} /></Suspense>}
     </>
   );

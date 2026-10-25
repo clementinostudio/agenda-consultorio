@@ -2,6 +2,8 @@
 import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
+import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
+import { DinheiroHome } from "./dinheiro.jsx";
 import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes } from "../App.jsx";
 
 function resumoPessoal(db, chave) {
@@ -58,7 +60,7 @@ function LancRow({ l, act }) {
   return (
     <button className="txn" onClick={() => act.editLanc(l.id)}>
       <MarcaLogo key={l.marca || l.cat} marca={l.marca || (acharMarca(l.desc || "") || {}).id} cat={cat} className="txn-av" />
-      <span className="mid"><span className="nm">{l.desc || cat.nome}</span><span className="sb">{cat.nome} · {relativo(l.data).toLowerCase()}</span></span>
+      <span className="mid"><span className="nm">{l.desc || cat.nome}</span><span className="sb">{cat.nome}{l.moeda ? ` · ${ESCONDER ? "•••" : fmtMoeda(l.valorOrig, l.moeda)}` : ""} · {relativo(l.data).toLowerCase()}</span></span>
       <span className={"amt" + (l.tipo === "entrada" ? " pos" : "")}>{l.tipo === "entrada" ? "+" : "−"}<Money v={l.valor} /></span>
     </button>
   );
@@ -124,6 +126,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
             <button className="act" onClick={() => act.novoLanc("entrada")}><i><I.plus /></i>Entrada</button>
             <button className="act" onClick={() => act.novaConta()}><i><I.bill /></i>Conta fixa</button>
           </div>
+          <DinheiroHome db={db} act={act} />
         </div>
         <div className="col">
           <div className="panel">
@@ -232,7 +235,7 @@ function ContasTab({ db, act, tema }) {
             {contas.filter(c => c.assinatura).map(c => (
               <button key={c.id} className="txn" onClick={() => act.editConta(c.id)}>
                 <MarcaLogo marca={(acharMarca(c.nome) || {}).id} cat={catDe(c.cat)} className="txn-av" />
-                <span className="mid"><span className="nm">{c.nome}</span><span className="sb">Todo dia {c.dia} · {brl(c.valor * 12)} por ano</span></span>
+                <span className="mid"><span className="nm">{c.nome}</span><span className="sb">{c.moeda ? `${ESCONDER ? "•••" : fmtMoeda(c.valorOrig, c.moeda)}${c.iof !== false ? " + IOF" : ""} · ` : ""}Todo dia {c.dia} · {brl(c.valor * 12)} por ano</span></span>
                 <span className="amt"><Money v={c.valor} /></span>
               </button>
             ))}
@@ -245,9 +248,13 @@ function ContasTab({ db, act, tema }) {
   );
 }
 
-function LancSheet({ inicial, pre, tipo: tipo0, onVoz, onSave, onDelete, onClose }) {
+function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete, onClose }) {
+  const cot = useCotacoes();
   const [tipo, setTipo] = useState(inicial ? inicial.tipo : pre ? pre.tipo : tipo0);
-  const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : pre && pre.valor ? fmtNum(pre.valor) : "");
+  const orig = inicial || pre || null;
+  const [moeda, setMoeda] = useState(orig && orig.moeda ? orig.moeda : !inicial && viagem ? viagem.moeda : "BRL");
+  const [iof, setIof] = useState(orig && orig.moeda ? orig.iof !== false : viagem ? viagem.iof !== false : true);
+  const [valor, setValor] = useState(orig && orig.moeda && orig.valorOrig ? fmtNum(orig.valorOrig) : inicial ? fmtNum(inicial.valor) : pre && pre.valor ? fmtNum(pre.valor) : "");
   const [cat, setCat] = useState(inicial ? inicial.cat : pre ? pre.cat : null);
   const [desc, setDesc] = useState(inicial ? inicial.desc : pre ? pre.desc : "");
   const [data, setData] = useState(inicial ? inicial.data : pre ? addDays(todayISO(), -(pre.off || 0)) : todayISO());
@@ -258,12 +265,19 @@ function LancSheet({ inicial, pre, tipo: tipo0, onVoz, onSave, onDelete, onClose
     if (!txt.trim()) { setEntendi(null); return; }
     const r = interpretarFala(txt);
     setTipo(r.tipo); setCat(r.cat); setData(addDays(todayISO(), -r.off));
-    if (r.valor) setValor(fmtNum(r.valor));
+    if (r.moeda) { setMoeda(r.moeda); setIof(!!r.iof || r.tipo === "entrada"); if (r.valorOrig) setValor(fmtNum(r.valorOrig)); }
+    else { if (!viagem) setMoeda("BRL"); if (r.valor) setValor(fmtNum(r.valor)); }
     if (r.desc) setDesc(r.desc);
     setEntendi(r);
   };
   const lista = tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
   const v = num(valor);
+  const fora = moeda !== "BRL";
+  // edição de um gasto antigo: mantém a cotação do dia em que ele foi feito
+  const cotUsada = fora ? (inicial && inicial.moeda === moeda && inicial.cotacao ? inicial.cotacao : cot.moedas[moeda]) : 1;
+  const iofOn = fora && iof && tipo === "saida";
+  const emR = fora ? emReais(v, moeda, iofOn, cotUsada) : v;
+  const simb = fora ? fmtMoeda(0, moeda).replace(/[\d\s.,]/g, "") : "R$";
   const ok = v > 0 && cat && lista.some(c => c.id === cat);
   return (
     <Sheet title={inicial ? "Editar lançamento" : tipo === "entrada" ? "Nova entrada" : "Novo gasto"} onClose={onClose}>
@@ -272,12 +286,20 @@ function LancSheet({ inicial, pre, tipo: tipo0, onVoz, onSave, onDelete, onClose
           <input id="l-frase" value={frase} onChange={e => aplicar(e.target.value)} placeholder='Fale ou escreva: "gastei 32 na padaria"' enterKeyHint="done" autoComplete="off" aria-label="Descreva o gasto em uma frase" />
           <button type="button" className="mic" onClick={onVoz} aria-label="Falar"><I.mic /></button>
         </div>
-        {entendi && entendi.valor > 0 && <div className="voice-ok"><I.check /><span>Entendi: {entendi.tipo === "entrada" ? "entrada" : "gasto"} de {brlReal(entendi.valor)} em {catDe(entendi.cat).nome}{entendi.off ? (entendi.off === 1 ? ", ontem" : ", anteontem") : ", hoje"}. Confira e salve.</span></div>}
+        {entendi && entendi.valor > 0 && <div className="voice-ok"><I.check /><span>Entendi: {entendi.tipo === "entrada" ? "entrada" : "gasto"} de {entendi.moeda ? `${fmtMoeda(entendi.valorOrig, entendi.moeda)} (${brlReal(entendi.valor)})` : brlReal(entendi.valor)} em {catDe(entendi.cat).nome}{entendi.off ? (entendi.off === 1 ? ", ontem" : ", anteontem") : ", hoje"}. Confira e salve.</span></div>}
       </>}
       <Seg big value={tipo} onChange={x => { setTipo(x); setCat(null); }} options={[{ v: "saida", l: "Gasto" }, { v: "entrada", l: "Entrada" }]} />
-      <label className={"big-amt" + (tipo === "entrada" ? " in" : "")} htmlFor="l-valor"><span>R$</span>
+      <label className={"big-amt" + (tipo === "entrada" ? " in" : "")} htmlFor="l-valor"><span>{simb}</span>
         <input id="l-valor" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" autoFocus={!inicial} placeholder="0,00" value={valor} onChange={e => setValor(soNumero(e.target.value))} aria-label="Valor" />
       </label>
+      <div className="moeda-linha">
+        <select className="moeda-sel" value={moeda} onChange={e => setMoeda(e.target.value)} aria-label="Moeda">
+          <option value="BRL">🇧🇷 Real</option>
+          {CODIGOS.map(c => <option key={c} value={c}>{MOEDAS[c].bandeira} {MOEDAS[c].nome}</option>)}
+        </select>
+        {fora && <span className="moeda-conv">{v > 0 ? <>≈ <b>{brlReal(emR)}</b></> : <>1 {simb} = R$ {fmtTaxa(cotUsada)}</>}</span>}
+      </div>
+      {fora && tipo === "saida" && <Toggle on={iof} onClick={() => setIof(!iof)}>Pago no cartão (soma IOF de {String(IOF_CARTAO).replace(".", ",")}%)</Toggle>}
       <div className="cats" role="radiogroup" aria-label="Categoria">
         {lista.map(c => (
           <button type="button" key={c.id} role="radio" aria-checked={cat === c.id} className={"cat" + (cat === c.id ? " on" : "")} style={catVars(c)} onClick={() => setCat(c.id)}>
@@ -290,25 +312,36 @@ function LancSheet({ inicial, pre, tipo: tipo0, onVoz, onSave, onDelete, onClose
         <Field label="Quando" htmlFor="l-data"><input id="l-data" type="date" value={data} onChange={e => e.target.value && setData(e.target.value)} /></Field>
       </div>
       {!ok && <div className="hint">{!(v > 0) ? "Digite o valor e escolha uma categoria." : "Escolha uma categoria."}</div>}
-      <button className="btn mode" disabled={!ok} onClick={() => onSave({ id: inicial ? inicial.id : uid(), tipo, valor: v, cat, desc: desc.trim(), data })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
+      <button className="btn mode" disabled={!ok} onClick={() => onSave({ id: inicial ? inicial.id : uid(), tipo, valor: emR, cat, desc: desc.trim(), data, ...(fora ? { moeda, valorOrig: v, cotacao: cotUsada, iof: iofOn } : {}) })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
       {inicial && <ConfirmButton label="Apagar lançamento" titulo="Apagar este lançamento?" texto="Ele sai do seu extrato e dos totais do mês." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
 }
 
 function ContaSheet({ inicial, onSave, onDelete, onClose }) {
+  const cot = useCotacoes();
   const [nome, setNome] = useState(inicial ? inicial.nome : "");
-  const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : "");
+  const [moeda, setMoeda] = useState(inicial && inicial.moeda ? inicial.moeda : "BRL");
+  const [iof, setIof] = useState(inicial ? inicial.iof !== false : true);
+  const [valor, setValor] = useState(inicial ? fmtNum(inicial.moeda && inicial.valorOrig ? inicial.valorOrig : inicial.valor) : "");
   const [dia, setDia] = useState(inicial ? inicial.dia : 10);
   const [cat, setCat] = useState(inicial ? inicial.cat : "casa");
   const [assin, setAssin] = useState(inicial ? !!inicial.assinatura : false);
   const v = num(valor);
+  const fora = moeda !== "BRL";
+  const emR = fora ? emReais(v, moeda, iof) : v;
   const ok = nome.trim() && v > 0;
   return (
     <Sheet title={inicial ? "Editar conta" : "Nova conta fixa"} sub="Repete todo mês. Eu aviso antes de vencer." onClose={onClose}>
       <div className="fields">
         <Field label="Nome da conta" icon={<I.bill />} htmlFor="c-nome"><input id="c-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Aluguel, Luz, Internet" /></Field>
-        <Field label="Valor (R$)" icon={<I.money />} htmlFor="c-valor"><input id="c-valor" inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="0,00" /></Field>
+        <Field label={fora ? `Valor (${MOEDAS[moeda].nome.toLowerCase()})` : "Valor (R$)"} icon={<I.money />} htmlFor="c-valor"><input id="c-valor" inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="0,00" /></Field>
+        <Field label="Cobrada em" htmlFor="c-moeda">
+          <select id="c-moeda" className="moeda-sel no-campo" value={moeda} onChange={e => setMoeda(e.target.value)}>
+            <option value="BRL">🇧🇷 Real</option>
+            {CODIGOS.map(c => <option key={c} value={c}>{MOEDAS[c].bandeira} {MOEDAS[c].nome}</option>)}
+          </select>
+        </Field>
         <Field label="Vence todo dia">
           <div className="stepper">
             <button type="button" aria-label="Dia anterior" onClick={() => setDia(Math.max(1, dia - 1))}>−</button>
@@ -326,7 +359,9 @@ function ContaSheet({ inicial, onSave, onDelete, onClose }) {
         ))}
       </div>
       <Toggle on={assin} onClick={() => setAssin(!assin)}>É uma assinatura (streaming, app, academia)</Toggle>
-      <button className="btn mode" disabled={!ok} onClick={() => onSave({ ...(inicial || { pagas: {} }), id: inicial ? inicial.id : uid(), nome: nome.trim(), valor: v, dia, cat, assinatura: assin })}><I.check /> {inicial ? "Salvar" : "Adicionar conta"}</button>
+      {fora && <Toggle on={iof} onClick={() => setIof(!iof)}>Cobrada no cartão (soma IOF de {String(IOF_CARTAO).replace(".", ",")}%)</Toggle>}
+      {fora && v > 0 && <div className="moeda-aviso">Hoje sai por <b>{brlReal(emR)}</b> por mês ({brlReal(emR * 12)} por ano). Eu atualizo esse valor com a cotação do dia.</div>}
+      <button className="btn mode" disabled={!ok} onClick={() => { const { moeda: _m, valorOrig: _vo, iof: _i, ...base } = inicial || { pagas: {} }; onSave({ ...base, id: inicial ? inicial.id : uid(), nome: nome.trim(), valor: emR, dia, cat, assinatura: assin, ...(fora ? { moeda, valorOrig: v, iof } : {}) }); }}><I.check /> {inicial ? "Salvar" : "Adicionar conta"}</button>
       {inicial && <ConfirmButton label="Apagar conta" titulo="Apagar esta conta fixa?" texto="Ela para de aparecer nos próximos meses e nos lembretes." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
