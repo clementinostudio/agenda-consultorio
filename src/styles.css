@@ -911,7 +911,7 @@ main.app.puxando { transition: none; }
   border: 1px solid var(--vidro-borda); box-shadow: var(--vidro-sombra);
 }
 /* barra de abas: material mais grosso, como a tab bar do iOS (mantém a cor do tema) */
-.nav .nav-pill, .shell.glass .nav .nav-pill { background-color: color-mix(in srgb, var(--nav-bg) 88%, transparent); background-image: var(--ruido), var(--vidro-brilho); -webkit-backdrop-filter: blur(30px) saturate(190%); backdrop-filter: blur(30px) saturate(190%); }
+.nav .nav-pill, .shell.glass .nav .nav-pill { background-color: color-mix(in srgb, var(--nav-bg) 94%, transparent); background-image: var(--ruido), var(--vidro-brilho); -webkit-backdrop-filter: blur(30px) saturate(190%); backdrop-filter: blur(30px) saturate(190%); }
 /* Com foto de fundo, todo o app vira vidro */
 .shell.glass :is(.bal, .panel, .bub, .tl-card, .week, .next, .goal, .rhythm, .tile, .search, .wx, .mode-pill, .demo, .tl-gap, .tl-empty, .pend, .reserve, .txn-wrap, .dica-instalar) {
   background-color: var(--mat-fino); background-image: var(--ruido), var(--vidro-brilho);
@@ -965,3 +965,12 @@ main.app.puxando { transition: none; }
 @keyframes b-pula { 0% { transform: none; } 35% { transform: translateY(-7px) scale(.94, 1.08); } 65% { transform: translateY(0) scale(1.08, .92); } 100% { transform: none; } }
 @keyframes b-susto { 30% { transform: translateY(-4px) scale(1.05); } }
 @media (prefers-reduced-motion: reduce) { .b-corpo, .b-sombra { animation: none !important; } }
+
+/* Barra de baixo que encolhe ao rolar (como a tab bar do iOS) e volta quando a tela para */
+.nav { transform-origin: 50% 100%; transition: transform .32s cubic-bezier(.2, .8, .2, 1); }
+.nav.mini { transform: translateX(-50%) translateY(6px) scale(.84); }
+.nav .nv { transition: flex .25s ease, background .2s, height .25s ease; }
+.nav.mini .nv.on { flex: 1.2; }
+.nav.mini .nv.on .lb { display: none; }
+.nav.mini .nav-mic { transform: scale(.92); }
+@media (prefers-reduced-motion: reduce) { .nav, .nav .nv { transition: none; } }
