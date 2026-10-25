@@ -147,7 +147,8 @@ Fica em `sobre/index.html` e é publicada junto com o app: `https://SEU-USUARIO.
 
 ### Cara de app
 - Bolinha, o mascote do microfone: uma bola minimalista com dois olhinhos que flutua, pisca, olha em volta, faz caras sozinha, reage à sua voz, fica feliz quando entende e confusa quando não entende.
-- A barra de baixo desce e some enquanto a tela rola, e volta subindo com uma mola suave quando para.
+- Barra de baixo preta, fixa e minimalista (sem vidro e sem sumir ao rolar): ícones com o nome embaixo e a Bolinha como botão de falar.
+- Painéis abrem e fecham deslizando (também com um peteleco para baixo) e apagar qualquer coisa abre uma janela de confirmação clara, com Cancelar e a ação.
 - Telas entram com fade e uma subida curta em cascata; ao falar, uma aurora de cores flui no pé da tela (no computador, passando por trás da barra lateral, com a Bolinha no canto).
 - Puxe a tela para baixo no topo para recarregar (clima, feriados, avisos e versão nova do app).
 - Vidro líquido no estilo do iOS 26: quase transparente, desfoque leve com saturação e brilho, linha finíssima e reflexos de luz nas quinas, sem granulado nem contorno grosso.

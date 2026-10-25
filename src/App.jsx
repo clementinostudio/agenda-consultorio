@@ -1037,6 +1037,7 @@ const I = {
   wallet: () => <Svg><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16.5 15h1"/><path d="M6 6l9-3 1.5 3"/></Svg>,
   plus: () => <Svg sw={2.2}><path d="M12 5v14M5 12h14"/></Svg>,
   x: () => <Svg sw={2.2}><path d="M6 6l12 12M18 6L6 18"/></Svg>,
+  trash: () => <Svg><path d="M4 7h16M9.5 7V4.5h5V7"/><path d="M6.5 7l.9 11.6A2 2 0 0 0 9.4 20.5h5.2a2 2 0 0 0 2-1.9L17.5 7"/><path d="M10.5 11v5.5M13.5 11v5.5"/></Svg>,
   check: () => <Svg sw={2.6}><path d="M5 12.5l4.5 4.5L19 7.5"/></Svg>,
   chev: () => <Svg sw={2.2}><path d="M9 6l6 6-6 6"/></Svg>,
   chevL: () => <Svg sw={2.2}><path d="M15 6l-6 6 6 6"/></Svg>,
@@ -1240,32 +1241,90 @@ function CalBadge({ iso }) {
   return <span className="calb" aria-hidden="true"><b>{MES_CURTO[d.getMonth()]}</b><i>{d.getDate()}</i></span>;
 }
 
+const semMovimento = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+const SAIDA_MS = 200;
+
 function Sheet({ title, sub, onClose, children }) {
-  // Arrastar para baixo pela alça (ou pelo título) fecha, igual aos apps do celular
-  const ref = useRef(null), arr = useRef(null);
-  const ini = e => { if (!ref.current) return; arr.current = { y: e.touches[0].clientY, dy: 0 }; ref.current.style.transition = "none"; };
-  const mov = e => { if (!arr.current) return; const dy = Math.max(0, e.touches[0].clientY - arr.current.y); arr.current.dy = dy; ref.current.style.translate = `0 ${dy}px`; };
-  const fim = () => { if (!arr.current) return; const dy = arr.current.dy; arr.current = null; ref.current.style.transition = "translate .22s ease"; if (dy > 110) { ref.current.style.translate = "0 100vh"; vibrar("toque"); setTimeout(onClose, 160); } else ref.current.style.translate = ""; };
+  // Arrastar para baixo pela alça (ou pelo título) fecha, igual aos apps do celular.
+  // Fechar pelo X, tocando fora ou com Esc também anima a saída (desce e o fundo some).
+  const ref = useRef(null), scrim = useRef(null), arr = useRef(null);
+  const sair = () => {
+    const sc = scrim.current;
+    if (!sc || sc.classList.contains("sai") || sc.classList.contains("solto") || semMovimento()) { onClose(); return; }
+    sc.classList.add("sai"); setTimeout(onClose, SAIDA_MS);
+  };
+  const ini = e => { if (!ref.current) return; arr.current = { y: e.touches[0].clientY, dy: 0, t: performance.now() }; ref.current.style.transition = "none"; };
+  const mov = e => {
+    if (!arr.current) return;
+    const dy = Math.max(0, e.touches[0].clientY - arr.current.y); arr.current.dy = dy;
+    ref.current.style.translate = `0 ${dy}px`;
+    scrim.current && scrim.current.style.setProperty("--scrim-o", String(Math.max(0, 1 - dy / 420)));
+  };
+  const fim = () => {
+    if (!arr.current) return;
+    const { dy, t } = arr.current; arr.current = null;
+    const rapido = dy > 40 && dy / Math.max(1, performance.now() - t) > .6; // um "peteleco" para baixo também fecha
+    if (dy > 110 || rapido) {
+      ref.current.style.transition = "translate .2s cubic-bezier(.4, 0, 1, 1)"; ref.current.style.translate = "0 100%";
+      if (scrim.current) { scrim.current.classList.add("solto"); scrim.current.style.setProperty("--scrim-o", "0"); }
+      vibrar("toque"); setTimeout(onClose, 190);
+    } else {
+      ref.current.style.transition = "translate .32s cubic-bezier(.2, .9, .3, 1.1)"; ref.current.style.translate = "";
+      scrim.current && scrim.current.style.removeProperty("--scrim-o");
+    }
+  };
   const arrasto = { onTouchStart: ini, onTouchMove: mov, onTouchEnd: fim, onTouchCancel: fim };
+  const sairRef = useRef(sair); sairRef.current = sair;
   useEffect(() => {
-    const k = e => e.key === "Escape" && onClose();
+    const k = e => e.key === "Escape" && sairRef.current();
     window.addEventListener("keydown", k);
     const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
     return () => { window.removeEventListener("keydown", k); document.body.style.overflow = prev; };
   }, []);
   return (
-    <div className="scrim" onClick={onClose}>
+    <div className="scrim" ref={scrim} onClick={sair}>
       <div className="sheet" ref={ref} role="dialog" aria-modal="true" aria-label={title || "Painel"} onClick={e => e.stopPropagation()}>
         <div className="grab" {...arrasto} />
         {title && (
           <div className="sheet-head" {...arrasto}>
             <div><h2>{title}</h2>{sub && <div className="sub">{sub}</div>}</div>
-            <button className="icon-btn" onClick={onClose} aria-label="Fechar"><I.x /></button>
+            <button className="sheet-x" onClick={sair} aria-label="Fechar"><I.x /></button>
           </div>
         )}
         <div className="stack">{children}</div>
       </div>
     </div>
+  );
+}
+
+// Janela de confirmação (no lugar do antigo "toque de novo para apagar"):
+// abre no meio da tela, com o que vai acontecer escrito, Cancelar à esquerda e a ação à direita.
+function Confirmar({ titulo, texto, acao = "Confirmar", icon, perigo = true, onSim, onFim }) {
+  const [saindo, setSaindo] = useState(false);
+  const saiu = useRef(false), nao = useRef(null);
+  const sair = () => { if (saiu.current) return; saiu.current = true; setSaindo(true); setTimeout(onFim, semMovimento() ? 0 : 160); };
+  const sim = () => { if (saiu.current) return; vibrar("aviso"); onSim(); sair(); };
+  const sairRef = useRef(sair); sairRef.current = sair;
+  useEffect(() => {
+    try { nao.current && nao.current.focus({ preventScroll: true }); } catch (e) {}
+    // Esc fecha só a janela, não o painel que está por baixo
+    const k = e => { if (e.key === "Escape") { e.stopPropagation(); sairRef.current(); } };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }, []);
+  return createPortal(
+    <div className={"alerta" + (saindo ? " sai" : "")} onClick={sair} role="presentation">
+      <div className="alerta-box" role="alertdialog" aria-modal="true" aria-labelledby="alerta-t" aria-describedby={texto ? "alerta-d" : undefined} onClick={e => e.stopPropagation()}>
+        {icon && <span className={"alerta-ic" + (perigo ? " perigo" : "")} aria-hidden="true">{icon}</span>}
+        <h3 id="alerta-t">{titulo}</h3>
+        {texto && <p id="alerta-d">{texto}</p>}
+        <div className="alerta-acoes">
+          <button ref={nao} className="alerta-btn" onClick={sair}>Cancelar</button>
+          <button className={"alerta-btn forte" + (perigo ? " perigo" : "")} onClick={sim}>{acao}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1287,10 +1346,14 @@ function Seg({ value, options, onChange, big }) {
 const Dots = ({ total, filled }) => <span className="dots" aria-label={`${filled} de ${total}`}>{Array.from({ length: total }, (_, i) => <i key={i} className={i < filled ? "f" : ""} />)}</span>;
 const Toggle = ({ on, onClick, children }) => <button type="button" className="toggle" role="switch" aria-checked={on} onClick={onClick}><span>{children}</span><span className={"sw" + (on ? " on" : "")} /></button>;
 
-function ConfirmButton({ label, confirmLabel, onConfirm, icon }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => { if (!armed) return; const t = setTimeout(() => setArmed(false), 4000); return () => clearTimeout(t); }, [armed]);
-  return <button className="btn danger" onClick={() => { if (armed) { vibrar("aviso"); onConfirm(); } else { vibrar("aviso"); setArmed(true); } }}>{icon}{armed ? confirmLabel : label}</button>;
+function ConfirmButton({ label, onConfirm, icon, titulo, texto, acao }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <>
+      <button className="btn danger" onClick={() => { vibrar("aviso"); setAberto(true); }}>{icon}{label}</button>
+      {aberto && <Confirmar titulo={titulo || `${label}?`} texto={texto} acao={acao || label} icon={icon || <I.trash />} onSim={onConfirm} onFim={() => setAberto(false)} />}
+    </>
+  );
 }
 
 function TopBar({ eyebrow, title, act, tema, extra }) {
@@ -1726,7 +1789,7 @@ function SessionSheet({ db, item, onClose, act }) {
         </div>
         {s.status === "done" && PERFIL.registro !== false && <Toggle on={!!s.registro} onClick={() => act.toggleRegistro(s.id)}>Registro da sessão feito</Toggle>}
         {charge && <button className="btn ghost" onClick={() => act.openCharge(charge.id)}><I.receipt /> Ver cobrança</button>}
-        {ultima && <ConfirmButton icon={<I.undo />} label="Desfazer registro" confirmLabel="Toque de novo para desfazer" onConfirm={() => act.desfazer(s.id)} />}
+        {ultima && <ConfirmButton icon={<I.undo />} label="Desfazer registro" titulo="Desfazer este registro?" texto="A sessão volta a ficar como antes de você marcar, e o que foi lançado junto com ela sai." acao="Desfazer" onConfirm={() => act.desfazer(s.id)} />}
         <button className="btn text" onClick={onClose}>Fechar</button>
       </Sheet>
     );
@@ -1889,7 +1952,7 @@ function PatientSheet({ db, pid, onClose, act }) {
           </div>
         ))}
       </div>
-      <ConfirmButton label={`Excluir ${TERMO.s}`} confirmLabel="Toque de novo para excluir" onConfirm={() => act.excluir(p.id)} />
+      <ConfirmButton label={`Excluir ${TERMO.s}`} titulo={`Excluir ${primeiro(p.name)}?`} texto="O cadastro sai da sua agenda. Isso não dá para desfazer." acao="Excluir" onConfirm={() => act.excluir(p.id)} />
     </Sheet>
   );
 }
@@ -2584,7 +2647,7 @@ function LancSheet({ inicial, pre, tipo: tipo0, onVoz, onSave, onDelete, onClose
       </div>
       {!ok && <div className="hint">{!(v > 0) ? "Digite o valor e escolha uma categoria." : "Escolha uma categoria."}</div>}
       <button className="btn mode" disabled={!ok} onClick={() => onSave({ id: inicial ? inicial.id : uid(), tipo, valor: v, cat, desc: desc.trim(), data })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
-      {inicial && <ConfirmButton label="Apagar lançamento" confirmLabel="Toque de novo para apagar" onConfirm={() => onDelete(inicial.id)} />}
+      {inicial && <ConfirmButton label="Apagar lançamento" titulo="Apagar este lançamento?" texto="Ele sai do seu extrato e dos totais do mês." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
 }
@@ -2620,7 +2683,7 @@ function ContaSheet({ inicial, onSave, onDelete, onClose }) {
       </div>
       <Toggle on={assin} onClick={() => setAssin(!assin)}>É uma assinatura (streaming, app, academia)</Toggle>
       <button className="btn mode" disabled={!ok} onClick={() => onSave({ ...(inicial || { pagas: {} }), id: inicial ? inicial.id : uid(), nome: nome.trim(), valor: v, dia, cat, assinatura: assin })}><I.check /> {inicial ? "Salvar" : "Adicionar conta"}</button>
-      {inicial && <ConfirmButton label="Apagar conta" confirmLabel="Toque de novo para apagar" onConfirm={() => onDelete(inicial.id)} />}
+      {inicial && <ConfirmButton label="Apagar conta" titulo="Apagar esta conta fixa?" texto="Ela para de aparecer nos próximos meses e nos lembretes." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
 }
@@ -2996,7 +3059,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act }) {
               <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>Seus dados ficam guardados neste aparelho</small></span><I.chev /></button>
             </div>
           </div>
-          <ConfirmButton label="Apagar meus dados" confirmLabel="Toque de novo para apagar tudo" onConfirm={act.zerar} />
+          <ConfirmButton label="Apagar meus dados" titulo="Apagar todos os seus dados?" texto="Pacientes, sessões, cobranças e gastos deste aparelho somem de vez. Isso não dá para desfazer." acao="Apagar tudo" onConfirm={act.zerar} />
           {db.patients.length === 0 && <button className="btn text" onClick={act.carregarExemplo}>Carregar dados de exemplo</button>}
         </>}
 
@@ -3298,26 +3361,36 @@ function RevisaoSheet({ db, onClose, act }) {
 // CONFIRMAÇÃO DA VÉSPERA
 function ConfirmSheet({ db, iso, onClose, act }) {
   const its = itensDoDia(db, iso).filter(i => i.kind !== "log");
+  const conf = db.confirmados || {};
+  const feitos = its.filter(x => conf[`${x.patient.id}:${iso}`]).length;
   return (
-    <Sheet title={`Confirmar ${relativo(iso).toLowerCase()}`} sub={`${diaCurto(iso)} · ${its.length} ${its.length === 1 ? "sessão" : "sessões"}`} onClose={onClose}>
+    <Sheet title={`Confirmar ${relativo(iso).toLowerCase()}`} sub={`${relativo(iso).toLowerCase() === diaCurto(iso).toLowerCase() ? "" : diaCurto(iso) + " · "}${its.length} ${its.length === 1 ? "sessão" : "sessões"}`} onClose={onClose}>
       {its.length === 0 && <div className="empty">Nenhuma sessão nesse dia.</div>}
-      {its.map(x => {
-        const ok = db.confirmados[`${x.patient.id}:${iso}`], txt = msgConfirma(x.patient, iso, x.time);
-        return (
-          <div className="panel" key={x.patient.id}>
-            <div className="txn">
-              <span className="txn-av">{iniciais(x.patient.name)}<i className="cdot" style={{ background: corDe(x.patient).cor }} /></span>
-              <span className="mid"><span className="nm">{x.patient.name}</span><span className="sb">{x.time}</span></span>
-              <button className={"box " + (ok ? "done" : "up")} onClick={() => act.setConfirmado(x.patient.id, iso, !ok)} aria-label={ok ? "Desmarcar confirmação" : "Marcar como confirmado"}>{ok && <I.check />}</button>
+      {its.length > 0 && (
+        <div className="conf-prog" aria-live="polite">
+          <span><b>{feitos} de {its.length}</b> {feitos === its.length ? "confirmadas. Tudo certo!" : "confirmadas"}</span>
+          <div className="conf-bar"><i style={{ width: `${(feitos / its.length) * 100}%` }} /></div>
+        </div>
+      )}
+      <div className="conf-lista">
+        {its.map(x => {
+          const ok = !!conf[`${x.patient.id}:${iso}`], txt = msgConfirma(x.patient, iso, x.time);
+          return (
+            <div className={"conf-item" + (ok ? " ok" : "")} key={x.patient.id}>
+              <div className="conf-top">
+                <span className="txn-av">{iniciais(x.patient.name)}<i className="cdot" style={{ background: corDe(x.patient).cor }} /></span>
+                <span className="mid"><b>{x.patient.name}</b><small>{x.time}{ok ? " · confirmado" : ""}</small></span>
+                <button className={"box " + (ok ? "done" : "up")} onClick={() => act.setConfirmado(x.patient.id, iso, !ok)} aria-label={ok ? "Desmarcar confirmação" : "Marcar como confirmado"}>{ok && <I.check />}</button>
+              </div>
+              <p className="conf-msg">{txt}</p>
+              <div className="conf-acoes">
+                <a className="conf-wa" href={waLink(x.patient.phone, txt)} target="_blank" rel="noopener noreferrer" onClick={() => act.setConfirmado(x.patient.id, iso, true)}><I.send /> {ok ? "Enviar de novo" : "Enviar no WhatsApp"}</a>
+                <button className="conf-copy" onClick={() => { copiarTexto(txt, act, "Confirmação copiada"); act.setConfirmado(x.patient.id, iso, true); }} aria-label="Copiar mensagem"><I.copy /></button>
+              </div>
             </div>
-            <p className="hint" style={{ padding: "0 0 10px" }}>{txt}</p>
-            <div className="btn-row" style={{ paddingBottom: 12 }}>
-              <button className="btn ghost" style={{ height: 44, fontSize: 15 }} onClick={() => { copiarTexto(txt, act, "Confirmação copiada"); act.setConfirmado(x.patient.id, iso, true); }}><I.copy /> Copiar</button>
-              <a className="btn ghost" style={{ height: 44, fontSize: 15 }} href={waLink(x.patient.phone, txt)} target="_blank" rel="noopener noreferrer" onClick={() => act.setConfirmado(x.patient.id, iso, true)}><I.send /> WhatsApp</a>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </Sheet>
   );
 }
@@ -3366,7 +3439,7 @@ function EsperaSheet({ inicial, onSave, onDelete, onClose }) {
       </div>
       <button className="btn" disabled={!nome.trim()} onClick={() => onSave({ ...(inicial || { desde: todayISO(), id: uid() }), nome: nome.trim(), phone, pref, obs: obs.trim() })}><I.check /> Salvar</button>
       {inicial && <button className="btn ghost" onClick={() => onDelete(inicial.id, true)}><I.user /> Virar {TERMO.s}</button>}
-      {inicial && <ConfirmButton label="Tirar da lista" confirmLabel="Toque de novo para tirar" onConfirm={() => onDelete(inicial.id)} />}
+      {inicial && <ConfirmButton label="Tirar da lista" titulo="Tirar da lista de espera?" texto="A pessoa sai da lista. Dá para colocar de novo depois." acao="Tirar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
 }
@@ -3582,19 +3655,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const [vozAtiva, setVozAtiva] = useState(false);
   // Barra de cima que aparece quando a página rola
   const [rolou, setRolou] = useState(false);
-  // Barra de baixo some enquanto a tela rola (ou o dedo arrasta) e volta quando a tela para
-  const [navMini, setNavMini] = useState(false);
+  // A barra de baixo fica sempre parada no lugar; só a de cima reage à rolagem
+  // (um único setState por mudança de estado, e não a cada pixel rolado)
   useEffect(() => {
-    let t = null, mini = false, y0 = window.scrollY;
-    const encolher = () => {
-      if (!mini) { mini = true; setNavMini(true); }
-      clearTimeout(t); t = setTimeout(() => { mini = false; setNavMini(false); }, 260);
-    };
-    const f = () => { setRolou(window.scrollY > 72); if (Math.abs(window.scrollY - y0) > 2) encolher(); y0 = window.scrollY; };
-    const arrasto = e => { if (e.target.closest && e.target.closest(".nav")) encolher(); };
-    f(); window.addEventListener("scroll", f, { passive: true });
-    window.addEventListener("touchmove", arrasto, { passive: true });
-    return () => { clearTimeout(t); window.removeEventListener("scroll", f); window.removeEventListener("touchmove", arrasto); };
+    let r = null, raf = 0;
+    const f = () => { raf = 0; const v = window.scrollY > 72; if (v !== r) { r = v; setRolou(v); } };
+    const agendar = () => { if (!raf) raf = requestAnimationFrame(f); };
+    f(); window.addEventListener("scroll", agendar, { passive: true });
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", agendar); };
   }, []);
   const vozApi = useRef({});
   CLIMA = clima;
@@ -3751,7 +3819,17 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   }, [now, av.ativo, av.antecedencia, push]);
 
   const notify = (msg, undo) => { setToast({ msg, undo }); clearTimeout(tRef.current); tRef.current = setTimeout(() => setToast(null), undo ? 6000 : 2800); };
-  const close = () => setSheet(null);
+  // Fecha o painel aberto com a animação de saída. Enquanto ele desce, o conteúdo fica "congelado"
+  // como estava (assim um paciente excluído não some do painel antes da hora).
+  const sheetRef = useRef(sheet); sheetRef.current = sheet;
+  const [saindo, setSaindo] = useState(false);
+  const close = () => {
+    const atual = sheetRef.current;
+    const tirar = () => { setSaindo(false); setSheet(s => s === atual ? null : s); };
+    const abertos = Array.from(document.querySelectorAll(".scrim:not(.sai):not(.solto), .perfil:not(.sai)"));
+    if (!atual || !abertos.length || semMovimento()) { tirar(); return; }
+    abertos.forEach(el => el.classList.add("sai")); setSaindo(true); setTimeout(tirar, SAIDA_MS);
+  };
   const setP = fn => setDb(d => ({ ...d, pessoal: fn(d.pessoal) }));
   const chaveAtual = () => todayISO().slice(0, 7);
 
@@ -3929,6 +4007,25 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     : [{ id: "home", l: "Início", ic: <I.home />, n: atrasados }, { id: "agenda", l: "Agenda", ic: <I.cal />, n: 0 }, { id: "pac", l: TERMO.P, ic: <I.users />, n: 0 }, { id: "fin", l: "Finanças", ic: <I.wallet />, n: pendentes }];
   const lancSel = sheet && sheet.type === "lanc" && sheet.id ? db.pessoal.lanc.find(l => l.id === sheet.id) : null;
   const contaSel = sheet && sheet.type === "conta" && sheet.id ? db.pessoal.contas.find(c => c.id === sheet.id) : null;
+  const paineisCong = useRef(null);
+  const paineis = saindo && paineisCong.current ? paineisCong.current : (
+    <>
+      {sheet && sheet.type === "session" && <SessionSheet key={sheet.item.patient.id + sheet.item.date + sheet.item.kind} db={db} item={sheet.item} onClose={close} act={act} />}
+      {sheet && sheet.type === "patient" && <PatientSheet db={db} pid={sheet.pid} onClose={close} act={act} />}
+      {sheet && sheet.type === "form" && <PatientForm total={db.patients.length} perfil={perfil} pre={sheet.pre} initial={sheet.pid ? db.patients.find(p => p.id === sheet.pid) : null} onSave={act.salvarPaciente} onClose={close} />}
+      {sheet && sheet.type === "charge" && <ChargeSheet key={sheet.cid} db={db} cid={sheet.cid} fresh={sheet.fresh} nomeProf={conta.nome} onClose={close} act={act} />}
+      {sheet && sheet.type === "settings" && <PerfilPage db={db} conta={conta} tema={tema} inicio={sheet.aba} onClose={close} act={act} />}
+      {sheet && sheet.type === "fechar" && <FecharDia db={db} conta={conta} onClose={close} act={act} />}
+      {sheet && sheet.type === "revisao" && <RevisaoSheet db={db} onClose={close} act={act} />}
+      {sheet && sheet.type === "confirmar" && <ConfirmSheet db={db} iso={sheet.iso} onClose={close} act={act} />}
+      {sheet && sheet.type === "livres" && <LivresSheet db={db} onClose={close} act={act} />}
+      {sheet && sheet.type === "registros" && <RegistrosSheet db={db} onClose={close} act={act} />}
+      {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
+      {sheet && sheet.type === "lanc" && <LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} />}
+      {sheet && sheet.type === "conta" && <ContaSheet key={sheet.id || "nova"} inicial={contaSel} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} />}
+    </>
+  );
+  if (!saindo) paineisCong.current = paineis;
 
   return (
     <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " glass" : "")} data-mode={modoEf}>
@@ -3992,31 +4089,21 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         </div>
       </div>
       <VozBarra api={vozApi} db={db} usaPessoal={usaPessoal} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onComando={act.comandoVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />
-      <nav className={"nav" + (navMini && !vozAtiva ? " encolhida" : "")} aria-label="Seções">
-        <div className="nav-pill">
+      <nav className="nav" aria-label="Seções">
+        <div className="nav-in">
           {abas.map(a => (
             <button key={a.id} className={"nv" + (tabEf === a.id ? " on" : "")} onClick={() => act.setTab(a.id)} aria-current={tabEf === a.id ? "page" : undefined} aria-label={a.l}>
               {a.ic}<span className="lb">{a.l}</span>{a.n > 0 && <span className="badge">{a.n}</span>}
             </button>
           ))}
+          <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Terminar" : "Falar"}>
+            <Bolinha estado={vozAtiva} /><span className="lb">{vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Parar" : "Falar"}</span>
+          </button>
         </div>
-        <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Terminar" : "Falar"}><Bolinha estado={vozAtiva} /></button>
       </nav>
 
-      {sheet && sheet.type === "session" && <SessionSheet key={sheet.item.patient.id + sheet.item.date + sheet.item.kind} db={db} item={sheet.item} onClose={close} act={act} />}
-      {sheet && sheet.type === "patient" && <PatientSheet db={db} pid={sheet.pid} onClose={close} act={act} />}
-      {sheet && sheet.type === "form" && <PatientForm total={db.patients.length} perfil={perfil} pre={sheet.pre} initial={sheet.pid ? db.patients.find(p => p.id === sheet.pid) : null} onSave={act.salvarPaciente} onClose={close} />}
-      {sheet && sheet.type === "charge" && <ChargeSheet key={sheet.cid} db={db} cid={sheet.cid} fresh={sheet.fresh} nomeProf={conta.nome} onClose={close} act={act} />}
-      {sheet && sheet.type === "settings" && <PerfilPage db={db} conta={conta} tema={tema} inicio={sheet.aba} onClose={close} act={act} />}
-      {sheet && sheet.type === "fechar" && <FecharDia db={db} conta={conta} onClose={close} act={act} />}
-      {sheet && sheet.type === "revisao" && <RevisaoSheet db={db} onClose={close} act={act} />}
-      {sheet && sheet.type === "confirmar" && <ConfirmSheet db={db} iso={sheet.iso} onClose={close} act={act} />}
-      {sheet && sheet.type === "livres" && <LivresSheet db={db} onClose={close} act={act} />}
-      {sheet && sheet.type === "registros" && <RegistrosSheet db={db} onClose={close} act={act} />}
-      {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
+      {paineis}
       {foco && <Agora db={db} conta={conta} now={now} onClose={() => setFoco(false)} act={act} />}
-      {sheet && sheet.type === "lanc" && <LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} />}
-      {sheet && sheet.type === "conta" && <ContaSheet key={sheet.id || "nova"} inicial={contaSel} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} />}
 
       {toast && (
         <div className={"toast" + (toast.undo ? "" : " solo")} role="status">
