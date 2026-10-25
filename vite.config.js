@@ -25,8 +25,8 @@ export default defineConfig({
       includeAssets: ["icons/favicon.svg", "icons/apple-touch-icon.png", "fundos/*.jpg"],
       manifest: {
         id: "agenda-do-consultorio",
-        name: "Cais",
-        short_name: "Cais",
+        name: "Alvena",
+        short_name: "Alvena",
         description: "Sua agenda, seus pagamentos e suas contas num lugar só.",
         lang: "pt-BR",
         start_url: ".",
@@ -44,7 +44,7 @@ export default defineConfig({
           { src: "screenshots/pessoal.png", sizes: "780x1688", type: "image/png", form_factor: "narrow", label: "Gastos e contas da casa" },
           { src: "screenshots/computador.png", sizes: "1280x800", type: "image/png", form_factor: "wide", label: "No computador" },
         ],
-        background_color: "#0A0C11",
+        background_color: "#0A1240",
         theme_color: "#0A0C11",
         icons: [
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },

@@ -4,7 +4,7 @@
 self.addEventListener("push", event => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = { corpo: event.data ? event.data.text() : "" }; }
-  const titulo = d.titulo || "Cais";
+  const titulo = d.titulo || "Alvena";
   const opcoes = {
     body: d.corpo || "Você tem um aviso na agenda.",
     icon: self.registration.scope + "icons/icon-192.png",

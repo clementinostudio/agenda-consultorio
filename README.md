@@ -1,4 +1,4 @@
-# Cais
+# Alvena
 
 App para profissionais da saúde mental (pensado para quem tem TDAH): agenda que se repete sozinha, cálculo de sublocação, cobrança automática por pacote, lembretes, modo Pessoal para os gastos da casa e muito mais. Feito com **Vite + React** e pronto para virar **PWA** (instala na tela inicial do celular e abre sem internet).
 

@@ -1,5 +1,5 @@
 /*
-  Cais (antes: Agenda do Consultório)
+  Alvena (antes: Agenda do Consultório)
   -------------------------------------
   O app inteiro está neste arquivo, separado em seções numeradas (procure por "====").
   Para mudar textos, valores padrão, cores de paciente ou categorias, comece pela seção 1 (CONFIGURAÇÃO).
@@ -1261,10 +1261,10 @@ const vazio = () => ({ settings: { pix: "" }, patients: [], sessions: [], charge
    6. ÍCONES
    ========================================================= */
 const Svg = ({ children, sw = 1.8 }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{children}</svg>;
-// Logo do Cais: anel em C (a enseada) com o barquinho, branco sobre o azul
+// Logo da Alvena: um A de fita só (sobe, curva no topo, desce a haste; a travessa é um laço pela esquerda)
 const Marca = () => (
-  <svg viewBox="0 0 512 512" aria-hidden="true">
-    <path d="M256 160A96 96 0 1 0 352 256" fill="none" stroke="#fff" strokeWidth="68" /><circle cx="323.9" cy="188.1" r="34" fill="#fff" />
+  <svg viewBox="97 105 300 300" aria-hidden="true">
+    <path d="M338 380V176Q338 128 300 128Q274 128 260 158L196 300Q180 336 152 334Q128 332 134 302Q146 258 214 248Q296 238 338 300" fill="none" stroke="#fff" strokeWidth="44" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 const I = {
@@ -1701,7 +1701,7 @@ function Auth({ onLogin }) {
   };
   return (
     <main className="auth">
-      <div className="brand"><i><Marca /></i>Cais</div>
+      <div className="brand"><i><Marca /></i>Alvena</div>
       <div className="auth-h">
         <div className="hi">{criar ? "Vamos começar!" : "Que bom te ver!"}</div>
         <h1>{criar ? "Criar conta" : "Entrar"}</h1>
@@ -3141,8 +3141,8 @@ const TXT_PUSH = {
   tempo: "Demorou demais para responder. Tente de novo.",
 };
 const textoNegado = () => ehIOS()
-  ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Cais → Permitir Notificações. Depois volte aqui."
-  : "As notificações estão bloqueadas. Libere nas configurações do celular: Apps → Cais (ou Chrome) → Notificações. Depois volte aqui.";
+  ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Alvena → Permitir Notificações. Depois volte aqui."
+  : "As notificações estão bloqueadas. Libere nas configurações do celular: Apps → Alvena (ou Chrome) → Notificações. Depois volte aqui.";
 
 function AvisosFechado({ act }) {
   const [ligado, setLigado] = useState(() => pushLigado());
@@ -4312,7 +4312,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " com-foto" + (conta.vidro !== false ? " glass" : "") : "") + (conta.vidro === false ? " solido" : "")} data-mode={modoEf}>
       {conta.fundo && imagemFundo(conta.fundo, meusFundos) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo, meusFundos)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
       <aside className="side" aria-label="Menu">
-        <div className="side-brand"><i><Marca /></i>Cais</div>
+        <div className="side-brand"><i><Marca /></i>Alvena</div>
         {usaPessoal && <ModeSwitch modo={modo} setModo={act.setModo} block />}
         <nav className="side-nav">
           {abas.map(a => (
