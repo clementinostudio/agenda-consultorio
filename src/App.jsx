@@ -3587,7 +3587,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     let t = null, mini = false, y0 = window.scrollY;
     const encolher = () => {
       if (!mini) { mini = true; setNavMini(true); }
-      clearTimeout(t); t = setTimeout(() => { mini = false; setNavMini(false); }, 320);
+      clearTimeout(t); t = setTimeout(() => { mini = false; setNavMini(false); }, 180);
     };
     const f = () => { setRolou(window.scrollY > 72); if (Math.abs(window.scrollY - y0) > 2) encolher(); y0 = window.scrollY; };
     const arrasto = e => { if (e.target.closest && e.target.closest(".nav")) encolher(); };
@@ -3991,7 +3991,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         </div>
       </div>
       <VozBarra api={vozApi} db={db} usaPessoal={usaPessoal} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onComando={act.comandoVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />
-      <nav className={"nav" + (navMini && !vozAtiva ? " mini" : "")} aria-label="Seções">
+      <nav className={"nav" + (navMini && !vozAtiva ? " encolhida" : "")} aria-label="Seções">
         <div className="nav-pill">
           {abas.map(a => (
             <button key={a.id} className={"nv" + (tabEf === a.id ? " on" : "")} onClick={() => act.setTab(a.id)} aria-current={tabEf === a.id ? "page" : undefined} aria-label={a.l}>
