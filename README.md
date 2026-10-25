@@ -144,7 +144,7 @@ Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da
 
 ### Cara de app
 - Bolinha, o mascote do microfone: uma bola minimalista com dois olhinhos que flutua, pisca, olha em volta, faz caras sozinha, reage à sua voz, fica feliz quando entende e confusa quando não entende.
-- A barra de baixo encolhe enquanto a tela rola e volta ao normal quando para.
+- A barra de baixo desce e some enquanto a tela rola, e volta subindo com uma mola suave quando para.
 - Telas entram com fade e uma subida curta em cascata; ao falar, uma aurora de cores flui no pé da tela (no computador, passando por trás da barra lateral, com a Bolinha no canto).
 - Puxe a tela para baixo no topo para recarregar (clima, feriados, avisos e versão nova do app).
 - Vidro líquido no estilo do iOS 26: quase transparente, desfoque leve com saturação e brilho, linha finíssima e reflexos de luz nas quinas, sem granulado nem contorno grosso.

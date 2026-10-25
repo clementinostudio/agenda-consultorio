@@ -3581,13 +3581,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const [vozAtiva, setVozAtiva] = useState(false);
   // Barra de cima que aparece quando a página rola
   const [rolou, setRolou] = useState(false);
-  // Barra de baixo encolhe enquanto a tela rola (ou o dedo arrasta) e volta ao tamanho normal quando para
+  // Barra de baixo some enquanto a tela rola (ou o dedo arrasta) e volta quando a tela para
   const [navMini, setNavMini] = useState(false);
   useEffect(() => {
     let t = null, mini = false, y0 = window.scrollY;
     const encolher = () => {
       if (!mini) { mini = true; setNavMini(true); }
-      clearTimeout(t); t = setTimeout(() => { mini = false; setNavMini(false); }, 180);
+      clearTimeout(t); t = setTimeout(() => { mini = false; setNavMini(false); }, 260);
     };
     const f = () => { setRolou(window.scrollY > 72); if (Math.abs(window.scrollY - y0) > 2) encolher(); y0 = window.scrollY; };
     const arrasto = e => { if (e.target.closest && e.target.closest(".nav")) encolher(); };

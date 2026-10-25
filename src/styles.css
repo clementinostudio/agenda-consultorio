@@ -1041,9 +1041,9 @@ main.app { animation: entra .42s cubic-bezier(.2, .8, .2, 1) backwards; }
 .nav .nav-pill, .shell.glass .nav .nav-pill { background-color: color-mix(in srgb, var(--nav-bg) 78%, transparent); -webkit-backdrop-filter: blur(16px) saturate(170%) brightness(1.04); backdrop-filter: blur(16px) saturate(170%) brightness(1.04); border: 0; box-shadow: var(--vidro-sombra); }
 .perfil-lista, .perfil-hero { background-image: none; }
 
-/* Barra de baixo encolhe ao rolar: só escala (sem mexer no layout), volta com mola suave */
-.nav { transform-origin: 50% 100%; transition: transform .45s cubic-bezier(.32, .72, 0, 1); will-change: transform; }
-.nav.encolhida { transform: translateX(-50%) translateY(5px) scale(.88); transition-duration: .3s; }
+/* Barra de baixo: some descendo enquanto a tela rola e volta subindo, com uma mola suave, quando para */
+.nav { transition: transform .55s cubic-bezier(.34, 1.36, .64, 1), opacity .3s ease; will-change: transform; }
+.nav.encolhida { transform: translateX(-50%) translateY(calc(100% + 28px + env(safe-area-inset-bottom, 0px))); opacity: .6; transition: transform .28s cubic-bezier(.4, 0, 1, 1), opacity .28s ease; }
 /* o vidro com desfoque fica recortado na forma da pílula (evita aparecer um retângulo atrás ao animar no iPhone) */
 .nav .nav-pill { clip-path: inset(0 round 999px); }
 @media (prefers-reduced-motion: reduce) { .nav { transition: none; } }
