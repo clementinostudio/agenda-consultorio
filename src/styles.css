@@ -1217,23 +1217,8 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 @media (prefers-reduced-motion: reduce) { .avisos-sis > * { animation: none; } }
 
 /* ===== Card "Guarde R$" com o porquinho (Finanças) ===== */
-.reserve.com-porco { position: relative; overflow: visible; min-height: 118px; margin-top: 62px; padding: 16px 146px 16px 18px; }
-.porco { position: absolute; right: 6px; top: -44px; width: 142px; aspect-ratio: 380 / 389; pointer-events: none; }
-.porco img { position: relative; z-index: 1; width: 100%; height: 100%; display: block; filter: drop-shadow(0 14px 14px rgba(0, 0, 0, .32)); transform-origin: 50% 100%; animation: porco-pula 3.4s ease-in-out .6s infinite; }
-/* a moeda fica acima da fenda (47,8% da largura) e cai nela */
-.moeda { position: absolute; z-index: 0; width: 32px; left: calc(47.8% - 16px); top: -30px; filter: drop-shadow(0 4px 6px rgba(150, 90, 0, .35)); animation: moeda-cai 3.4s cubic-bezier(.45, 0, .55, 1) .6s infinite; }
-@keyframes moeda-cai {
-  0% { opacity: 0; transform: translateY(-26px) scaleX(1); }
-  10% { opacity: 1; }
-  30% { transform: translateY(-14px) scaleX(.35); }
-  50% { transform: translateY(-4px) scaleX(1); }
-  62% { opacity: 1; transform: translateY(14px) scaleX(.55); }
-  70%, 100% { opacity: 0; transform: translateY(26px) scaleX(.5); }
-}
-@keyframes porco-pula {
-  0%, 64% { transform: none; }
-  70% { transform: translateY(1px) scale(1.03, .96); }
-  78% { transform: translateY(-4px) scale(.98, 1.02); }
-  86%, 100% { transform: none; }
-}
-@media (prefers-reduced-motion: reduce) { .porco img, .moeda { animation: none; } .moeda { opacity: 1; } }
+.reserve.com-porco { position: relative; overflow: visible; min-height: 100px; margin-top: 38px; padding: 16px 118px 16px 18px; }
+.porco { position: absolute; right: 10px; top: -30px; width: 104px; aspect-ratio: 380 / 389; pointer-events: none; }
+.porco img { width: 100%; height: 100%; display: block; filter: drop-shadow(0 12px 12px rgba(0, 0, 0, .3)); animation: porco-flutua 3.6s ease-in-out infinite alternate; }
+@keyframes porco-flutua { from { transform: translateY(2px) rotate(-1.5deg); } to { transform: translateY(-6px) rotate(1.5deg); } }
+@media (prefers-reduced-motion: reduce) { .porco img { animation: none; } }

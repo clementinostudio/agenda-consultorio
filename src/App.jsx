@@ -2168,23 +2168,9 @@ function PatientForm({ initial, total = 0, perfil, pre, onSave, onClose }) {
   );
 }
 
-/* Porquinho do card "Guarde R$": a imagem sai pela borda de cima do card e uma moeda dourada
-   cai na fenda de tempos em tempos (o porquinho dá um pulinho quando ela entra). */
+/* Porquinho do card "Guarde R$": sai pela borda de cima do card e fica flutuando devagar */
 const Porquinho = () => (
   <div className="porco" aria-hidden="true">
-    <svg className="moeda" viewBox="0 0 64 68">
-      <defs>
-        <radialGradient id="mo-face" cx="36%" cy="30%" r="78%"><stop offset="0" stopColor="#FFF6C4" /><stop offset=".32" stopColor="#FFD75E" /><stop offset=".72" stopColor="#F3AC23" /><stop offset="1" stopColor="#C77D0B" /></radialGradient>
-        <linearGradient id="mo-aro" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#E49A16" /><stop offset="1" stopColor="#A7650A" /></linearGradient>
-      </defs>
-      <circle cx="32" cy="35" r="29" fill="url(#mo-aro)" />
-      <circle cx="32" cy="31" r="29" fill="url(#mo-face)" />
-      <circle cx="32" cy="31" r="21.5" fill="none" stroke="#D9900F" strokeWidth="2.6" opacity=".85" />
-      <circle cx="32" cy="31.8" r="21.5" fill="none" stroke="#FFF1B3" strokeWidth="1.2" opacity=".7" />
-      <path d="M32 19.5l3.3 6.9 7.5 1-5.5 5.2 1.4 7.4L32 36.4l-6.7 3.6 1.4-7.4-5.5-5.2 7.5-1z" fill="#E9A21C" />
-      <path d="M32 18.6l3.3 6.9 7.5 1-5.5 5.2 1.4 7.4L32 35.5l-6.7 3.6 1.4-7.4-5.5-5.2 7.5-1z" fill="#FFE07A" />
-      <ellipse cx="22" cy="17" rx="7" ry="3.2" fill="#fff" opacity=".55" transform="rotate(-32 22 17)" />
-    </svg>
     <img src={PORQUINHO} alt="" width="380" height="389" decoding="async" />
   </div>
 );
