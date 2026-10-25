@@ -1366,7 +1366,7 @@ function AreaChart({ serie, cor }) {
    8. LOGIN E CADASTRO (demonstração)
    ========================================================= */
 function Auth({ onLogin }) {
-  const [modo, setModo] = useState("entrar");
+  const [modo, setModo] = useState(() => location.hash === "#criar" ? "criar" : "entrar");
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -4044,6 +4044,12 @@ function App() {
     window.scrollTo(0, 0);
   };
   const sair = () => { apagar(K.sessao); setSessao(null); };
+  // Veio da página de apresentação: #demo entra direto na demonstração; depois limpa o endereço
+  useEffect(() => {
+    const h = location.hash;
+    if (h === "#demo" && !sessao) entrar(CONTA_DEMO, false);
+    if (h === "#demo" || h === "#entrar" || h === "#criar") history.replaceState(null, "", location.pathname + location.search);
+  }, []);
   // Atualiza nome, foto ou perfil e guarda na lista de contas
   const atualizar = (patch, extra = {}) => {
     const contas = lerJSON(K.contas, {});

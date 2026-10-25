@@ -149,3 +149,5 @@ details p { margin: 0 0 18px; color: var(--muted); }
 
 .marca, .botao { white-space: nowrap; }
 @media (max-width: 420px) { .marca .longo { display: none; } .selo { font-size: 12px; } }
+.garantias a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.garantias li:has(a)::before { content: "↓"; color: var(--muted); }
