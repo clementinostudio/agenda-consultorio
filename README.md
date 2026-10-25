@@ -143,6 +143,9 @@ Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da
 - Se o aparelho não liberar o reconhecimento (acontece em alguns iPhones com o app instalado), o app abre o teclado: toque no microfone do teclado e fale.
 
 ### Cara de app
+- Pingo, o mascote do microfone: flutua, pisca, olha para os lados, estica com a sua voz, fica feliz quando entende e confuso quando não entende.
+- Puxe a tela para baixo no topo para recarregar (clima, feriados, avisos e versão nova do app).
+- Vidro no estilo Apple: desfoque com saturação, granulado sutil e borda reflexiva dupla, em quatro espessuras como os materiais do iOS.
 - Tela de abertura própria no iPhone, sem zoom de pinça, sem seleção de texto nos botões, toque que afunda, troca de tela animada e painéis que fecham arrastando para baixo.
 - No Android, o Chrome instala como app de verdade (aparece na lista de apps e a opção é "Desinstalar"), com fotos do app na janela de instalação.
 - No iPhone, segurar o ícone sempre mostra "Remover Favorito": é o texto que o iOS usa para todo app instalado pelo Safari, e nenhum site consegue mudar.

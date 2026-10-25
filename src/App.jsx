@@ -765,50 +765,76 @@ function interpretarVarios(frase) {
    Ele para sozinho quando você termina de falar. Se o aparelho não liberar (alguns iPhones com o app
    instalado na tela inicial), o app abre o teclado: aí é só tocar no microfone do teclado e falar. */
 const SRec = () => window.SpeechRecognition || window.webkitSpeechRecognition;
-const K_VOZ_TECLADO = "agenda-voz-teclado"; // lembra quando o reconhecimento não funcionou neste aparelho
+const K_VOZ_TECLADO = "agenda-voz-teclado"; // { falhas, ate }: quando o reconhecimento falha seguido, usa o teclado por umas horas
+const vozTravada = () => { const v = lerJSON(K_VOZ_TECLADO, null); return !!(v && v.falhas >= 2 && Date.now() < (v.ate || 0)); };
+const marcarFalhaVoz = () => { const v = lerJSON(K_VOZ_TECLADO, null); const f = ((v && v.falhas) || 0) + 1; gravar(K_VOZ_TECLADO, { falhas: f, ate: Date.now() + 6 * 36e5 }); return f; };
+const vozOk = () => apagar(K_VOZ_TECLADO);
+const MSG_TECLADO = "O aparelho não está liberando o reconhecimento de voz agora. Use o microfone do teclado: funciona igual.";
 
+// Reconhecimento de voz do aparelho, com proteções para nunca ficar "travado ouvindo"
 function useFalaNativa({ onParcial, onFinal, onFalhou }) {
   const [estado, setEstado] = useState("parado"); // parado | ouvindo | falando | erro
   const [erro, setErro] = useState("");
   const [nivel, setNivel] = useState(0);
   const r = useRef({});
   const cb = useRef({}); cb.current = { onParcial, onFinal, onFalhou };
-  const limpar = () => { const x = r.current; x.morto = true; clearInterval(x.decai); clearTimeout(x.vigia); try { x.rec && x.rec.abort(); } catch (e) {} r.current = {}; };
+  const limparTimers = x => { clearInterval(x.decai); clearTimeout(x.vigia); clearTimeout(x.vigia2); clearTimeout(x.teto); clearTimeout(x.forca); };
+  const limpar = () => { const x = r.current; x.fim = true; limparTimers(x); try { x.rec && x.rec.abort(); } catch (e) {} r.current = {}; };
   useEffect(() => limpar, []);
   const falhar = (msg, teclado) => { limpar(); setNivel(0); setErro(msg); setEstado("erro"); vibrar("aviso"); if (teclado) cb.current.onFalhou(); };
   const iniciar = () => {
+    const tinha = !!r.current.rec;
     limpar(); setErro(""); setNivel(0);
     const SR = SRec();
     if (!SR) return false;
-    let texto = "", fim = false, ouviu = false;
-    const rec = new SR();
-    rec.lang = "pt-BR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
-    const x = r.current = { rec };
-    x.decai = setInterval(() => setNivel(n => n > .18 ? n * .8 : .1 + Math.random() * .08), 110);
-    // Se em 7 s nada chegar (nem erro), o aparelho travou o microfone: oferece o teclado
-    x.vigia = setTimeout(() => { if (!ouviu && !fim) { fim = true; gravar(K_VOZ_TECLADO, true); falhar("O aparelho não liberou o reconhecimento de voz aqui. Use o microfone do teclado: funciona igual.", true); } }, 7000);
-    rec.onresult = e => {
-      ouviu = true; clearTimeout(x.vigia); apagar(K_VOZ_TECLADO);
-      texto = [...e.results].map(y => y[0].transcript).join(" ");
-      setEstado("falando"); setNivel(.65 + Math.random() * .35);
-      cb.current.onParcial(texto);
+    const abrir = () => {
+      const rec = new SR();
+      rec.lang = "pt-BR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+      const x = r.current = { rec, texto: "", fim: false, audio: false, ouviu: false };
+      // termina de um jeito só, aconteça o que acontecer
+      x.terminar = (t, msgVazio) => {
+        if (x.fim) return; x.fim = true; limparTimers(x);
+        try { rec.abort(); } catch (e) {}
+        if (r.current === x) r.current = {};
+        setNivel(0);
+        if (t) { setEstado("parado"); cb.current.onFinal(t); } else falhar(msgVazio || "Não ouvi nada. Toque no mascote e fale de novo.");
+      };
+      const travou = () => { if (x.fim) return; x.fim = true; limparTimers(x); try { rec.abort(); } catch (e) {} const f = marcarFalhaVoz(); falhar(f >= 2 ? MSG_TECLADO : "O microfone não respondeu. Toque no mascote de novo.", f >= 2); };
+      x.decai = setInterval(() => setNivel(n => n > .14 ? n * .8 : .06 + Math.random() * .06), 110);
+      x.vigia = setTimeout(() => { if (!x.audio && !x.ouviu) travou(); }, 4500);             // o microfone nem abriu
+      x.vigia2 = setTimeout(() => { if (!x.ouviu) { if (x.audio) { const f = marcarFalhaVoz(); if (f >= 2) return travou(); } x.terminar(""); } }, 9000); // abriu mas nada chegou
+      x.teto = setTimeout(() => { try { rec.stop(); } catch (e) {} x.forca = setTimeout(() => x.terminar(x.texto.trim()), 1500); }, 20000);
+      rec.onstart = rec.onaudiostart = () => { x.audio = true; };
+      rec.onspeechstart = () => setEstado("falando");
+      rec.onresult = e => {
+        if (x.fim) return;
+        x.ouviu = true; clearTimeout(x.vigia); clearTimeout(x.vigia2); vozOk();
+        x.texto = [...e.results].map(y => y[0].transcript).join(" ");
+        setEstado("falando"); setNivel(.55 + Math.random() * .45);
+        cb.current.onParcial(x.texto);
+      };
+      rec.onerror = e => {
+        if (x.fim || e.error === "aborted") return;
+        if (e.error === "no-speech") return x.terminar(x.texto.trim());
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") { x.fim = true; limparTimers(x); gravar(K_VOZ_TECLADO, { falhas: 2, ate: Date.now() + 6 * 36e5 }); return falhar("O microfone não foi liberado para o app. Use o microfone do teclado: funciona igual.", true); }
+        if (e.error === "network") return x.terminar(x.texto.trim(), "Sem internet: o reconhecimento de voz do aparelho precisa de conexão. Toque em Teclado.");
+        if (e.error === "audio-capture") return x.terminar(x.texto.trim(), "O microfone está ocupado por outro app. Feche o outro app e tente de novo.");
+        x.terminar(x.texto.trim(), "Não consegui ouvir agora. Toque no mascote para tentar de novo.");
+      };
+      rec.onend = () => x.terminar(x.texto.trim());
+      try { rec.start(); setEstado("ouvindo"); }
+      catch (e) { x.fim = true; limparTimers(x); r.current = {}; falhar("Não consegui abrir o microfone. Toque no mascote de novo."); }
     };
-    rec.onspeechstart = () => setEstado("falando");
-    rec.onerror = e => {
-      if (fim || e.error === "aborted") return; fim = true;
-      if (e.error === "no-speech") falhar("Não ouvi nada. Toque no microfone para tentar de novo.");
-      else if (e.error === "not-allowed" || e.error === "service-not-allowed") { gravar(K_VOZ_TECLADO, true); falhar("O microfone não foi liberado. Use o microfone do teclado: funciona igual.", true); }
-      else falhar("Não consegui ouvir agora. Toque no microfone para tentar de novo.");
-    };
-    rec.onend = () => {
-      if (fim) return; fim = true;
-      const t = texto.trim(); clearInterval(x.decai); clearTimeout(x.vigia); setNivel(0); r.current = {};
-      if (t) { setEstado("parado"); cb.current.onFinal(t); } else falhar("Não ouvi nada. Toque no microfone para tentar de novo.");
-    };
-    try { rec.start(); setEstado("ouvindo"); return true; }
-    catch (e) { falhar("Não consegui abrir o microfone. Toque nele de novo.", false); return true; }
+    if (tinha) setTimeout(abrir, 180); else abrir();
+    setEstado("ouvindo");
+    return true;
   };
-  const parar = () => { try { r.current.rec && r.current.rec.stop(); } catch (e) {} };
+  // terminar agora: pede para parar e, se o aparelho não responder em 1,5 s, termina com o que já ouviu
+  const parar = () => {
+    const x = r.current; if (!x.rec || x.fim) return;
+    try { x.rec.stop(); } catch (e) {}
+    clearTimeout(x.forca); x.forca = setTimeout(() => x.terminar && x.terminar(x.texto.trim()), 1500);
+  };
   const cancelar = () => { limpar(); setNivel(0); setErro(""); setEstado("parado"); };
   return { estado, erro, nivel, iniciar, parar, cancelar };
 }
@@ -2319,6 +2345,53 @@ function useContagem(alvo) {
 const quandoTxt = off => off === 2 ? "Anteontem" : off === 1 ? "Ontem" : "Hoje";
 const reais = v => (Math.round(v * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/* ---------- Pingo, o mascote do microfone ----------
+   Uma bolinha que flutua, pisca, olha para os lados e reage quando você fala:
+   - parado: flutua devagar, pisca e às vezes espia para um lado
+   - ouvindo: arregala os olhos e olha para cima (para o que você está falando)
+   - falando: estica e encolhe com a sua voz, com a boquinha abrindo
+   - entendeu: olhinhos felizes e bochechas
+   - não entendeu: olhos de lado, meio confuso */
+function Pingo({ estado = "" }) {
+  const [olhar, setOlhar] = useState("c");
+  const [pisca, setPisca] = useState(false);
+  useEffect(() => {
+    let vivo = true, t1, t2;
+    const piscar = () => { t1 = setTimeout(() => { if (!vivo) return; setPisca(true); setTimeout(() => vivo && setPisca(false), 130); if (Math.random() < .25) setTimeout(() => { if (!vivo) return; setPisca(true); setTimeout(() => vivo && setPisca(false), 120); }, 260); piscar(); }, 2200 + Math.random() * 3800); };
+    const espiar = () => { t2 = setTimeout(() => { if (!vivo) return; const r = Math.random(); setOlhar(r < .3 ? "e" : r < .6 ? "d" : r < .72 ? "b" : "c"); setTimeout(() => vivo && setOlhar("c"), 900 + Math.random() * 900); espiar(); }, 3500 + Math.random() * 4000); };
+    piscar(); espiar();
+    return () => { vivo = false; clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+  const modo = estado === "contando" ? "feliz" : estado === "faltando" || estado === "erro" ? "confuso" : estado === "falando" ? "falando" : estado === "ouvindo" || estado === "teclado" ? "ouvindo" : "parado";
+  const dir = modo === "ouvindo" || modo === "falando" ? "cima" : modo === "confuso" ? "e" : olhar;
+  return (
+    <span className={`pingo ${modo} olha-${dir}${pisca && modo !== "feliz" ? " pisca" : ""}`} aria-hidden="true">
+      <svg viewBox="0 0 64 64">
+        <ellipse className="pingo-sombra" cx="32" cy="60" rx="15" ry="2.6" />
+        <g className="pingo-corpo">
+          <path className="pingo-broto" d="M33 9 C 33 5, 36 3, 39 3.5 C 38.5 6.5, 36 8.5, 33 9 Z" />
+          <path className="pingo-haste" d="M32 12 C 32 10, 32.5 9.5, 33 9" />
+          <circle className="pingo-bola" cx="32" cy="33" r="21" />
+          <ellipse className="pingo-brilho" cx="24.5" cy="23.5" rx="6.5" ry="4" transform="rotate(-28 24.5 23.5)" />
+          <g className="pingo-rosto">
+            <g className="pingo-olhos">
+              <ellipse className="pingo-olho" cx="25" cy="32" rx="3.1" ry="4.4" />
+              <ellipse className="pingo-olho" cx="39" cy="32" rx="3.1" ry="4.4" />
+              <circle className="pingo-luz" cx="26.1" cy="30.4" r="1.05" />
+              <circle className="pingo-luz" cx="40.1" cy="30.4" r="1.05" />
+            </g>
+            <path className="pingo-feliz" d="M21.5 33 Q25 28.5 28.5 33 M35.5 33 Q39 28.5 42.5 33" />
+            <ellipse className="pingo-boca" cx="32" cy="40.5" rx="2.4" ry="2" />
+            <path className="pingo-sorriso" d="M28.5 39 Q32 42.5 35.5 39" />
+            <ellipse className="pingo-bochecha" cx="20" cy="38.5" rx="3" ry="1.8" />
+            <ellipse className="pingo-bochecha" cx="44" cy="38.5" rx="3" ry="1.8" />
+          </g>
+        </g>
+      </svg>
+    </span>
+  );
+}
+
 // Logo de verdade da empresa (ou o ícone da categoria quando não é uma marca conhecida)
 function MarcaLogo({ marca, cat, className = "" }) {
   const m = marcaPorId(marca);
@@ -2369,8 +2442,9 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const comecar = () => {
     clearTimeout(ocioso.current);
     setTexto(""); setRes(null); setAviso(""); setAtivo(true);
-    if (!SRec() || lerJSON(K_VOZ_TECLADO, false)) { abrirTeclado(); return; }
+    if (!SRec() || vozTravada()) { abrirTeclado(); return; }
     setFase("ouvindo");
+    if (tecRef.current) tecRef.current.blur();
     fala.iniciar();
   };
   const fechar = () => { fala.cancelar(); clearTimeout(ocioso.current); if (tecRef.current) tecRef.current.blur(); setAtivo(false); setFase("ouvindo"); setAviso(""); };
@@ -2383,7 +2457,12 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     comecar();
   };
   api.current = { tocar, comecar, fechar };
-  useEffect(() => { onAtivo(ativo ? fase : ""); }, [ativo, fase]);
+  // conta para a barra (e para o mascote) o que está acontecendo
+  const est0 = fala.estado;
+  useEffect(() => { onAtivo(!ativo ? "" : fase === "ouvindo" ? (est0 === "falando" ? "falando" : est0 === "erro" ? "erro" : "ouvindo") : fase); }, [ativo, fase, est0]);
+  useEffect(() => { document.documentElement.style.setProperty("--voz-n", ativo ? fala.nivel.toFixed(3) : "0"); }, [fala.nivel, ativo]);
+  // saiu do app no meio da fala: desliga tudo (quando voltar, é só tocar de novo)
+  useEffect(() => { if (!ativo) return; const f = () => { if (document.visibilityState === "hidden") fechar(); }; document.addEventListener("visibilitychange", f); return () => document.removeEventListener("visibilitychange", f); }, [ativo]);
   useEffect(() => {
     if (fase !== "contando") return;
     if (conta <= 0) { salvar(); return; }
@@ -2424,7 +2503,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
       {ativo && <div className={"vozb " + classe + (fase === "teclado" ? " teclado" : "")} style={{ "--n": fala.nivel.toFixed(3) }} aria-live="polite">
         <div className="vozb-sombra" aria-hidden="true"><i /><i /><i /></div>
         <div className="vozb-doca">
-          <div className="vozb-status">{fase !== "contando" && fase !== "faltando" && est !== "erro" && <i className="vozb-onda"><b /><b /><b /><b /></i>}{status}</div>
+          <div className="vozb-status">{fase !== "contando" && fase !== "faltando" && est !== "erro" && <i className="vozb-ponto" />}{status}</div>
           <p className={"vozb-fala" + (texto ? "" : " vazio")}>{texto || (est === "erro" ? fala.erro : fase === "teclado" ? "" : dica)}</p>
 
           {itens.length > 0 && (
@@ -2456,6 +2535,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
             {fase === "contando" && um && <button className="pill-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
             {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn forte" onClick={comecar}><I.mic /> Falar de novo</button>}
             {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn" onClick={abrirTeclado}>Teclado</button>}
+            {fase === "teclado" && SRec() && <button className="pill-btn" onClick={() => { vozOk(); comecar(); }}><I.mic /> Tentar a voz</button>}
             <button className="pill-btn" onClick={fechar}>Cancelar</button>
           </div>
         </div>
@@ -3570,6 +3650,47 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   // Pede ao navegador para não apagar os dados do app quando faltar espaço
   useEffect(() => { try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {} }, []);
 
+  // Puxar para recarregar: arrastar a tela para baixo no topo atualiza clima, feriados, avisos e o próprio app
+  const [puxar, setPuxar] = useState(0);
+  const [recarregando, setRecarregando] = useState(false);
+  const puxRef = useRef(null), puxVal = useRef(0), recRef = useRef(false), vozRef = useRef("");
+  vozRef.current = vozAtiva;
+  const recarregar = async () => {
+    recRef.current = true; setRecarregando(true); vibrar("ok");
+    const espera = new Promise(r => setTimeout(r, 900));
+    const cidade = perfil.cidade, y = new Date().getFullYear();
+    await Promise.all([
+      espera,
+      cidade ? buscarClima(cidade).then(c => setClima(c)).catch(() => {}) : null,
+      Promise.all([buscarFeriadosAPI(y), buscarFeriadosAPI(y + 1)]).then(() => setFerVer(v => v + 1)).catch(() => {}),
+      "serviceWorker" in navigator ? navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {}) : null,
+      Promise.resolve(sincRef.current && sincRef.current(false, true)).catch(() => {}),
+    ]);
+    setNow(new Date()); setRecarregando(false); recRef.current = false;
+  };
+  const recarregarRef = useRef(recarregar); recarregarRef.current = recarregar;
+  useEffect(() => {
+    const ini = e => {
+      puxRef.current = null;
+      if (window.scrollY > 2 || recRef.current || vozRef.current || document.body.style.overflow === "hidden" || e.touches.length > 1) return;
+      puxRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX, avisou: false };
+    };
+    const mov = e => {
+      const p = puxRef.current; if (!p) return;
+      const dy = e.touches[0].clientY - p.y, dx = Math.abs(e.touches[0].clientX - p.x);
+      if (dy < -6 || dx > Math.max(14, dy)) { puxRef.current = null; puxVal.current = 0; setPuxar(0); return; }
+      const v = Math.max(0, Math.min(120, dy * .5));
+      if (v >= 70 && !p.avisou) { p.avisou = true; vibrar("toque"); }
+      if (v < 70) p.avisou = false;
+      puxVal.current = v; setPuxar(v);
+    };
+    const fim = () => { if (!puxRef.current) return; puxRef.current = null; const v = puxVal.current; puxVal.current = 0; setPuxar(0); if (v >= 70) recarregarRef.current(); };
+    window.addEventListener("touchstart", ini, { passive: true });
+    window.addEventListener("touchmove", mov, { passive: true });
+    window.addEventListener("touchend", fim); window.addEventListener("touchcancel", fim);
+    return () => { window.removeEventListener("touchstart", ini); window.removeEventListener("touchmove", mov); window.removeEventListener("touchend", fim); window.removeEventListener("touchcancel", fim); };
+  }, []);
+
   // Avisos com o app fechado: manda a lista dos próximos dias para o servidor sempre que algo muda
   const sincronizar = async (manter, forcar) => {
     if (!pushLigado()) return "desligado";
@@ -3841,7 +3962,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         </div>
       </aside>
 
-      <main className="app">
+      <div className={"puxar" + (recarregando ? " gira" : puxar >= 70 ? " pronto" : "")} aria-hidden="true"
+        style={{ transform: `translate(-50%, ${recarregando ? 46 : puxar * .45 + 2}px) rotate(${puxar * 2}deg)`, opacity: recarregando || puxar > 6 ? 1 : 0, transition: puxar ? "opacity .15s" : undefined }}>
+        <svg viewBox="0 0 24 24"><circle className="puxar-trilho" cx="12" cy="12" r="8.5" /><circle className="puxar-arco" cx="12" cy="12" r="8.5" pathLength="100" style={{ strokeDashoffset: recarregando ? 70 : 100 - Math.min(1, puxar / 70) * 92 }} /></svg>
+      </div>
+      <main className={"app" + (puxar ? " puxando" : "")} style={puxar || recarregando ? { transform: `translateY(${recarregando ? 46 : puxar * .5}px)` } : undefined}>
         <DicaInstalar />
         {tabEf === "home" && <HomeTab db={db} conta={conta} now={now} act={act} tema={tema} />}
         {tabEf === "agenda" && <AgendaTab db={db} now={now} act={act} tema={tema} />}
@@ -3871,7 +3996,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
             </button>
           ))}
         </div>
-        {<button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva ? "Terminar" : "Falar"}>{vozAtiva === "contando" ? <I.check /> : vozAtiva ? <span className="nav-mic-onda"><b /><b /><b /></span> : <I.mic />}</button>}
+        <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Terminar" : "Falar"}><Pingo estado={vozAtiva} /></button>
       </nav>
 
       {sheet && sheet.type === "session" && <SessionSheet key={sheet.item.patient.id + sheet.item.date + sheet.item.kind} db={db} item={sheet.item} onClose={close} act={act} />}
