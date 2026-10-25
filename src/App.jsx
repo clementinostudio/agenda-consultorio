@@ -9,6 +9,7 @@
 */
 import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "./assets/porquinho.webp";
+import { acharMarca, marcaPorId, logoMarca, logoDoSite, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
 import { createPortal, flushSync } from "react-dom";
 
@@ -105,6 +106,7 @@ let TERMO = termoDe("Paciente");
 let ESTILO = "detalhado"; // "curto" mostra menos frases no resumo
 let PERFIL = {};          // respostas do perfil, lidas por várias partes do app
 let VIAGEM = null;        // modo viagem do Pessoal (a fala assume a moeda da viagem)
+let LOGOS = {};           // fotos que a pessoa escolheu como logo de uma empresa (por nome)
 // Fundos que já vêm no app (arquivos em public/fundos/). Para adicionar um, coloque a imagem lá e inclua uma linha aqui.
 const FUNDOS = [["floresta", "Floresta"], ["mar", "Mar à noite"], ["estrada", "Entardecer"]]
   .map(([id, nome]) => ({ id, nome, img: `${BASE}fundos/${id}.jpg`, thumb: `${BASE}fundos/${id}-mini.jpg` }));
@@ -496,168 +498,7 @@ function interpretarFala(frase) {
   return { tipo: entrada ? "entrada" : "saida", valor, cat, desc, off, marca: marca ? marca.id : null };
 }
 
-/* ---------- Marcas: reconhece a empresa e mostra a logo de verdade ----------
-   "gastei 30 no uber" vira "Uber", com a categoria certa e a logo oficial (o ícone do próprio site
-   da empresa, buscado pelo serviço de ícones do Google). Para incluir uma marca: [id, nome, site, categoria, palavras...].
-   As palavras podem ser texto simples (sem acento) ou uma expressão regular. */
-const MARCAS = [
-  // transporte
-  ["uber", "Uber", "uber.com", "transporte", "uber", "uber eats"],
-  ["99", "99", "99app.com", "transporte", "99 ?pop", "99 ?taxi", "99app", /\b(?:na|no|da|do|pela|pelo)\s+99\b(?!\s*(?:reais|real|conto|contos|centavos|,\d))/],
-  ["indrive", "inDrive", "indrive.com", "transporte", "indrive", "in drive"],
-  ["cabify", "Cabify", "cabify.com", "transporte", "cabify"],
-  ["blablacar", "BlaBlaCar", "blablacar.com.br", "transporte", "blablacar", "bla bla car"],
-  ["shell", "Shell", "shell.com.br", "transporte", "shell"],
-  ["ipiranga", "Ipiranga", "ipiranga.com.br", "transporte", "ipiranga"],
-  ["petrobras", "Petrobras", "petrobras.com.br", "transporte", "petrobras", "posto br"],
-  ["semparar", "Sem Parar", "semparar.com.br", "transporte", "sem parar"],
-  ["veloe", "Veloe", "veloe.com.br", "transporte", "veloe"],
-  ["conectcar", "ConectCar", "conectcar.com", "transporte", "conectcar", "conect car"],
-  ["estapar", "Estapar", "estapar.com.br", "transporte", "estapar"],
-  ["latam", "LATAM", "latamairlines.com", "transporte", "latam"],
-  ["gol", "GOL", "voegol.com.br", "transporte", /\b(?:passagem|voo|voos)\s+(?:da\s+)?gol\b/],
-  ["azul", "Azul", "voeazul.com.br", "transporte", /\b(?:passagem|voo|voos)\s+(?:da\s+)?azul\b/],
-  // comida
-  ["ifood", "iFood", "ifood.com.br", "comida", "ifood", "i food", "aifood"],
-  ["rappi", "Rappi", "rappi.com.br", "comida", "rappi", "rapi"],
-  ["ze", "Zé Delivery", "ze.delivery", "comida", "ze delivery"],
-  ["mcdonalds", "McDonald's", "mcdonalds.com.br", "comida", "mcdonalds", "mc donalds", "mcdonald", "mc donald", "mequi", "meque"],
-  ["burgerking", "Burger King", "burgerking.com.br", "comida", "burger king", "burguer king", "bk"],
-  ["subway", "Subway", "subway.com", "comida", "subway"],
-  ["kfc", "KFC", "kfc.com.br", "comida", "kfc"],
-  ["bobs", "Bob's", "bobs.com.br", "comida", "bobs"],
-  ["habibs", "Habib's", "habibs.com.br", "comida", "habibs", "habib"],
-  ["giraffas", "Giraffas", "giraffas.com.br", "comida", "giraffas", "girafas"],
-  ["outback", "Outback", "outback.com.br", "comida", "outback"],
-  ["madero", "Madero", "restaurantemadero.com.br", "comida", "madero"],
-  ["cocobambu", "Coco Bambu", "cocobambu.com", "comida", "coco bambu"],
-  ["spoleto", "Spoleto", "spoleto.com.br", "comida", "spoleto"],
-  ["pizzahut", "Pizza Hut", "pizzahut.com.br", "comida", "pizza hut"],
-  ["dominos", "Domino's", "dominos.com.br", "comida", "dominos", "domino"],
-  ["starbucks", "Starbucks", "starbucks.com.br", "comida", "starbucks"],
-  ["cacaushow", "Cacau Show", "cacaushow.com.br", "comida", "cacau show"],
-  ["kopenhagen", "Kopenhagen", "kopenhagen.com.br", "comida", "kopenhagen"],
-  // mercado
-  ["carrefour", "Carrefour", "carrefour.com.br", "mercado", "carrefour", "carrefur"],
-  ["paodeacucar", "Pão de Açúcar", "paodeacucar.com", "mercado", "pao de acucar"],
-  ["assai", "Assaí", "assai.com.br", "mercado", "assai"],
-  ["atacadao", "Atacadão", "atacadao.com.br", "mercado", "atacadao"],
-  ["samsclub", "Sam's Club", "samsclub.com.br", "mercado", "sams club", "sams"],
-  ["condor", "Condor", "condor.com.br", "mercado", "condor"],
-  ["muffato", "Super Muffato", "supermuffato.com.br", "mercado", "muffato", "mufato"],
-  ["angeloni", "Angeloni", "angeloni.com.br", "mercado", "angeloni"],
-  ["festval", "Festval", "festval.com.br", "mercado", "festval"],
-  ["zaffari", "Zaffari", "zaffari.com.br", "mercado", "zaffari", "zafari"],
-  ["savegnago", "Savegnago", "savegnago.com.br", "mercado", "savegnago"],
-  ["guanabara", "Guanabara", "supermercadosguanabara.com.br", "mercado", "guanabara"],
-  ["sonda", "Sonda", "sondadelivery.com.br", "mercado", "sonda"],
-  ["hirota", "Hirota", "hirota.com.br", "mercado", "hirota"],
-  ["oba", "Oba Hortifruti", "obahortifruti.com.br", "mercado", "oba hortifruti"],
-  ["giassi", "Giassi", "giassi.com.br", "mercado", "giassi"],
-  ["bistek", "Bistek", "bistek.com.br", "mercado", "bistek"],
-  // saúde
-  ["drogasil", "Drogasil", "drogasil.com.br", "saude", "drogasil"],
-  ["drogaraia", "Droga Raia", "drogaraia.com.br", "saude", "droga raia", "drogaraia", "raia"],
-  ["paguemenos", "Pague Menos", "paguemenos.com.br", "saude", "pague menos"],
-  ["panvel", "Panvel", "panvel.com", "saude", "panvel"],
-  ["drogariasaopaulo", "Drogaria São Paulo", "drogariasaopaulo.com.br", "saude", "drogaria sao paulo"],
-  ["pacheco", "Drogarias Pacheco", "drogariaspacheco.com.br", "saude", "pacheco"],
-  ["nissei", "Farmácias Nissei", "farmaciasnissei.com.br", "saude", "nissei"],
-  ["venancio", "Drogaria Venancio", "drogariavenancio.com.br", "saude", "venancio"],
-  ["smartfit", "Smart Fit", "smartfit.com.br", "saude", "smart fit", "smartfit"],
-  ["bluefit", "Bluefit", "bluefit.com.br", "saude", "bluefit", "blue fit"],
-  ["wellhub", "Wellhub", "wellhub.com", "saude", "wellhub", "gympass"],
-  ["totalpass", "TotalPass", "totalpass.com", "saude", "totalpass", "total pass"],
-  // lazer e assinaturas
-  ["netflix", "Netflix", "netflix.com", "lazer", "netflix", "netflics"],
-  ["spotify", "Spotify", "spotify.com", "lazer", "spotify", "spotfy"],
-  ["deezer", "Deezer", "deezer.com", "lazer", "deezer"],
-  ["youtube", "YouTube", "youtube.com", "lazer", "youtube", "you tube"],
-  ["primevideo", "Prime Video", "primevideo.com", "lazer", "prime video", "amazon prime"],
-  ["disney", "Disney+", "disneyplus.com", "lazer", "disney"],
-  ["max", "Max", "max.com", "lazer", "hbo max", "hbo"],
-  ["globoplay", "Globoplay", "globoplay.globo.com", "lazer", "globoplay", "globo play"],
-  ["paramount", "Paramount+", "paramountplus.com", "lazer", "paramount"],
-  ["crunchyroll", "Crunchyroll", "crunchyroll.com", "lazer", "crunchyroll"],
-  ["appletv", "Apple TV", "tv.apple.com", "lazer", "apple tv"],
-  ["steam", "Steam", "steampowered.com", "lazer", "steam"],
-  ["playstation", "PlayStation", "playstation.com", "lazer", "playstation", "psn", "play station"],
-  ["xbox", "Xbox", "xbox.com", "lazer", "xbox", "game pass"],
-  ["nintendo", "Nintendo", "nintendo.com", "lazer", "nintendo"],
-  ["cinemark", "Cinemark", "cinemark.com.br", "lazer", "cinemark"],
-  ["cinepolis", "Cinépolis", "cinepolis.com.br", "lazer", "cinepolis"],
-  ["ingresso", "Ingresso.com", "ingresso.com", "lazer", "ingresso com", "ingresso.com"],
-  ["airbnb", "Airbnb", "airbnb.com.br", "lazer", "airbnb", "air bnb"],
-  ["booking", "Booking", "booking.com", "lazer", "booking"],
-  ["decolar", "Decolar", "decolar.com", "lazer", "decolar"],
-  // compras
-  ["amazon", "Amazon", "amazon.com.br", "compras", "amazon", "amazon.com"],
-  ["mercadolivre", "Mercado Livre", "mercadolivre.com.br", "compras", "mercado livre"],
-  ["shopee", "Shopee", "shopee.com.br", "compras", "shopee", "shopii", "xopi"],
-  ["shein", "Shein", "shein.com", "compras", "shein", "xein"],
-  ["aliexpress", "AliExpress", "aliexpress.com", "compras", "aliexpress", "ali express"],
-  ["temu", "Temu", "temu.com", "compras", "temu"],
-  ["magalu", "Magalu", "magazineluiza.com.br", "compras", "magalu", "magazine luiza"],
-  ["americanas", "Americanas", "americanas.com.br", "compras", "americanas"],
-  ["casasbahia", "Casas Bahia", "casasbahia.com.br", "compras", "casas bahia"],
-  ["renner", "Renner", "lojasrenner.com.br", "compras", "renner"],
-  ["riachuelo", "Riachuelo", "riachuelo.com.br", "compras", "riachuelo"],
-  ["cea", "C&A", "cea.com.br", "compras", /\bc ?& ?a\b/, /\bcea\b/],
-  ["zara", "Zara", "zara.com", "compras", "zara"],
-  ["hering", "Hering", "hering.com.br", "compras", "hering"],
-  ["nike", "Nike", "nike.com.br", "compras", "nike"],
-  ["adidas", "adidas", "adidas.com.br", "compras", "adidas"],
-  ["centauro", "Centauro", "centauro.com.br", "compras", "centauro"],
-  ["netshoes", "Netshoes", "netshoes.com.br", "compras", "netshoes", "net shoes"],
-  ["decathlon", "Decathlon", "decathlon.com.br", "compras", "decathlon"],
-  ["leroy", "Leroy Merlin", "leroymerlin.com.br", "casa", "leroy merlin", "leroy"],
-  ["tokstok", "Tok&Stok", "tokstok.com.br", "casa", "tok stok", "tokstok"],
-  ["kalunga", "Kalunga", "kalunga.com.br", "compras", "kalunga"],
-  ["boticario", "O Boticário", "boticario.com.br", "compras", "boticario"],
-  ["natura", "Natura", "natura.com.br", "compras", "natura"],
-  ["sephora", "Sephora", "sephora.com.br", "compras", "sephora"],
-  ["apple", "Apple", "apple.com", "compras", "apple", "icloud", "app store"],
-  ["google", "Google", "google.com", "compras", "google", "google one", "play store"],
-  ["microsoft", "Microsoft", "microsoft.com", "compras", "microsoft", "office 365"],
-  ["openai", "ChatGPT", "openai.com", "compras", "chatgpt", "chat gpt", "openai"],
-  ["canva", "Canva", "canva.com", "compras", "canva"],
-  ["adobe", "Adobe", "adobe.com", "compras", "adobe"],
-  ["duolingo", "Duolingo", "duolingo.com", "compras", "duolingo"],
-  // casa: energia, água, internet, telefone, bancos
-  ["copel", "Copel", "copel.com", "casa", "copel"],
-  ["sanepar", "Sanepar", "sanepar.com.br", "casa", "sanepar"],
-  ["enel", "Enel", "enel.com.br", "casa", "enel"],
-  ["cemig", "Cemig", "cemig.com.br", "casa", "cemig"],
-  ["sabesp", "Sabesp", "sabesp.com.br", "casa", "sabesp"],
-  ["comgas", "Comgás", "comgas.com.br", "casa", "comgas"],
-  ["vivo", "Vivo", "vivo.com.br", "casa", /\b(?:da|na|conta da|internet da)\s+vivo\b/, "vivo fibra"],
-  ["claro", "Claro", "claro.com.br", "casa", /\b(?:da|na|conta da|internet da)\s+claro\b/, "claro net"],
-  ["tim", "TIM", "tim.com.br", "casa", /\b(?:da|na|conta da)\s+tim\b/],
-  ["nubank", "Nubank", "nubank.com.br", "outros", "nubank", "nu bank"],
-  ["itau", "Itaú", "itau.com.br", "outros", "itau"],
-  ["bradesco", "Bradesco", "bradesco.com.br", "outros", "bradesco"],
-  ["santander", "Santander", "santander.com.br", "outros", "santander"],
-  ["bb", "Banco do Brasil", "bb.com.br", "outros", "banco do brasil"],
-  ["inter", "Inter", "inter.co", "outros", "banco inter"],
-  ["c6", "C6 Bank", "c6bank.com.br", "outros", "c6 bank", "c6"],
-  ["picpay", "PicPay", "picpay.com", "outros", "picpay", "pic pay"],
-  ["mercadopago", "Mercado Pago", "mercadopago.com.br", "outros", "mercado pago"],
-].map(([id, nome, site, cat, ...palavras]) => ({
-  id, nome, site, cat,
-  re: palavras.map(p => p instanceof RegExp ? p : new RegExp(`\\b${p.replace(/\./g, "\\.")}\\b`)),
-}));
-// procura a marca citada primeiro na frase
-function acharMarca(frase) {
-  const t = " " + semAcento(frase || "").replace(/[’'`´]/g, "") + " ";
-  let melhor = null, pos = 1e9;
-  for (const m of MARCAS) for (const re of m.re) {
-    const r = t.match(re);
-    if (r && r.index < pos) { pos = r.index; melhor = m; }
-  }
-  return melhor;
-}
-const marcaPorId = id => MARCAS.find(m => m.id === id) || null;
-const logoMarca = (m, fonte = 0) => fonte === 0 ? `https://www.google.com/s2/favicons?domain=${m.site}&sz=128` : `https://icons.duckduckgo.com/ip3/${m.site}.ico`;
+// Marcas (logos de empresas, tolerando erro de digitação): veja src/marcas.js
 
 /* ---------- Falar no consultório: "Felipe veio", "Ana faltou", "Júlia pagou", "remarca o Pedro pra quinta às 15h" ---------- */
 const DIAS_FALA = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
@@ -2425,14 +2266,18 @@ function Bolinha({ estado = "" }) {
   );
 }
 
-// Logo de verdade da empresa (ou o ícone da categoria quando não é uma marca conhecida)
-function MarcaLogo({ marca, cat, className = "" }) {
+// Logo de verdade da empresa. Ordem: foto que a pessoa escolheu > logo da marca conhecida > site escolhido > ícone da categoria
+const logoPropria = nome => (nome && LOGOS[normalizar(nome)]) || null;
+function MarcaLogo({ marca, site, nome, cat, className = "" }) {
   const m = marcaPorId(marca);
+  const foto = logoPropria(nome) || (m && logoPropria(m.nome));
+  const alvo = m && m.site ? m.site : site || null;
   const [fonte, setFonte] = useState(0);
-  if (!m || fonte > 1) return <span className={className + " cat"} style={catVars(cat)}><CatIcon cat={cat} /></span>;
+  if (foto) return <span className={className + " logo foto"} title={(m && m.nome) || nome}><img src={foto} alt="" /></span>;
+  if (!alvo || fonte > 1) return <span className={className + " cat"} style={catVars(cat)}><CatIcon cat={cat} /></span>;
   return (
-    <span className={className + " logo"} title={m.nome}>
-      <img src={logoMarca(m, fonte)} alt={m.nome} loading="lazy" referrerPolicy="no-referrer" decoding="async"
+    <span className={className + " logo"} title={(m && m.nome) || nome || alvo}>
+      <img key={alvo + fonte} src={logoDoSite(alvo, fonte)} alt={(m && m.nome) || ""} loading="lazy" referrerPolicy="no-referrer" decoding="async"
         onError={() => setFonte(f => f + 1)}
         onLoad={e => { if (fonte === 0 && e.currentTarget.naturalWidth > 0 && e.currentTarget.naturalWidth <= 16) setFonte(1); }} />
     </span>
@@ -2936,6 +2781,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const av = { ...AVISOS_PADRAO, ...(perfil.avisos || {}) };
   const [db, setDb] = useState(() => carregarDb(conta));
   VIAGEM = (db.pessoal && db.pessoal.viagem) || null;
+  LOGOS = (db.pessoal && db.pessoal.logos) || {};
   const [modo, setModoSt] = useState(() => lerJSON(K.modo(conta.email), "consultorio"));
   const [tab, setTab] = useState(() => lerJSON(K.modo(conta.email), "consultorio") === "pessoal" ? "p-home" : "home");
   const [sheet, setSheet] = useState(null);
@@ -3290,7 +3136,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     novoLanc: tipo => setSheet({ type: "lanc", tipo }),
     editLanc: id => setSheet({ type: "lanc", id }),
     salvarLanc: l0 => {
-      const mm = acharMarca(l0.desc || ""); const l = { ...l0, marca: mm ? mm.id : null };
+      const mm = acharMarca(l0.desc || ""); const l = { ...l0, marca: l0.marca !== undefined ? l0.marca : mm ? mm.id : null };
       const novoL = !db.pessoal.lanc.some(x => x.id === l.id);
       setP(P => ({ ...P, lanc: novoL ? [...P.lanc, l] : P.lanc.map(x => x.id === l.id ? l : x) }));
       vibrar("ok"); close();
@@ -3298,6 +3144,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     },
     apagarLanc: id => { setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== id) })); close(); notify("Lançamento apagado"); },
     novaConta: () => setSheet({ type: "conta" }),
+    // foto escolhida como logo de uma empresa (vale para tudo com esse nome)
+    salvarLogo: (nome, url) => { const k = normalizar(nome); if (!k) return; setP(P => ({ ...P, logos: { ...(P.logos || {}), [k]: url } })); vibrar("ok"); notify("Logo salva"); },
+    tirarLogo: nome => { const k = normalizar(nome); setP(P => { const l = { ...(P.logos || {}) }; delete l[k]; return { ...P, logos: l }; }); },
     // Dinheiro rendendo: caixinhas, à vista ou parcelado, modo viagem
     abrirCaixinha: id => setSheet({ type: "caixinha", id: id || null }),
     salvarCaixinha: c => { setP(P => { const cx = P.caixinhas || []; return { ...P, caixinhas: cx.some(x => x.id === c.id) ? cx.map(x => x.id === c.id ? c : x) : [...cx, c] }; }); vibrar("ok"); notify(`Caixinha ${c.nome} salva`); },
@@ -3361,11 +3210,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       {sheet && sheet.type === "livres" && <Suspense fallback={null}><LivresSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
-      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "caixinha" && <Suspense fallback={null}><CaixinhaSheet key={sheet.id || "nova"} cx={(db.pessoal.caixinhas || []).find(x => x.id === sheet.id) || null} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "parcelado" && <Suspense fallback={null}><ParceladoSheet onClose={close} /></Suspense>}
       {sheet && sheet.type === "viagem" && <Suspense fallback={null}><ViagemSheet viagem={db.pessoal.viagem} lanc={db.pessoal.lanc} act={act} onClose={close} /></Suspense>}
-      {sheet && sheet.type === "conta" && <Suspense fallback={null}><ContaSheet key={sheet.id || "nova"} inicial={contaSel} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "conta" && <Suspense fallback={null}><ContaSheet key={sheet.id || "nova"} inicial={contaSel} onLogo={act.salvarLogo} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} /></Suspense>}
     </>
   );
   if (!saindo) paineisCong.current = paineis;
@@ -3494,6 +3343,6 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar };
+export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar };
 
 export default App;

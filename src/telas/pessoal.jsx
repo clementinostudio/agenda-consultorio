@@ -4,7 +4,72 @@ import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
 import { DinheiroHome } from "./dinheiro.jsx";
+import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
+import { logoPropria, lerArquivo } from "../App.jsx";
 import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes } from "../App.jsx";
+
+/* ---------- Logo enquanto digita: sugere as empresas parecidas (mesmo com erro de digitação),
+   tenta achar o site de quem não está na lista e deixa usar uma foto como logo ---------- */
+// escolha: null (automático) | { marca, nome, cat } | { site } | { nenhuma: true }
+const escolhaInicial = it => !it ? null : it.semLogo ? { nenhuma: true } : it.marca ? { marca: it.marca, nome: (marcaId(it.marca) || {}).nome } : it.logoSite ? { site: it.logoSite } : null;
+function escolhaEfetiva(texto, escolha) {
+  if (escolha) return escolha.nenhuma ? null : escolha;
+  const top = buscarMarcas(texto, 1)[0];
+  return top && top.p >= 86 ? { marca: top.m.id, nome: top.m.nome, cat: top.m.cat, auto: true } : null;
+}
+const camposLogo = (texto, escolha) => {
+  if (escolha && escolha.nenhuma) return { marca: null, logoSite: null, semLogo: true };
+  const ef = escolhaEfetiva(texto, escolha);
+  return { marca: ef && ef.marca ? ef.marca : null, logoSite: ef && ef.site ? ef.site : null, semLogo: false };
+};
+// reduz a foto para um quadrado pequeno (fica leve para guardar)
+async function fotoParaLogo(file) {
+  const url = await lerArquivo(file);
+  const img = await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = url; });
+  const lado = Math.min(img.naturalWidth, img.naturalHeight), T = 128;
+  const c = document.createElement("canvas"); c.width = c.height = T;
+  c.getContext("2d").drawImage(img, (img.naturalWidth - lado) / 2, (img.naturalHeight - lado) / 2, lado, lado, 0, 0, T, T);
+  return c.toDataURL("image/jpeg", .85);
+}
+function SitePalpite({ site, ativo, onEscolher }) {
+  const [ok, setOk] = useState(false);
+  if (!ok) return <img className="ms-teste" src={logoDoSite(site, 0)} alt="" referrerPolicy="no-referrer" onLoad={e => { if (e.currentTarget.naturalWidth > 16) setOk(true); }} />;
+  return (
+    <button type="button" className={"ms-op" + (ativo ? " on" : "")} onClick={onEscolher}>
+      <span className="ms-logo logo"><img src={logoDoSite(site, 0)} alt="" referrerPolicy="no-referrer" /></span><span>{site}</span>
+    </button>
+  );
+}
+function SugestoesMarca({ texto, escolha, onEscolha, onFoto }) {
+  const sug = useMemo(() => buscarMarcas(texto, 5), [texto]);
+  const palpites = useMemo(() => (sug.length && sug[0].p >= 86 ? [] : palpitesDeSite(texto)), [texto, sug]);
+  const ef = escolhaEfetiva(texto, escolha);
+  const fotoRef = useRef(null);
+  const temFoto = !!logoPropria((ef && ef.nome) || texto);
+  if (normalizar(texto).length < 2) return null;
+  const escolher = async e => {
+    const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return;
+    try { onFoto((ef && ef.nome) || texto.trim(), await fotoParaLogo(f)); } catch (err) {}
+  };
+  return (
+    <div className="marca-sug" aria-label="Escolha a logo">
+      {sug.map(({ m }) => {
+        const on = !!(ef && ef.marca === m.id);
+        return (
+          <button type="button" key={m.id} className={"ms-op" + (on ? " on" : "")} aria-pressed={on} onClick={() => onEscolha({ marca: m.id, nome: m.nome, cat: m.cat })}>
+            <MarcaLogo marca={m.id} cat={catDe(m.cat)} className="ms-logo" /><span>{m.nome}</span>
+          </button>
+        );
+      })}
+      {palpites.map(site => <SitePalpite key={site} site={site} ativo={!!(ef && ef.site === site)} onEscolher={() => onEscolha({ site })} />)}
+      <button type="button" className="ms-op ms-foto" onClick={() => fotoRef.current && fotoRef.current.click()}>
+        <span className="ms-logo ms-cam" aria-hidden="true">📷</span><span>{temFoto ? "Trocar foto" : "Usar foto"}</span>
+      </button>
+      <input ref={fotoRef} type="file" accept="image/*" hidden onChange={escolher} />
+      {(ef || (escolha && escolha.nenhuma)) && <button type="button" className={"ms-op ms-nenhuma" + (escolha && escolha.nenhuma ? " on" : "")} onClick={() => onEscolha({ nenhuma: true })}>Sem logo</button>}
+    </div>
+  );
+}
 
 function resumoPessoal(db, chave) {
   const P = db.pessoal;
@@ -59,7 +124,7 @@ function LancRow({ l, act }) {
   const cat = catDe(l.cat);
   return (
     <button className="txn" onClick={() => act.editLanc(l.id)}>
-      <MarcaLogo key={l.marca || l.cat} marca={l.marca || (acharMarca(l.desc || "") || {}).id} cat={cat} className="txn-av" />
+      <MarcaLogo key={(l.marca || l.logoSite || l.cat) + (l.desc || "")} marca={l.semLogo ? null : l.marca || (acharMarca(l.desc || "") || {}).id} site={l.semLogo ? null : l.logoSite} nome={l.desc} cat={cat} className="txn-av" />
       <span className="mid"><span className="nm">{l.desc || cat.nome}</span><span className="sb">{cat.nome}{l.moeda ? ` · ${ESCONDER ? "•••" : fmtMoeda(l.valorOrig, l.moeda)}` : ""} · {relativo(l.data).toLowerCase()}</span></span>
       <span className={"amt" + (l.tipo === "entrada" ? " pos" : "")}>{l.tipo === "entrada" ? "+" : "−"}<Money v={l.valor} /></span>
     </button>
@@ -68,10 +133,12 @@ function LancRow({ l, act }) {
 
 function BillRow({ c, chave, act }) {
   const s = situacaoConta(c, chave), cat = catDe(c.cat);
+  const mid = c.semLogo ? null : c.marca || (acharMarca(c.nome) || {}).id;
+  const temLogo = !c.semLogo && !!(mid || c.logoSite || logoPropria(c.nome));
   const chip = s.st === "paga" ? "mint" : s.st === "atrasada" ? "rose" : s.st === "hoje" || s.st === "breve" ? "amber" : "ghost";
   return (
     <div className="txn">
-      <CalBadge iso={vencimento(c, chave)} />
+      {temLogo ? <span className="bill-logo"><MarcaLogo marca={mid} site={c.logoSite} nome={c.nome} cat={cat} className="txn-av" /><i className="bill-dia" aria-hidden="true">{Number(vencimento(c, chave).slice(8))}</i></span> : <CalBadge iso={vencimento(c, chave)} />}
       <button className="mid" style={{ textAlign: "left" }} onClick={() => act.editConta(c.id)}>
         <span className="nm">{c.nome}</span>
         <span className="sb"><span className={"chip " + chip}>{s.txt}</span><span>{cat.nome}</span></span>
@@ -234,7 +301,7 @@ function ContasTab({ db, act, tema }) {
             <div className="panel-head"><h3>Assinaturas</h3><span className="hint" style={{ padding: 0 }}>{brl(soma(contas.filter(c => c.assinatura), c => c.valor))}/mês · {brl(soma(contas.filter(c => c.assinatura), c => c.valor) * 12)}/ano</span></div>
             {contas.filter(c => c.assinatura).map(c => (
               <button key={c.id} className="txn" onClick={() => act.editConta(c.id)}>
-                <MarcaLogo marca={(acharMarca(c.nome) || {}).id} cat={catDe(c.cat)} className="txn-av" />
+                <MarcaLogo marca={c.semLogo ? null : c.marca || (acharMarca(c.nome) || {}).id} site={c.semLogo ? null : c.logoSite} nome={c.nome} cat={catDe(c.cat)} className="txn-av" />
                 <span className="mid"><span className="nm">{c.nome}</span><span className="sb">{c.moeda ? `${ESCONDER ? "•••" : fmtMoeda(c.valorOrig, c.moeda)}${c.iof !== false ? " + IOF" : ""} · ` : ""}Todo dia {c.dia} · {brl(c.valor * 12)} por ano</span></span>
                 <span className="amt"><Money v={c.valor} /></span>
               </button>
@@ -248,7 +315,7 @@ function ContasTab({ db, act, tema }) {
   );
 }
 
-function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete, onClose }) {
+function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete, onClose, onLogo }) {
   const cot = useCotacoes();
   const [tipo, setTipo] = useState(inicial ? inicial.tipo : pre ? pre.tipo : tipo0);
   const orig = inicial || pre || null;
@@ -257,6 +324,9 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete,
   const [valor, setValor] = useState(orig && orig.moeda && orig.valorOrig ? fmtNum(orig.valorOrig) : inicial ? fmtNum(inicial.valor) : pre && pre.valor ? fmtNum(pre.valor) : "");
   const [cat, setCat] = useState(inicial ? inicial.cat : pre ? pre.cat : null);
   const [desc, setDesc] = useState(inicial ? inicial.desc : pre ? pre.desc : "");
+  const [escolha, setEscolha] = useState(() => escolhaInicial(inicial));
+  const efDesc = escolhaEfetiva(desc, escolha);
+  useEffect(() => { if (!cat && tipo === "saida" && efDesc && efDesc.cat && CATEGORIAS.some(c => c.id === efDesc.cat)) setCat(efDesc.cat); }, [efDesc && efDesc.cat]);
   const [data, setData] = useState(inicial ? inicial.data : pre ? addDays(todayISO(), -(pre.off || 0)) : todayISO());
   const [frase, setFrase] = useState("");
   const [entendi, setEntendi] = useState(null);
@@ -267,7 +337,7 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete,
     setTipo(r.tipo); setCat(r.cat); setData(addDays(todayISO(), -r.off));
     if (r.moeda) { setMoeda(r.moeda); setIof(!!r.iof || r.tipo === "entrada"); if (r.valorOrig) setValor(fmtNum(r.valorOrig)); }
     else { if (!viagem) setMoeda("BRL"); if (r.valor) setValor(fmtNum(r.valor)); }
-    if (r.desc) setDesc(r.desc);
+    if (r.desc) { setDesc(r.desc); setEscolha(null); }
     setEntendi(r);
   };
   const lista = tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
@@ -308,19 +378,24 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete,
         ))}
       </div>
       <div className="fields">
-        <Field label="Descrição (opcional)" htmlFor="l-desc"><input id="l-desc" value={desc} onChange={e => setDesc(e.target.value)} placeholder={tipo === "entrada" ? "Ex.: Freela" : "Ex.: Padaria"} /></Field>
+        <Field label="Descrição (opcional)" icon={escolhaEfetiva(desc, escolha) || logoPropria(desc) ? <MarcaLogo marca={(escolhaEfetiva(desc, escolha) || {}).marca} site={(escolhaEfetiva(desc, escolha) || {}).site} nome={desc} cat={catDe(cat || "outros")} className="campo-logo" /> : null} htmlFor="l-desc"><input id="l-desc" value={desc} onChange={e => { setDesc(e.target.value); setEscolha(null); }} placeholder={tipo === "entrada" ? "Ex.: Freela" : "Ex.: Padaria, Carrefour, Netflix"} autoComplete="off" /></Field>
+        <SugestoesMarca texto={desc} escolha={escolha} onFoto={onLogo} onEscolha={e => { setEscolha(e); if (e.nome) setDesc(e.nome); if (e.cat && tipo === "saida" && CATEGORIAS.some(c => c.id === e.cat)) setCat(e.cat); }} />
         <Field label="Quando" htmlFor="l-data"><input id="l-data" type="date" value={data} onChange={e => e.target.value && setData(e.target.value)} /></Field>
       </div>
       {!ok && <div className="hint">{!(v > 0) ? "Digite o valor e escolha uma categoria." : "Escolha uma categoria."}</div>}
-      <button className="btn mode" disabled={!ok} onClick={() => onSave({ id: inicial ? inicial.id : uid(), tipo, valor: emR, cat, desc: desc.trim(), data, ...(fora ? { moeda, valorOrig: v, cotacao: cotUsada, iof: iofOn } : {}) })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
+      <button className="btn mode" disabled={!ok} onClick={() => onSave({ id: inicial ? inicial.id : uid(), tipo, valor: emR, cat, desc: desc.trim(), data, ...camposLogo(desc, escolha), ...(fora ? { moeda, valorOrig: v, cotacao: cotUsada, iof: iofOn } : {}) })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
       {inicial && <ConfirmButton label="Apagar lançamento" titulo="Apagar este lançamento?" texto="Ele sai do seu extrato e dos totais do mês." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
 }
 
-function ContaSheet({ inicial, onSave, onDelete, onClose }) {
+function ContaSheet({ inicial, onSave, onDelete, onClose, onLogo }) {
   const cot = useCotacoes();
   const [nome, setNome] = useState(inicial ? inicial.nome : "");
+  const [escolha, setEscolha] = useState(() => escolhaInicial(inicial));
+  const [catTocada, setCatTocada] = useState(!!inicial);
+  const efNome = escolhaEfetiva(nome, escolha);
+  useEffect(() => { if (!catTocada && efNome && efNome.cat && CATEGORIAS.some(c => c.id === efNome.cat)) setCat(efNome.cat); }, [efNome && efNome.cat, catTocada]);
   const [moeda, setMoeda] = useState(inicial && inicial.moeda ? inicial.moeda : "BRL");
   const [iof, setIof] = useState(inicial ? inicial.iof !== false : true);
   const [valor, setValor] = useState(inicial ? fmtNum(inicial.moeda && inicial.valorOrig ? inicial.valorOrig : inicial.valor) : "");
@@ -334,7 +409,8 @@ function ContaSheet({ inicial, onSave, onDelete, onClose }) {
   return (
     <Sheet title={inicial ? "Editar conta" : "Nova conta fixa"} sub="Repete todo mês. Eu aviso antes de vencer." onClose={onClose}>
       <div className="fields">
-        <Field label="Nome da conta" icon={<I.bill />} htmlFor="c-nome"><input id="c-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Aluguel, Luz, Internet" /></Field>
+        <Field label="Nome da conta" icon={escolhaEfetiva(nome, escolha) || logoPropria(nome) ? <MarcaLogo marca={(escolhaEfetiva(nome, escolha) || {}).marca} site={(escolhaEfetiva(nome, escolha) || {}).site} nome={nome} cat={catDe(cat)} className="campo-logo" /> : <I.bill />} htmlFor="c-nome"><input id="c-nome" value={nome} onChange={e => { setNome(e.target.value); setEscolha(null); }} placeholder="Ex.: Aluguel, Copel, Netflix" autoComplete="off" /></Field>
+        <SugestoesMarca texto={nome} escolha={escolha} onFoto={onLogo} onEscolha={e => { setEscolha(e); if (e.nome) setNome(e.nome); if (e.cat && !inicial) setCat(e.cat); }} />
         <Field label={fora ? `Valor (${MOEDAS[moeda].nome.toLowerCase()})` : "Valor (R$)"} icon={<I.money />} htmlFor="c-valor"><input id="c-valor" inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="0,00" /></Field>
         <Field label="Cobrada em" htmlFor="c-moeda">
           <select id="c-moeda" className="moeda-sel no-campo" value={moeda} onChange={e => setMoeda(e.target.value)}>
@@ -353,7 +429,7 @@ function ContaSheet({ inicial, onSave, onDelete, onClose }) {
       </div>
       <div className="cats" role="radiogroup" aria-label="Categoria">
         {CATEGORIAS.map(c => (
-          <button type="button" key={c.id} role="radio" aria-checked={cat === c.id} className={"cat" + (cat === c.id ? " on" : "")} style={catVars(c)} onClick={() => setCat(c.id)}>
+          <button type="button" key={c.id} role="radio" aria-checked={cat === c.id} className={"cat" + (cat === c.id ? " on" : "")} style={catVars(c)} onClick={() => { setCat(c.id); setCatTocada(true); }}>
             <span className="ci"><CatIcon cat={c} /></span>{c.nome}
           </button>
         ))}
@@ -361,7 +437,7 @@ function ContaSheet({ inicial, onSave, onDelete, onClose }) {
       <Toggle on={assin} onClick={() => setAssin(!assin)}>É uma assinatura (streaming, app, academia)</Toggle>
       {fora && <Toggle on={iof} onClick={() => setIof(!iof)}>Cobrada no cartão (soma IOF de {String(IOF_CARTAO).replace(".", ",")}%)</Toggle>}
       {fora && v > 0 && <div className="moeda-aviso">Hoje sai por <b>{brlReal(emR)}</b> por mês ({brlReal(emR * 12)} por ano). Eu atualizo esse valor com a cotação do dia.</div>}
-      <button className="btn mode" disabled={!ok} onClick={() => { const { moeda: _m, valorOrig: _vo, iof: _i, ...base } = inicial || { pagas: {} }; onSave({ ...base, id: inicial ? inicial.id : uid(), nome: nome.trim(), valor: emR, dia, cat, assinatura: assin, ...(fora ? { moeda, valorOrig: v, iof } : {}) }); }}><I.check /> {inicial ? "Salvar" : "Adicionar conta"}</button>
+      <button className="btn mode" disabled={!ok} onClick={() => { const { moeda: _m, valorOrig: _vo, iof: _i, ...base } = inicial || { pagas: {} }; onSave({ ...base, id: inicial ? inicial.id : uid(), nome: nome.trim(), valor: emR, dia, cat, assinatura: assin, ...camposLogo(nome, escolha), ...(fora ? { moeda, valorOrig: v, iof } : {}) }); }}><I.check /> {inicial ? "Salvar" : "Adicionar conta"}</button>
       {inicial && <ConfirmButton label="Apagar conta" titulo="Apagar esta conta fixa?" texto="Ela para de aparecer nos próximos meses e nos lembretes." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
