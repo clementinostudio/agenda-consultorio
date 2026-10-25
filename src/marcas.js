@@ -469,9 +469,47 @@ export const MARCAS = LISTA.map(([id, nome, site, cat, ...apelidos], ordem) => (
 const POR_ID = new Map(MARCAS.map(m => [m.id, m]));
 export const marcaPorId = id => (id && POR_ID.get(id)) || null;
 
-// Endereço da logo: Google (fonte 0) ou DuckDuckGo (fonte 1)
-export const logoDoSite = (site, fonte = 0) => (fonte === 0 ? `https://www.google.com/s2/favicons?domain=${site}&sz=128` : `https://icons.duckduckgo.com/ip3/${site}.ico`);
+/* ---------- De onde vem a logo (da melhor para a mais simples) ----------
+   1. o ícone de alta resolução que o próprio site oferece para iPhone (apple-touch-icon, 180px)
+   2. o serviço de ícones novo do Google (avisa com erro quando não acha, em vez de mandar um ícone genérico)
+   3. o serviço antigo do Google (só vale se vier maior que 16px; 16px é o globo genérico)
+   Se nenhuma servir, o app mostra as iniciais da empresa numa cor própria (nunca uma seta cinza). */
+export const fontesLogo = site => [
+  { url: `https://${site}/apple-touch-icon.png`, min: 48 },
+  { url: `https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${site}&size=128`, min: 16 },
+  { url: `https://www.google.com/s2/favicons?domain=${site}&sz=128`, min: 17 },
+];
+export const logoDoSite = (site, fonte = 0) => (fontesLogo(site)[fonte] || {}).url || "";
 export const logoMarca = (m, fonte = 0) => logoDoSite(m.site, fonte);
+
+// Lembra qual fonte deu certo para cada site (assim não testa tudo de novo a cada tela)
+const CHAVE_FONTE = "agenda-logos-fonte";
+let memoria = null;
+const lerMemoria = () => { if (!memoria) { try { memoria = JSON.parse(localStorage.getItem(CHAVE_FONTE) || "{}"); } catch (e) { memoria = {}; } } return memoria; };
+export function fonteLembrada(site) {
+  const r = lerMemoria()[site]; if (!r) return undefined;
+  const [i, quando] = r, idade = Date.now() - quando;
+  if (i < 0 ? idade > 3 * 864e5 : idade > 30 * 864e5) return undefined; // "sem logo" é testado de novo a cada 3 dias
+  return i;
+}
+let gravando = null;
+export function lembrarFonte(site, i) {
+  if (i < 0 && typeof navigator !== "undefined" && navigator.onLine === false) return; // sem internet não é "sem logo"
+  const m = lerMemoria(); if (m[site] && m[site][0] === i) return;
+  m[site] = [i, Date.now()];
+  clearTimeout(gravando); gravando = setTimeout(() => { try { localStorage.setItem(CHAVE_FONTE, JSON.stringify(m)); } catch (e) {} }, 400);
+}
+
+// Iniciais e cor da empresa (para quando não há logo)
+const IGNORAR = new Set("super supermercado supermercados mercado farmacia farmacias drogaria drogarias banco de do da dos das e o a loja lojas grupo rede atacadista".split(" "));
+const CORES_MONO = ["#E4572E", "#2B7FFF", "#17A673", "#8E5CF6", "#F29E1F", "#D63384", "#0EA5B7", "#5B6B8C"];
+export function monograma(nome) {
+  const ws = normalizar(nome).split(" ").filter(w => w && !IGNORAR.has(w));
+  const base = ws.length ? ws : normalizar(nome).split(" ").filter(Boolean);
+  const ini = ((base[0] || "?")[0] + (base[1] ? base[1][0] : "")).toUpperCase();
+  let h = 0; for (const ch of normalizar(nome)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return { ini, cor: CORES_MONO[h % CORES_MONO.length] };
+}
 
 /* ---------- parecido com: distância de edição (aceita uma letra trocada, faltando, sobrando ou invertida) ---------- */
 function distancia(a, b, max) {

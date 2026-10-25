@@ -1325,3 +1325,11 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .logo.foto img { width: 100%; height: 100%; object-fit: cover; }
 .bill-logo { position: relative; flex: none; }
 .bill-dia { position: absolute; right: -5px; bottom: -5px; min-width: 21px; height: 21px; padding: 0 4px; border-radius: 8px; display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 800; background: var(--fg); color: var(--bg); border: 2px solid var(--surface); }
+
+/* logo de reserva: iniciais da empresa numa cor própria */
+.mono { display: grid; place-items: center; color: #fff; border: 0 !important; border-radius: 14px; }
+.mono b { font: 800 15px var(--f-display); letter-spacing: -.02em; }
+.ms-logo.mono b { font-size: 12px; }
+.campo-logo.mono b { font-size: 14px; }
+.logo img { border-radius: 22%; }
+.logo.cheio img { width: 100%; height: 100%; border-radius: 0; object-fit: cover; }

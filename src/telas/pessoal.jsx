@@ -31,12 +31,13 @@ async function fotoParaLogo(file) {
   c.getContext("2d").drawImage(img, (img.naturalWidth - lado) / 2, (img.naturalHeight - lado) / 2, lado, lado, 0, 0, T, T);
   return c.toDataURL("image/jpeg", .85);
 }
+// Palpite de site: só aparece se o Google tiver um ícone de verdade para ele (o serviço novo dá erro quando não tem)
 function SitePalpite({ site, ativo, onEscolher }) {
   const [ok, setOk] = useState(false);
-  if (!ok) return <img className="ms-teste" src={logoDoSite(site, 0)} alt="" referrerPolicy="no-referrer" onLoad={e => { if (e.currentTarget.naturalWidth > 16) setOk(true); }} />;
+  if (!ok) return <img className="ms-teste" src={logoDoSite(site, 1)} alt="" referrerPolicy="no-referrer" onLoad={e => { if (e.currentTarget.naturalWidth >= 16) setOk(true); }} />;
   return (
     <button type="button" className={"ms-op" + (ativo ? " on" : "")} onClick={onEscolher}>
-      <span className="ms-logo logo"><img src={logoDoSite(site, 0)} alt="" referrerPolicy="no-referrer" /></span><span>{site}</span>
+      <MarcaLogo site={site} nome={site} className="ms-logo" /><span>{site}</span>
     </button>
   );
 }

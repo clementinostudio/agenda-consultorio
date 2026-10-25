@@ -9,7 +9,7 @@
 */
 import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "./assets/porquinho.webp";
-import { acharMarca, marcaPorId, logoMarca, logoDoSite, normalizar } from "./marcas.js";
+import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monograma, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
 import { createPortal, flushSync } from "react-dom";
 
@@ -2272,16 +2272,30 @@ function MarcaLogo({ marca, site, nome, cat, className = "" }) {
   const m = marcaPorId(marca);
   const foto = logoPropria(nome) || (m && logoPropria(m.nome));
   const alvo = m && m.site ? m.site : site || null;
-  const [fonte, setFonte] = useState(0);
-  if (foto) return <span className={className + " logo foto"} title={(m && m.nome) || nome}><img src={foto} alt="" /></span>;
-  if (!alvo || fonte > 1) return <span className={className + " cat"} style={catVars(cat)}><CatIcon cat={cat} /></span>;
+  const rotulo = (m && m.nome) || nome || alvo || "";
+  if (foto) return <span className={className + " logo foto"} title={rotulo}><img src={foto} alt="" /></span>;
+  if (alvo) return <LogoDoSite key={alvo} site={alvo} rotulo={rotulo} className={className} />;
+  if (m) return <Monograma nome={rotulo} className={className} />;
+  return <span className={className + " cat"} style={catVars(cat)}><CatIcon cat={cat} /></span>;
+}
+// Tenta as fontes em ordem (ícone grande do site > Google novo > Google antigo); se nada servir, mostra as iniciais
+function LogoDoSite({ site, rotulo, className }) {
+  const fontes = fontesLogo(site);
+  const [i, setI] = useState(() => { const f = fonteLembrada(site); return f === undefined ? 0 : f; });
+  if (i < 0 || i >= fontes.length) return <Monograma nome={rotulo} className={className} />;
+  const f = fontes[i];
+  const proxima = () => { const n = i + 1; if (n >= fontes.length) { lembrarFonte(site, -1); setI(-1); } else setI(n); };
   return (
-    <span className={className + " logo"} title={(m && m.nome) || nome || alvo}>
-      <img key={alvo + fonte} src={logoDoSite(alvo, fonte)} alt={(m && m.nome) || ""} loading="lazy" referrerPolicy="no-referrer" decoding="async"
-        onError={() => setFonte(f => f + 1)}
-        onLoad={e => { if (fonte === 0 && e.currentTarget.naturalWidth > 0 && e.currentTarget.naturalWidth <= 16) setFonte(1); }} />
+    <span className={className + " logo" + (i === 0 ? " cheio" : "")} title={rotulo}>
+      <img key={f.url} src={f.url} alt="" loading="lazy" referrerPolicy="no-referrer" decoding="async"
+        onError={proxima}
+        onLoad={e => { if (e.currentTarget.naturalWidth < f.min) proxima(); else lembrarFonte(site, i); }} />
     </span>
   );
+}
+function Monograma({ nome, className }) {
+  const { ini, cor } = monograma(nome || "?");
+  return <span className={className + " mono"} style={{ background: cor }} title={nome} aria-hidden="true"><b>{ini}</b></span>;
 }
 
 function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo }) {

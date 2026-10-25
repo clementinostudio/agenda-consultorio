@@ -79,7 +79,7 @@ export default defineConfig({
             options: { cacheName: "feriados", expiration: { maxEntries: 5, maxAgeSeconds: 60 * 60 * 24 * 30 } },
           },
           { // Logos das empresas (Uber, iFood...): guarda no aparelho, depois aparecem até sem internet
-            urlPattern: /^https:\/\/(www\.google\.com\/s2\/favicons|icons\.duckduckgo\.com\/ip3)\/.*/i,
+            urlPattern: /^https:\/\/((www\.google\.com\/s2\/favicons|t3\.gstatic\.com\/faviconV2)|[^/]+\/apple-touch-icon\.png$)/i,
             handler: "CacheFirst",
             options: { cacheName: "logos", expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 90 }, cacheableResponse: { statuses: [0, 200] } },
           },
