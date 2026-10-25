@@ -134,8 +134,18 @@ bash servidor-avisos/instalar-avisos.sh
 
 O comando abre o navegador para você entrar na Cloudflare (crie a conta grátis se não tiver), publica o servidor e avisa o GitHub do endereço. Depois, no celular: abra o app pelo ícone → Ajustes → Avisos → **Ligar avisos com o app fechado** → Permitir. No iPhone precisa do iOS 16.4 ou mais novo e do app instalado na tela inicial. As chaves ficam em `servidor-avisos/.chaves.json`, que nunca vai para o GitHub (não apague: sem elas os aparelhos precisam ligar os avisos de novo).
 
-### Falar um gasto
-Toque no microfone da barra de baixo e fale ("gastei 32 e 50 no mercado"). Um degradê colorido sobe do pé da tela e o que você fala aparece ali mesmo, sem abrir janela. Usa o reconhecimento de voz do próprio aparelho, sem servidor. Se o aparelho não liberar o reconhecimento (acontece em alguns iPhones com o app instalado), o app abre o teclado: toque no microfone do teclado e fale, que funciona igual.
+### Falar (em qualquer tela)
+Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da tela e tudo aparece ali embaixo, sem abrir janela. Usa o reconhecimento de voz do próprio aparelho, sem servidor.
+
+- Gastos e entradas: "gastei 30 no uber", "comprei 120 na amazon e 54 e 90 no ifood", "recebi 200 de pix".
+- Consultório: "Felipe veio", "Felipe veio e pagou", "a Ana faltou", "Júlia pagou", "remarca o Pedro pra quinta às 15h".
+- Empresas conhecidas (Uber, 99, iFood, Netflix, Amazon, mercados, farmácias, postos, bancos...) entram com o nome certo, a categoria certa e a logo oficial, que vem do ícone do próprio site da empresa e fica guardada no aparelho. A lista fica em `MARCAS`, no `App.jsx`.
+- Se o aparelho não liberar o reconhecimento (acontece em alguns iPhones com o app instalado), o app abre o teclado: toque no microfone do teclado e fale.
+
+### Cara de app
+- Tela de abertura própria no iPhone, sem zoom de pinça, sem seleção de texto nos botões, toque que afunda, troca de tela animada e painéis que fecham arrastando para baixo.
+- No Android, o Chrome instala como app de verdade (aparece na lista de apps e a opção é "Desinstalar"), com fotos do app na janela de instalação.
+- No iPhone, segurar o ícone sempre mostra "Remover Favorito": é o texto que o iOS usa para todo app instalado pelo Safari, e nenhum site consegue mudar.
 
 ### Próximo passo recomendado: Supabase (plano gratuito)
 1. **Login de verdade** com e-mail e senha (Supabase Auth).

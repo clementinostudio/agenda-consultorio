@@ -6,7 +6,7 @@
   Os estilos ficam em src/styles.css e as imagens de fundo em public/fundos/.
 */
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
 const BASE = import.meta.env.BASE_URL;
@@ -133,6 +133,13 @@ const vibrar = (tipo = "toque") => {
 
 // A área que rola fica dentro do app (assim a barra de baixo nunca sai do lugar)
 const rolarTopo = () => window.scrollTo(0, 0);
+// Troca de tela com animação suave, como app nativo (View Transitions; onde não existe, troca direto)
+const comTransicao = fn => {
+  try {
+    if (document.startViewTransition && !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) { document.startViewTransition(() => flushSync(fn)); return; }
+  } catch (e) {}
+  fn();
+};
 const brlReal = v => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brl = v => ESCONDER ? "R$ •••" : brlReal(v);
 const num = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
@@ -459,7 +466,7 @@ const iconeClima = code => code >= 95 ? "storm" : code >= 51 ? "rain" : code >= 
 const PALAVRAS_CAT = {
   comida: ["padaria", "restaurante", "lanche", "lanchonete", "almoço", "jantar", "ifood", "pizza", "café", "cafeteria", "hambúrguer", "sorvete", "bar", "delivery", "açaí", "pastel", "marmita"],
   mercado: ["mercado", "supermercado", "feira", "açougue", "hortifruti", "sacolão", "atacadão", "atacado", "quitanda"],
-  transporte: ["uber", "99", "ônibus", "gasolina", "combustível", "posto", "estacionamento", "metrô", "táxi", "pedágio", "passagem", "etanol"],
+  transporte: ["uber", "ônibus", "gasolina", "combustível", "posto", "estacionamento", "metrô", "táxi", "pedágio", "passagem", "etanol"],
   saude: ["farmácia", "remédio", "médico", "consulta", "exame", "dentista", "academia", "terapia", "plano de saúde"],
   casa: ["aluguel", "luz", "energia", "água", "internet", "gás", "condomínio", "faxina", "diarista", "móvel", "reforma"],
   lazer: ["cinema", "show", "teatro", "netflix", "spotify", "viagem", "passeio", "jogo", "streaming", "festa"],
@@ -506,8 +513,226 @@ function interpretarFala(frase) {
     desc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : "";
     cat = entrada ? "outros-e" : "outros";
   }
-  return { tipo: entrada ? "entrada" : "saida", valor, cat, desc, off };
+  // empresa conhecida: nome certo, categoria certa e a logo dela
+  const marca = acharMarca(t);
+  if (marca) { desc = marca.nome; if (!entrada) cat = marca.cat; }
+  return { tipo: entrada ? "entrada" : "saida", valor, cat, desc, off, marca: marca ? marca.id : null };
 }
+
+/* ---------- Marcas: reconhece a empresa e mostra a logo de verdade ----------
+   "gastei 30 no uber" vira "Uber", com a categoria certa e a logo oficial (o ícone do próprio site
+   da empresa, buscado pelo serviço de ícones do Google). Para incluir uma marca: [id, nome, site, categoria, palavras...].
+   As palavras podem ser texto simples (sem acento) ou uma expressão regular. */
+const MARCAS = [
+  // transporte
+  ["uber", "Uber", "uber.com", "transporte", "uber", "uber eats"],
+  ["99", "99", "99app.com", "transporte", "99 ?pop", "99 ?taxi", "99app", /\b(?:na|no|da|do|pela|pelo)\s+99\b(?!\s*(?:reais|real|conto|contos|centavos|,\d))/],
+  ["indrive", "inDrive", "indrive.com", "transporte", "indrive", "in drive"],
+  ["cabify", "Cabify", "cabify.com", "transporte", "cabify"],
+  ["blablacar", "BlaBlaCar", "blablacar.com.br", "transporte", "blablacar", "bla bla car"],
+  ["shell", "Shell", "shell.com.br", "transporte", "shell"],
+  ["ipiranga", "Ipiranga", "ipiranga.com.br", "transporte", "ipiranga"],
+  ["petrobras", "Petrobras", "petrobras.com.br", "transporte", "petrobras", "posto br"],
+  ["semparar", "Sem Parar", "semparar.com.br", "transporte", "sem parar"],
+  ["veloe", "Veloe", "veloe.com.br", "transporte", "veloe"],
+  ["conectcar", "ConectCar", "conectcar.com", "transporte", "conectcar", "conect car"],
+  ["estapar", "Estapar", "estapar.com.br", "transporte", "estapar"],
+  ["latam", "LATAM", "latamairlines.com", "transporte", "latam"],
+  ["gol", "GOL", "voegol.com.br", "transporte", /\b(?:passagem|voo|voos)\s+(?:da\s+)?gol\b/],
+  ["azul", "Azul", "voeazul.com.br", "transporte", /\b(?:passagem|voo|voos)\s+(?:da\s+)?azul\b/],
+  // comida
+  ["ifood", "iFood", "ifood.com.br", "comida", "ifood", "i food", "aifood"],
+  ["rappi", "Rappi", "rappi.com.br", "comida", "rappi", "rapi"],
+  ["ze", "Zé Delivery", "ze.delivery", "comida", "ze delivery"],
+  ["mcdonalds", "McDonald's", "mcdonalds.com.br", "comida", "mcdonalds", "mc donalds", "mcdonald", "mc donald", "mequi", "meque"],
+  ["burgerking", "Burger King", "burgerking.com.br", "comida", "burger king", "burguer king", "bk"],
+  ["subway", "Subway", "subway.com", "comida", "subway"],
+  ["kfc", "KFC", "kfc.com.br", "comida", "kfc"],
+  ["bobs", "Bob's", "bobs.com.br", "comida", "bobs"],
+  ["habibs", "Habib's", "habibs.com.br", "comida", "habibs", "habib"],
+  ["giraffas", "Giraffas", "giraffas.com.br", "comida", "giraffas", "girafas"],
+  ["outback", "Outback", "outback.com.br", "comida", "outback"],
+  ["madero", "Madero", "restaurantemadero.com.br", "comida", "madero"],
+  ["cocobambu", "Coco Bambu", "cocobambu.com", "comida", "coco bambu"],
+  ["spoleto", "Spoleto", "spoleto.com.br", "comida", "spoleto"],
+  ["pizzahut", "Pizza Hut", "pizzahut.com.br", "comida", "pizza hut"],
+  ["dominos", "Domino's", "dominos.com.br", "comida", "dominos", "domino"],
+  ["starbucks", "Starbucks", "starbucks.com.br", "comida", "starbucks"],
+  ["cacaushow", "Cacau Show", "cacaushow.com.br", "comida", "cacau show"],
+  ["kopenhagen", "Kopenhagen", "kopenhagen.com.br", "comida", "kopenhagen"],
+  // mercado
+  ["carrefour", "Carrefour", "carrefour.com.br", "mercado", "carrefour", "carrefur"],
+  ["paodeacucar", "Pão de Açúcar", "paodeacucar.com", "mercado", "pao de acucar"],
+  ["assai", "Assaí", "assai.com.br", "mercado", "assai"],
+  ["atacadao", "Atacadão", "atacadao.com.br", "mercado", "atacadao"],
+  ["samsclub", "Sam's Club", "samsclub.com.br", "mercado", "sams club", "sams"],
+  ["condor", "Condor", "condor.com.br", "mercado", "condor"],
+  ["muffato", "Super Muffato", "supermuffato.com.br", "mercado", "muffato", "mufato"],
+  ["angeloni", "Angeloni", "angeloni.com.br", "mercado", "angeloni"],
+  ["festval", "Festval", "festval.com.br", "mercado", "festval"],
+  ["zaffari", "Zaffari", "zaffari.com.br", "mercado", "zaffari", "zafari"],
+  ["savegnago", "Savegnago", "savegnago.com.br", "mercado", "savegnago"],
+  ["guanabara", "Guanabara", "supermercadosguanabara.com.br", "mercado", "guanabara"],
+  ["sonda", "Sonda", "sondadelivery.com.br", "mercado", "sonda"],
+  ["hirota", "Hirota", "hirota.com.br", "mercado", "hirota"],
+  ["oba", "Oba Hortifruti", "obahortifruti.com.br", "mercado", "oba hortifruti"],
+  ["giassi", "Giassi", "giassi.com.br", "mercado", "giassi"],
+  ["bistek", "Bistek", "bistek.com.br", "mercado", "bistek"],
+  // saúde
+  ["drogasil", "Drogasil", "drogasil.com.br", "saude", "drogasil"],
+  ["drogaraia", "Droga Raia", "drogaraia.com.br", "saude", "droga raia", "drogaraia", "raia"],
+  ["paguemenos", "Pague Menos", "paguemenos.com.br", "saude", "pague menos"],
+  ["panvel", "Panvel", "panvel.com", "saude", "panvel"],
+  ["drogariasaopaulo", "Drogaria São Paulo", "drogariasaopaulo.com.br", "saude", "drogaria sao paulo"],
+  ["pacheco", "Drogarias Pacheco", "drogariaspacheco.com.br", "saude", "pacheco"],
+  ["nissei", "Farmácias Nissei", "farmaciasnissei.com.br", "saude", "nissei"],
+  ["venancio", "Drogaria Venancio", "drogariavenancio.com.br", "saude", "venancio"],
+  ["smartfit", "Smart Fit", "smartfit.com.br", "saude", "smart fit", "smartfit"],
+  ["bluefit", "Bluefit", "bluefit.com.br", "saude", "bluefit", "blue fit"],
+  ["wellhub", "Wellhub", "wellhub.com", "saude", "wellhub", "gympass"],
+  ["totalpass", "TotalPass", "totalpass.com", "saude", "totalpass", "total pass"],
+  // lazer e assinaturas
+  ["netflix", "Netflix", "netflix.com", "lazer", "netflix", "netflics"],
+  ["spotify", "Spotify", "spotify.com", "lazer", "spotify", "spotfy"],
+  ["deezer", "Deezer", "deezer.com", "lazer", "deezer"],
+  ["youtube", "YouTube", "youtube.com", "lazer", "youtube", "you tube"],
+  ["primevideo", "Prime Video", "primevideo.com", "lazer", "prime video", "amazon prime"],
+  ["disney", "Disney+", "disneyplus.com", "lazer", "disney"],
+  ["max", "Max", "max.com", "lazer", "hbo max", "hbo"],
+  ["globoplay", "Globoplay", "globoplay.globo.com", "lazer", "globoplay", "globo play"],
+  ["paramount", "Paramount+", "paramountplus.com", "lazer", "paramount"],
+  ["crunchyroll", "Crunchyroll", "crunchyroll.com", "lazer", "crunchyroll"],
+  ["appletv", "Apple TV", "tv.apple.com", "lazer", "apple tv"],
+  ["steam", "Steam", "steampowered.com", "lazer", "steam"],
+  ["playstation", "PlayStation", "playstation.com", "lazer", "playstation", "psn", "play station"],
+  ["xbox", "Xbox", "xbox.com", "lazer", "xbox", "game pass"],
+  ["nintendo", "Nintendo", "nintendo.com", "lazer", "nintendo"],
+  ["cinemark", "Cinemark", "cinemark.com.br", "lazer", "cinemark"],
+  ["cinepolis", "Cinépolis", "cinepolis.com.br", "lazer", "cinepolis"],
+  ["ingresso", "Ingresso.com", "ingresso.com", "lazer", "ingresso com", "ingresso.com"],
+  ["airbnb", "Airbnb", "airbnb.com.br", "lazer", "airbnb", "air bnb"],
+  ["booking", "Booking", "booking.com", "lazer", "booking"],
+  ["decolar", "Decolar", "decolar.com", "lazer", "decolar"],
+  // compras
+  ["amazon", "Amazon", "amazon.com.br", "compras", "amazon", "amazon.com"],
+  ["mercadolivre", "Mercado Livre", "mercadolivre.com.br", "compras", "mercado livre"],
+  ["shopee", "Shopee", "shopee.com.br", "compras", "shopee", "shopii", "xopi"],
+  ["shein", "Shein", "shein.com", "compras", "shein", "xein"],
+  ["aliexpress", "AliExpress", "aliexpress.com", "compras", "aliexpress", "ali express"],
+  ["temu", "Temu", "temu.com", "compras", "temu"],
+  ["magalu", "Magalu", "magazineluiza.com.br", "compras", "magalu", "magazine luiza"],
+  ["americanas", "Americanas", "americanas.com.br", "compras", "americanas"],
+  ["casasbahia", "Casas Bahia", "casasbahia.com.br", "compras", "casas bahia"],
+  ["renner", "Renner", "lojasrenner.com.br", "compras", "renner"],
+  ["riachuelo", "Riachuelo", "riachuelo.com.br", "compras", "riachuelo"],
+  ["cea", "C&A", "cea.com.br", "compras", /\bc ?& ?a\b/, /\bcea\b/],
+  ["zara", "Zara", "zara.com", "compras", "zara"],
+  ["hering", "Hering", "hering.com.br", "compras", "hering"],
+  ["nike", "Nike", "nike.com.br", "compras", "nike"],
+  ["adidas", "adidas", "adidas.com.br", "compras", "adidas"],
+  ["centauro", "Centauro", "centauro.com.br", "compras", "centauro"],
+  ["netshoes", "Netshoes", "netshoes.com.br", "compras", "netshoes", "net shoes"],
+  ["decathlon", "Decathlon", "decathlon.com.br", "compras", "decathlon"],
+  ["leroy", "Leroy Merlin", "leroymerlin.com.br", "casa", "leroy merlin", "leroy"],
+  ["tokstok", "Tok&Stok", "tokstok.com.br", "casa", "tok stok", "tokstok"],
+  ["kalunga", "Kalunga", "kalunga.com.br", "compras", "kalunga"],
+  ["boticario", "O Boticário", "boticario.com.br", "compras", "boticario"],
+  ["natura", "Natura", "natura.com.br", "compras", "natura"],
+  ["sephora", "Sephora", "sephora.com.br", "compras", "sephora"],
+  ["apple", "Apple", "apple.com", "compras", "apple", "icloud", "app store"],
+  ["google", "Google", "google.com", "compras", "google", "google one", "play store"],
+  ["microsoft", "Microsoft", "microsoft.com", "compras", "microsoft", "office 365"],
+  ["openai", "ChatGPT", "openai.com", "compras", "chatgpt", "chat gpt", "openai"],
+  ["canva", "Canva", "canva.com", "compras", "canva"],
+  ["adobe", "Adobe", "adobe.com", "compras", "adobe"],
+  ["duolingo", "Duolingo", "duolingo.com", "compras", "duolingo"],
+  // casa: energia, água, internet, telefone, bancos
+  ["copel", "Copel", "copel.com", "casa", "copel"],
+  ["sanepar", "Sanepar", "sanepar.com.br", "casa", "sanepar"],
+  ["enel", "Enel", "enel.com.br", "casa", "enel"],
+  ["cemig", "Cemig", "cemig.com.br", "casa", "cemig"],
+  ["sabesp", "Sabesp", "sabesp.com.br", "casa", "sabesp"],
+  ["comgas", "Comgás", "comgas.com.br", "casa", "comgas"],
+  ["vivo", "Vivo", "vivo.com.br", "casa", /\b(?:da|na|conta da|internet da)\s+vivo\b/, "vivo fibra"],
+  ["claro", "Claro", "claro.com.br", "casa", /\b(?:da|na|conta da|internet da)\s+claro\b/, "claro net"],
+  ["tim", "TIM", "tim.com.br", "casa", /\b(?:da|na|conta da)\s+tim\b/],
+  ["nubank", "Nubank", "nubank.com.br", "outros", "nubank", "nu bank"],
+  ["itau", "Itaú", "itau.com.br", "outros", "itau"],
+  ["bradesco", "Bradesco", "bradesco.com.br", "outros", "bradesco"],
+  ["santander", "Santander", "santander.com.br", "outros", "santander"],
+  ["bb", "Banco do Brasil", "bb.com.br", "outros", "banco do brasil"],
+  ["inter", "Inter", "inter.co", "outros", "banco inter"],
+  ["c6", "C6 Bank", "c6bank.com.br", "outros", "c6 bank", "c6"],
+  ["picpay", "PicPay", "picpay.com", "outros", "picpay", "pic pay"],
+  ["mercadopago", "Mercado Pago", "mercadopago.com.br", "outros", "mercado pago"],
+].map(([id, nome, site, cat, ...palavras]) => ({
+  id, nome, site, cat,
+  re: palavras.map(p => p instanceof RegExp ? p : new RegExp(`\\b${p.replace(/\./g, "\\.")}\\b`)),
+}));
+// procura a marca citada primeiro na frase
+function acharMarca(frase) {
+  const t = " " + semAcento(frase || "").replace(/[’'`´]/g, "") + " ";
+  let melhor = null, pos = 1e9;
+  for (const m of MARCAS) for (const re of m.re) {
+    const r = t.match(re);
+    if (r && r.index < pos) { pos = r.index; melhor = m; }
+  }
+  return melhor;
+}
+const marcaPorId = id => MARCAS.find(m => m.id === id) || null;
+const logoMarca = (m, fonte = 0) => fonte === 0 ? `https://www.google.com/s2/favicons?domain=${m.site}&sz=128` : `https://icons.duckduckgo.com/ip3/${m.site}.ico`;
+
+/* ---------- Falar no consultório: "Felipe veio", "Ana faltou", "Júlia pagou", "remarca o Pedro pra quinta às 15h" ---------- */
+const DIAS_FALA = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function acharPaciente(t, db) {
+  let melhor = null, pos = 1e9, tam = 0;
+  for (const p of db.patients.filter(x => x.active)) {
+    const nome = semAcento(p.name).trim(), pri = nome.split(/\s+/)[0];
+    for (const alvo of [nome, pri]) {
+      if (alvo.length < 3) continue;
+      const m = t.match(new RegExp(`\\b${escRe(alvo)}\\b`));
+      if (m && (m.index < pos || (m.index === pos && alvo.length > tam))) { melhor = p; pos = m.index; tam = alvo.length; }
+    }
+  }
+  return melhor;
+}
+function lerDiaHora(t) {
+  const hoje = todayISO();
+  let data = null;
+  if (/\bdepois de amanha\b/.test(t)) data = addDays(hoje, 2);
+  else if (/\bamanha\b/.test(t)) data = addDays(hoje, 1);
+  else if (/\bhoje\b/.test(t)) data = hoje;
+  else {
+    const d = t.match(/\b(domingo|segunda|terca|quarta|quinta|sexta|sabado)\b/);
+    if (d) { const alvo = DIAS_FALA[d[1]], hj = fromISO(hoje).getDay(); data = addDays(hoje, ((alvo - hj + 7) % 7) || 7); }
+    const dia = t.match(/\bdia\s+(\d{1,2})\b/);
+    if (!d && dia) { const n = Number(dia[1]); let c = `${hoje.slice(0, 8)}${pad(n)}`; if (c < hoje) { const m = fromISO(hoje); m.setMonth(m.getMonth() + 1, n); c = toISO(m); } data = c; }
+  }
+  let hora = null;
+  const h = t.match(/\b(\d{1,2})\s*(?::|h)\s*(\d{2})\b/) || t.match(/\b(\d{1,2})\s*h\b/) || t.match(/\b(?:as|pras|para as|pra)\s+(\d{1,2})(?:\s+(?:e\s+)?(\d{2}))?(?:\s+horas?)?\b/) || t.match(/\b(\d{1,2})\s+horas?\b/);
+  if (h && Number(h[1]) <= 23) hora = `${pad(Number(h[1]))}:${pad(Number(h[2] || 0))}`;
+  return { data, hora };
+}
+function interpretarConsultorio(frase, db) {
+  const t = " " + numerosPorExtenso(semAcento(frase || "")).replace(/\s+/g, " ") + " ";
+  const p = acharPaciente(t, db);
+  if (!p) return null;
+  const falta = /\b(faltou|nao veio|nao apareceu|nao compareceu|desmarcou|cancelou)\b/.test(t);
+  const veio = !falta && /\b(veio|atendi|compareceu|teve sessao|fez sessao|fez a sessao|atendido|atendida)\b/.test(t);
+  const pagou = /\b(pagou|me pagou|pagamento|fez o pix|mandou o pix|acertou|quitou|ja pagou)\b/.test(t);
+  const remarcar = /\b(remarca|remarcar|remarquei|remarcou|muda|mudar|mudei|passa|passar|passei|adia|adiar)\b/.test(t);
+  if (remarcar) { const { data, hora } = lerDiaHora(t); return { acao: "remarcar", p, data: data || p.nextDate, hora: hora || p.time, ok: !!(data || hora) }; }
+  if (falta) return { acao: "falta", p, ok: true };
+  if (veio) return { acao: "veio", p, pago: pagou, ok: true };
+  if (pagou) return { acao: "pagou", p, ok: true };
+  return { acao: "?", p, ok: false };
+}
+const textoAcao = (c, T) => c.acao === "veio" ? (c.pago ? "Veio e pagou" : "Veio")
+  : c.acao === "falta" ? "Faltou"
+  : c.acao === "pagou" ? "Pagou"
+  : c.acao === "remarcar" ? `Remarcar para ${diaCurto(c.data)} às ${c.hora}`
+  : `O que aconteceu com ${primeiro(c.p.name)}?`;
 
 // Várias anotações numa frase só: "gastei 30 no mercado e 12 de uber"
 const VERBO_FALA = /\b(gastei|paguei|comprei|recebi|ganhei|entrou|vendi|caiu|me pagou|me pagaram)\b/;
@@ -990,6 +1215,12 @@ function CalBadge({ iso }) {
 }
 
 function Sheet({ title, sub, onClose, children }) {
+  // Arrastar para baixo pela alça (ou pelo título) fecha, igual aos apps do celular
+  const ref = useRef(null), arr = useRef(null);
+  const ini = e => { if (!ref.current) return; arr.current = { y: e.touches[0].clientY, dy: 0 }; ref.current.style.transition = "none"; };
+  const mov = e => { if (!arr.current) return; const dy = Math.max(0, e.touches[0].clientY - arr.current.y); arr.current.dy = dy; ref.current.style.transform = `translateY(${dy}px)`; };
+  const fim = () => { if (!arr.current) return; const dy = arr.current.dy; arr.current = null; ref.current.style.transition = "transform .2s ease"; if (dy > 110) { vibrar("toque"); onClose(); } else ref.current.style.transform = ""; };
+  const arrasto = { onTouchStart: ini, onTouchMove: mov, onTouchEnd: fim, onTouchCancel: fim };
   useEffect(() => {
     const k = e => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k);
@@ -998,10 +1229,10 @@ function Sheet({ title, sub, onClose, children }) {
   }, []);
   return (
     <div className="scrim" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title || "Painel"} onClick={e => e.stopPropagation()}>
-        <div className="grab" />
+      <div className="sheet" ref={ref} role="dialog" aria-modal="true" aria-label={title || "Painel"} onClick={e => e.stopPropagation()}>
+        <div className="grab" {...arrasto} />
         {title && (
-          <div className="sheet-head">
+          <div className="sheet-head" {...arrasto}>
             <div><h2>{title}</h2>{sub && <div className="sub">{sub}</div>}</div>
             <button className="icon-btn" onClick={onClose} aria-label="Fechar"><I.x /></button>
           </div>
@@ -1883,7 +2114,7 @@ function LancRow({ l, act }) {
   const cat = catDe(l.cat);
   return (
     <button className="txn" onClick={() => act.editLanc(l.id)}>
-      <span className="txn-av cat" style={catVars(cat)}><CatIcon cat={cat} /></span>
+      <MarcaLogo key={l.marca || l.cat} marca={l.marca || (acharMarca(l.desc || "") || {}).id} cat={cat} className="txn-av" />
       <span className="mid"><span className="nm">{l.desc || cat.nome}</span><span className="sb">{cat.nome} · {relativo(l.data).toLowerCase()}</span></span>
       <span className={"amt" + (l.tipo === "entrada" ? " pos" : "")}>{l.tipo === "entrada" ? "+" : "−"}<Money v={l.valor} /></span>
     </button>
@@ -2057,7 +2288,7 @@ function ContasTab({ db, act, tema }) {
             <div className="panel-head"><h3>Assinaturas</h3><span className="hint" style={{ padding: 0 }}>{brl(soma(contas.filter(c => c.assinatura), c => c.valor))}/mês · {brl(soma(contas.filter(c => c.assinatura), c => c.valor) * 12)}/ano</span></div>
             {contas.filter(c => c.assinatura).map(c => (
               <button key={c.id} className="txn" onClick={() => act.editConta(c.id)}>
-                <span className="txn-av cat" style={catVars(catDe(c.cat))}><CatIcon cat={catDe(c.cat)} /></span>
+                <MarcaLogo marca={(acharMarca(c.nome) || {}).id} cat={catDe(c.cat)} className="txn-av" />
                 <span className="mid"><span className="nm">{c.nome}</span><span className="sb">Todo dia {c.dia} · {brl(c.valor * 12)} por ano</span></span>
                 <span className="amt"><Money v={c.valor} /></span>
               </button>
@@ -2088,36 +2319,62 @@ function useContagem(alvo) {
 const quandoTxt = off => off === 2 ? "Anteontem" : off === 1 ? "Ontem" : "Hoje";
 const reais = v => (Math.round(v * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function VozBarra({ api, onSalvar, onEditar, onAtivo }) {
+// Logo de verdade da empresa (ou o ícone da categoria quando não é uma marca conhecida)
+function MarcaLogo({ marca, cat, className = "" }) {
+  const m = marcaPorId(marca);
+  const [fonte, setFonte] = useState(0);
+  if (!m || fonte > 1) return <span className={className + " cat"} style={catVars(cat)}><CatIcon cat={cat} /></span>;
+  return (
+    <span className={className + " logo"} title={m.nome}>
+      <img src={logoMarca(m, fonte)} alt={m.nome} loading="lazy" referrerPolicy="no-referrer" decoding="async"
+        onError={() => setFonte(f => f + 1)}
+        onLoad={e => { if (fonte === 0 && e.currentTarget.naturalWidth > 0 && e.currentTarget.naturalWidth <= 16) setFonte(1); }} />
+    </span>
+  );
+}
+
+function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo }) {
   const [ativo, setAtivo] = useState(false);
   const [fase, setFase] = useState("ouvindo"); // ouvindo | teclado | contando | faltando
   const [texto, setTexto] = useState("");
-  const [itens, setItens] = useState([]);
+  const [res, setRes] = useState(null);
+  const [aviso, setAviso] = useState("");
   const [conta, setConta] = useState(3);
   const tecRef = useRef(null);
   const ocioso = useRef(null);
-  const aplicar = t => { setTexto(t); setItens(interpretarVarios(t)); };
+  const T = TERMO;
+  // entende a frase: primeiro procura um paciente ("Felipe veio"), senão é gasto/entrada
+  const entender = t => {
+    const c = interpretarConsultorio(t, db);
+    const itens = interpretarVarios(t);
+    if (c && (c.ok || !itens.some(i => i.valor > 0))) return { tipo: "consult", c };
+    return { tipo: "gastos", itens };
+  };
+  const aplicar = t => { setTexto(t); setRes(entender(t)); };
   const concluir = t => {
-    aplicar(t);
+    aplicar(t); setAviso("");
     if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la)\b/.test(semAcento(t))) { fechar(); return; }
-    const its = interpretarVarios(t);
-    if (its.length && its.every(i => i.valor > 0)) { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); }
-    else { setFase("faltando"); vibrar("aviso"); }
+    const r = entender(t);
+    let ok = false, msg = "";
+    if (r.tipo === "consult") { ok = r.c.ok; if (!ok) msg = `Entendi ${primeiro(r.c.p.name)}, mas não o que aconteceu. Diga "veio", "faltou", "pagou" ou "remarca pra quinta às 15h".`; }
+    else if (!r.itens.length || !r.itens.every(i => i.valor > 0)) msg = r.itens.some(i => i.valor > 0) ? "Faltou o valor de alguma coisa." : "Não peguei o valor. Ex.: “gastei 30 no uber”.";
+    else if (!usaPessoal) msg = "Para anotar gastos, ligue o modo Pessoal em Perfil.";
+    else ok = true;
+    if (ok) { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); }
+    else { setAviso(msg); setFase("faltando"); vibrar("aviso"); }
   };
   const fala = useFalaNativa({ onParcial: aplicar, onFinal: concluir, onFalhou: () => setFase("teclado") });
-  const abrirTeclado = () => { fala.cancelar(); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
-  // Chamado direto no toque do botão (o iPhone só libera microfone e teclado dentro do toque)
+  const abrirTeclado = () => { fala.cancelar(); setAviso(""); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
+  // chamado direto no toque (o iPhone só libera microfone e teclado dentro do toque)
   const comecar = () => {
     clearTimeout(ocioso.current);
-    setTexto(""); setItens([]); setAtivo(true);
-    const usarTeclado = !SRec() || lerJSON(K_VOZ_TECLADO, false);
-    if (usarTeclado) { abrirTeclado(); return; }
+    setTexto(""); setRes(null); setAviso(""); setAtivo(true);
+    if (!SRec() || lerJSON(K_VOZ_TECLADO, false)) { abrirTeclado(); return; }
     setFase("ouvindo");
     fala.iniciar();
   };
-  const fechar = () => { fala.cancelar(); clearTimeout(ocioso.current); if (tecRef.current) tecRef.current.blur(); setAtivo(false); setFase("ouvindo"); };
-  const salvar = () => { const its = itens; fechar(); onSalvar(its); };
-  // toque no microfone com ele aceso
+  const fechar = () => { fala.cancelar(); clearTimeout(ocioso.current); if (tecRef.current) tecRef.current.blur(); setAtivo(false); setFase("ouvindo"); setAviso(""); };
+  const salvar = () => { const r = res; fechar(); if (!r) return; if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens); };
   const tocar = () => {
     if (!ativo) return comecar();
     if (fase === "contando") return salvar();
@@ -2134,44 +2391,71 @@ function VozBarra({ api, onSalvar, onEditar, onAtivo }) {
     return () => clearTimeout(t);
   }, [fase, conta]);
   useEffect(() => { if (!ativo) return; const k = e => e.key === "Escape" && fechar(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [ativo]);
-  // ditado pelo teclado: entende enquanto escreve e conclui depois de uma pausa
+  // com o teclado aberto, tudo sobe junto e fica logo acima dele (nada some lá em cima)
+  useEffect(() => {
+    const vv = window.visualViewport, raiz = document.documentElement;
+    if (!ativo || !vv) { raiz.style.removeProperty("--teclado"); return; }
+    const f = () => raiz.style.setProperty("--teclado", Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) + "px");
+    f(); vv.addEventListener("resize", f); vv.addEventListener("scroll", f);
+    return () => { vv.removeEventListener("resize", f); vv.removeEventListener("scroll", f); raiz.style.removeProperty("--teclado"); };
+  }, [ativo]);
   const digitou = e => {
     const t = e.target.value; aplicar(t);
     clearTimeout(ocioso.current);
-    if (interpretarVarios(t).some(i => i.valor > 0)) ocioso.current = setTimeout(() => concluir(t), 2600);
+    const r = entender(t);
+    if ((r.tipo === "consult" && r.c.ok) || (r.tipo === "gastos" && r.itens.some(i => i.valor > 0))) ocioso.current = setTimeout(() => concluir(t), 2600);
   };
 
-  const varios = itens.length > 1;
-  const atual = itens[itens.length - 1] || { valor: 0, cat: null, desc: "", off: 0, tipo: "saida" };
-  const valorVisto = useContagem(varios ? soma(itens, i => i.valor) : atual.valor || 0);
+  const itens = res && res.tipo === "gastos" ? res.itens.filter(i => i.valor > 0) : [];
+  const um = itens.length === 1 ? itens[0] : null;
+  const valorVisto = useContagem(itens.length ? soma(itens, i => i.valor) : 0);
+  const c = res && res.tipo === "consult" ? res.c : null;
   const est = fala.estado;
-  const temCat = atual.cat && atual.cat !== "outros" && atual.cat !== "outros-e";
+  const classe = fase === "contando" ? "pronto" : fase === "faltando" || est === "erro" ? "erro" : est;
   const status = fase === "contando" ? `Entendi · salvando em ${conta}`
-    : fase === "faltando" ? (atual.valor > 0 ? "Faltou o valor de alguma coisa" : "Não peguei o valor")
     : fase === "teclado" ? "Toque no microfone do teclado e fale"
-    : est === "erro" ? "" : est === "falando" ? "Ouvindo…" : "Pode falar";
+    : fase === "faltando" ? "Faltou algo" : est === "erro" ? "Não deu para ouvir" : est === "falando" ? "Ouvindo…" : "Pode falar";
+  const dica = `Ex.: “gastei 30 no uber”${db.patients.some(p => p.active) ? ` ou “${primeiro(db.patients.find(p => p.active).name)} veio”` : ""}`;
   return (
     <>
       <input ref={tecRef} className={"voz-tec" + (ativo && fase === "teclado" ? " on" : "")} tabIndex={ativo && fase === "teclado" ? 0 : -1} type="text" enterKeyHint="done" autoComplete="off" autoCorrect="on"
-        placeholder="Ex.: gastei 32 e 50 no mercado" aria-label="Fale ou escreva o gasto" onChange={digitou}
+        placeholder={dica.replace("Ex.: ", "").replace(/[“”]/g, "")} aria-label="Fale ou escreva" onChange={digitou}
         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(ocioso.current); if (e.target.value.trim()) concluir(e.target.value); } }} />
-      {ativo && <div className={"vozb " + (fase === "contando" ? "pronto" : fase === "faltando" || est === "erro" ? "erro" : est) + (fase === "teclado" ? " teclado" : "")} style={{ "--n": fala.nivel.toFixed(3) }} aria-live="polite">
+      {ativo && <div className={"vozb " + classe + (fase === "teclado" ? " teclado" : "")} style={{ "--n": fala.nivel.toFixed(3) }} aria-live="polite">
         <div className="vozb-sombra" aria-hidden="true"><i /><i /><i /></div>
-        <div className="vozb-conteudo">
-          {atual.valor > 0 && <div className={"vozb-valor" + (atual.tipo === "entrada" ? " in" : "")} key={varios ? "v" : atual.cat}><small>{varios ? `${itens.length} anotações · R$` : atual.tipo === "entrada" ? "+ R$" : "R$"}</small>{reais(valorVisto)}</div>}
-          {atual.valor > 0 && !varios && <div className="vozb-chips">
-            <span style={catVars(catDe(atual.cat))}><i className="ci"><CatIcon cat={catDe(atual.cat)} /></i>{atual.desc || catDe(atual.cat).nome}</span>
-            <span>{quandoTxt(atual.off)}</span>
-            {temCat || atual.tipo === "entrada" ? <span>{atual.tipo === "entrada" ? "Entrada" : "Gasto"}</span> : null}
-          </div>}
-          {varios && <div className="vozb-lista">{itens.map((it, i) => <span key={i}>{it.desc || catDe(it.cat).nome} <b>{brlReal(it.valor)}</b></span>)}</div>}
-          <p className="vozb-fala">{texto ? texto : est === "erro" ? fala.erro : fase === "teclado" ? "" : "Diga o valor e onde foi"}</p>
-          {status && <div className="vozb-status">{fase !== "contando" && fase !== "faltando" && est !== "erro" && <i className="vozb-onda"><b /><b /><b /><b /></i>}{status}</div>}
+        <div className="vozb-doca">
+          <div className="vozb-status">{fase !== "contando" && fase !== "faltando" && est !== "erro" && <i className="vozb-onda"><b /><b /><b /><b /></i>}{status}</div>
+          <p className={"vozb-fala" + (texto ? "" : " vazio")}>{texto || (est === "erro" ? fala.erro : fase === "teclado" ? "" : dica)}</p>
+
+          {itens.length > 0 && (
+            <div className="vozb-card">
+              {itens.slice(0, 3).map((it, i) => (
+                <div key={i} className="vozb-linha">
+                  <MarcaLogo key={it.marca || it.cat} marca={it.marca} cat={catDe(it.cat)} className="vozb-ic" />
+                  <span className="vozb-txt"><b>{it.desc || catDe(it.cat).nome}</b><small>{catDe(it.cat).nome} · {quandoTxt(it.off)}{it.tipo === "entrada" ? " · entrada" : ""}</small></span>
+                  <b className={"vozb-v" + (it.tipo === "entrada" ? " in" : "")}>{it.tipo === "entrada" ? "+" : ""}{um ? `R$ ${reais(valorVisto)}` : brlReal(it.valor)}</b>
+                </div>
+              ))}
+              {itens.length > 3 && <div className="vozb-mais">+ {itens.length - 3} · total {brlReal(soma(itens, i => i.valor))}</div>}
+              {itens.length > 1 && itens.length <= 3 && <div className="vozb-mais">Total {brlReal(soma(itens, i => i.valor))}</div>}
+            </div>
+          )}
+          {c && (
+            <div className="vozb-card">
+              <div className="vozb-linha">
+                <span className="vozb-ic pac" style={corVars(c.p)}>{c.p.foto ? <img src={c.p.foto} alt="" /> : iniciais(c.p.name)}</span>
+                <span className="vozb-txt"><b>{c.p.name}</b><small>{textoAcao(c, T)}</small></span>
+                {c.ok && c.acao !== "remarcar" && <span className={"chip " + (c.acao === "falta" ? "rose" : "mint")}>{c.acao === "falta" ? "Falta" : c.acao === "pagou" ? "Pago" : "Sessão"}</span>}
+              </div>
+            </div>
+          )}
+          {aviso && <div className="vozb-aviso"><I.alert /><span>{aviso}</span></div>}
+
           <div className="vozb-acoes">
-            {fase === "contando" && <button className="pill-btn forte" onClick={salvar} style={{ "--k": conta / 3 }}><I.check /> Salvar agora</button>}
-            {fase === "contando" && itens.length === 1 && <button className="pill-btn" onClick={() => { const it = itens[0]; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
+            {fase === "contando" && <button className="pill-btn forte" onClick={salvar} style={{ "--k": conta / 3 }}><I.check /> Salvar</button>}
+            {fase === "contando" && um && <button className="pill-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
             {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn forte" onClick={comecar}><I.mic /> Falar de novo</button>}
-            {(est === "erro" || fase === "faltando") && fase !== "teclado" && <button className="pill-btn" onClick={abrirTeclado}>Usar o teclado</button>}
+            {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn" onClick={abrirTeclado}>Teclado</button>}
             <button className="pill-btn" onClick={fechar}>Cancelar</button>
           </div>
         </div>
@@ -3053,6 +3337,26 @@ async function exportarMes(db, chave, act) {
 
 // Instalar na tela inicial: Android/PC usam o pedido do navegador; iPhone precisa do menu Compartilhar
 let pedidoInstalar = null;
+// Aviso discreto no topo quando o app está aberto no navegador e não instalado
+function DicaInstalar() {
+  const [fechada, setFechada] = useState(() => lerJSON("agenda-dica-instalar", false) || appInstalado());
+  const [pode, setPode] = useState(!!pedidoInstalar);
+  useEffect(() => { const f = () => setPode(true); window.addEventListener("pode-instalar", f); return () => window.removeEventListener("pode-instalar", f); }, []);
+  if (fechada || (!ehIOS() && !pode)) return null;
+  const fechar = () => { gravar("agenda-dica-instalar", true); setFechada(true); };
+  return (
+    <div className="dica-instalar">
+      <img src={`${BASE}icons/icon-192.png`} alt="" />
+      <div>
+        <b>Instale o app</b>
+        {ehIOS() ? <span>Toque em <I.share /> Compartilhar e depois em <b>Adicionar à Tela de Início</b>. Abre em tela cheia, com avisos.</span>
+          : <span>Fica na tela inicial, abre em tela cheia e funciona sem internet.</span>}
+        {!ehIOS() && <button className="pill-btn forte" onClick={async () => { pedidoInstalar.prompt(); await pedidoInstalar.userChoice; pedidoInstalar = null; fechar(); }}>Instalar</button>}
+      </div>
+      <button className="icon-btn" onClick={fechar} aria-label="Agora não"><I.x /></button>
+    </div>
+  );
+}
 if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); pedidoInstalar = e; window.dispatchEvent(new Event("pode-instalar")); });
 }
@@ -3201,6 +3505,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const [meusFundos, setMeusFundos] = useState([]);
   const [push, setPush] = useState(() => pushLigado());
   const [vozAtiva, setVozAtiva] = useState(false);
+  // Barra de cima que aparece quando a página rola
+  const [rolou, setRolou] = useState(false);
+  useEffect(() => {
+    const f = () => setRolou(window.scrollY > 72);
+    f(); window.addEventListener("scroll", f, { passive: true });
+    return () => window.removeEventListener("scroll", f);
+  }, []);
   const vozApi = useRef({});
   CLIMA = clima;
   const tRef = useRef(null);
@@ -3332,8 +3643,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
 
   const act = {
     toast: m => notify(m),
-    setTab: t => { setTab(t); rolarTopo(); },
-    setModo: m => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(m === "pessoal" ? "p-home" : "home"); rolarTopo(); },
+    setTab: t => comTransicao(() => { setTab(t); rolarTopo(); }),
+    setModo: m => comTransicao(() => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(m === "pessoal" ? "p-home" : "home"); rolarTopo(); }),
     toggleOculto: () => setOculto(o => !o),
     testarAviso: async (atraso = 0) => {
       // pede a permissão na hora do toque (o navegador só deixa pedir assim)
@@ -3373,8 +3684,28 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     },
     setServidor: url => { gravar(K_PUSH_URL, url.trim()); },
     falarGasto: () => { if (sheet) close(); vozApi.current.comecar && vozApi.current.comecar(); },
+    comandoVoz: c => {
+      const p = db.patients.find(x => x.id === c.p.id); if (!p) return;
+      const hoje = todayISO(), nome = primeiro(p.name);
+      if (c.acao === "veio" || c.acao === "falta") {
+        if (p.nextDate > hoje) { vibrar("aviso"); notify(`A próxima sessão de ${nome} é só ${diaCurto(p.nextDate)}`); return; }
+        registrarE(p.id, { status: c.acao === "veio" ? "done" : "missed", nextDate: addDays(p.nextDate, p.freq), paidNow: c.acao === "veio" && !!c.pago });
+        return;
+      }
+      if (c.acao === "pagou") {
+        const ch = db.charges.filter(x => x.patientId === p.id && !x.paid).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+        if (!ch) { vibrar("aviso"); notify(`${nome} não tem cobrança em aberto`); return; }
+        act.setPago(ch.id, true); notify(`${nome} pagou ${brlReal(ch.amount)}`, () => act.setPago(ch.id, false));
+        return;
+      }
+      if (c.acao === "remarcar") {
+        const antes = { nextDate: p.nextDate, time: p.time };
+        setDb(d => ({ ...d, patients: d.patients.map(x => x.id === p.id ? { ...x, nextDate: c.data, time: c.hora } : x) }));
+        vibrar("ok"); notify(`${nome}: ${diaCurto(c.data)} às ${c.hora}`, () => setDb(d => ({ ...d, patients: d.patients.map(x => x.id === p.id ? { ...x, ...antes } : x) })));
+      }
+    },
     salvarVoz: itens => {
-      const novos = itens.map(it => ({ id: uid(), tipo: it.tipo, valor: it.valor, cat: it.cat, desc: it.desc || "", data: addDays(todayISO(), -(it.off || 0)) }));
+      const novos = itens.map(it => ({ id: uid(), tipo: it.tipo, valor: it.valor, cat: it.cat, desc: it.desc || "", marca: it.marca || null, data: addDays(todayISO(), -(it.off || 0)) }));
       const ids = new Set(novos.map(n => n.id));
       setP(P => ({ ...P, lanc: [...P.lanc, ...novos] }));
       close(); vibrar("ok");
@@ -3429,7 +3760,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     // Pessoal
     novoLanc: tipo => setSheet({ type: "lanc", tipo }),
     editLanc: id => setSheet({ type: "lanc", id }),
-    salvarLanc: l => {
+    salvarLanc: l0 => {
+      const mm = acharMarca(l0.desc || ""); const l = { ...l0, marca: mm ? mm.id : null };
       const novoL = !db.pessoal.lanc.some(x => x.id === l.id);
       setP(P => ({ ...P, lanc: novoL ? [...P.lanc, l] : P.lanc.map(x => x.id === l.id ? l : x) }));
       vibrar("ok"); close();
@@ -3510,6 +3842,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       </aside>
 
       <main className="app">
+        <DicaInstalar />
         {tabEf === "home" && <HomeTab db={db} conta={conta} now={now} act={act} tema={tema} />}
         {tabEf === "agenda" && <AgendaTab db={db} now={now} act={act} tema={tema} />}
         {tabEf === "pac" && <PatientsTab db={db} act={act} tema={tema} vista={pacVista} setVista={setPacVista} />}
@@ -3519,7 +3852,17 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         {tabEf === "p-contas" && <ContasTab db={db} act={act} tema={tema} />}
       </main>
 
-      {usaPessoal && <VozBarra api={vozApi} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />}
+      <div className={"topo-fixo" + (rolou && !sheet ? " on" : "")} aria-hidden={!(rolou && !sheet)} inert={rolou && !sheet ? undefined : ""}>
+        <div className="topo-fixo-in">
+          <Avatar conta={conta} onClick={act.openSettings} label="Sua conta" />
+          <button className="topo-fixo-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{tabEf === "home" || tabEf === "p-home" ? primeiro(conta.nome) : (abas.find(a => a.id === tabEf) || {}).l}</button>
+          <button className="icon-btn redondo" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>
+          {usaPessoal
+            ? <button className="topo-fixo-pill" onClick={() => act.setModo(modoEf === "pessoal" ? "consultorio" : "pessoal")} aria-label="Trocar de modo">{modoEf === "pessoal" ? "Pessoal" : "Consultório"}<I.repeat /></button>
+            : <button className="icon-btn redondo" onClick={act.trocarTema} aria-label="Trocar tema">{tema.escuro ? <I.sun /> : <I.moon />}</button>}
+        </div>
+      </div>
+      <VozBarra api={vozApi} db={db} usaPessoal={usaPessoal} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onComando={act.comandoVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />
       <nav className="nav" aria-label="Seções">
         <div className="nav-pill">
           {abas.map(a => (
@@ -3528,7 +3871,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
             </button>
           ))}
         </div>
-        {usaPessoal && <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva ? "Terminar" : "Falar um gasto"}>{vozAtiva === "contando" ? <I.check /> : vozAtiva ? <span className="nav-mic-onda"><b /><b /><b /></span> : <I.mic />}</button>}
+        {<button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva ? "Terminar" : "Falar"}>{vozAtiva === "contando" ? <I.check /> : vozAtiva ? <span className="nav-mic-onda"><b /><b /><b /></span> : <I.mic />}</button>}
       </nav>
 
       {sheet && sheet.type === "session" && <SessionSheet key={sheet.item.patient.id + sheet.item.date + sheet.item.kind} db={db} item={sheet.item} onClose={close} act={act} />}
