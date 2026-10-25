@@ -1052,20 +1052,29 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
   .ob-foot .btn.text { height: 36px; }
 }
 
-/* ===== Barra de baixo: preta, colada no pé da tela, sem vidro e sem flutuar =====
-   Um fundo sólido só (nada de desfoque, sombra ou animação ao rolar), então o celular desenha ela uma vez e pronto. */
-:root { --barra-h: 58px; }
-.nav { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; background: #000; border-top: 1px solid rgba(255, 255, 255, .08); padding: 0 max(4px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(4px, env(safe-area-inset-left, 0px)); transform: translateZ(0); contain: layout paint style; }
+/* ===== Barra de baixo no estilo do app do Xbox =====
+   Vidro escuro com um leve tom roxo/azul, só ícones (sem texto), a aba aberta fica branca e cheia,
+   as outras em cinza só no contorno, e o contador é um quadradinho verde no canto do ícone. */
+:root { --barra-h: 62px; }
+.nav { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0;
+  background:
+    radial-gradient(120% 140% at 0% 100%, rgba(92, 64, 140, .38), transparent 60%),
+    radial-gradient(120% 140% at 100% 100%, rgba(58, 74, 128, .34), transparent 60%),
+    linear-gradient(to bottom, rgba(34, 36, 48, .86), rgba(42, 40, 60, .94));
+  -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 -10px 30px rgba(0, 0, 0, .28);
+  padding: 0 max(8px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(8px, env(safe-area-inset-left, 0px)); transform: translateZ(0); }
 .nav-in { max-width: 560px; height: var(--barra-h); margin: 0 auto; display: flex; align-items: stretch; }
-.nv, .nav-mic { flex: 1 1 0; min-width: 0; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #6B707C; font-size: 10.5px; font-weight: 700; letter-spacing: .01em; line-height: 1; transition: color .12s ease, opacity .08s; }
-.nv svg { width: 23px; height: 23px; flex: none; }
-.nv .lb, .nav-mic .lb { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.nv, .nav-mic { flex: 1 1 0; min-width: 0; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9EA2AE; transition: color .12s ease, opacity .08s, transform .12s ease; }
+.nv-ic { position: relative; display: grid; place-items: center; }
+.nv svg { width: 28px; height: 28px; flex: none; }
+.nv .lb, .nav-mic .lb { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .nv.on, .nav-mic.on { color: #fff; }
-.nv:active, .nav-mic:active { opacity: .55; transition: none; }
+.nv:active, .nav-mic:active { opacity: .6; transform: scale(.92); transition: none; }
 .badge { min-width: 16px; height: 16px; border-radius: 8px; background: var(--amber-solid); color: #1d1406; font-size: 10px; font-weight: 800; display: grid; place-items: center; padding: 0 4px; line-height: 1; }
-.nav .badge { position: absolute; top: 6px; left: calc(50% + 6px); }
+.nav .badge { position: absolute; top: -9px; left: calc(100% - 9px); min-width: 20px; height: 20px; border-radius: 5px; padding: 0 5px; background: #2E8B3A; color: #fff; font-size: 12.5px; font-weight: 800; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); }
 /* a Bolinha vira só mais um ícone da barra, parada (sem flutuar) mas ainda pisca e reage à voz */
-.nav-mic .bolinha { width: 30px; height: 30px; margin: -3px 0 -4px; }
+.nav-mic .bolinha { width: 32px; height: 32px; margin: 0; }
 .nav-mic .b-sombra { display: none; }
 .nav-mic .bolinha:not(.feliz) .b-corpo { animation: none; }
 .nav-mic.on .bolinha { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--mode) 70%, transparent)); }
@@ -1077,7 +1086,7 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 }
 /* No computador a barra lateral faz o papel das abas: fica só a Bolinha, no canto */
 @media (min-width: 900px) {
-  .nav { left: auto; right: 28px; bottom: 28px; background: none; border: 0; padding: 0; contain: none; }
+  .nav { left: auto; right: 28px; bottom: 28px; background: none; border: 0; padding: 0; contain: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
   .nav-in { height: auto; }
   .nav .nv, .nav-mic .lb { display: none; }
   .nav-mic { flex: none; width: 72px; height: 72px; }
