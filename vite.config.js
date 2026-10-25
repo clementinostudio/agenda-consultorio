@@ -44,7 +44,7 @@ export default defineConfig({
           { src: "screenshots/pessoal.png", sizes: "780x1688", type: "image/png", form_factor: "narrow", label: "Gastos e contas da casa" },
           { src: "screenshots/computador.png", sizes: "1280x800", type: "image/png", form_factor: "wide", label: "No computador" },
         ],
-        background_color: "#0A1240",
+        background_color: "#070B1A",
         theme_color: "#0A0C11",
         icons: [
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
