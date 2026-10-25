@@ -12,6 +12,8 @@ export default defineConfig({
   // Duas páginas: o app (index.html) e a página de apresentação (sobre/index.html)
   build: {
     rollupOptions: {
+      // O React fica num arquivo separado: quase nunca muda, então o celular não precisa baixar de novo a cada atualização
+      output: { manualChunks: id => (/node_modules\/(react|react-dom|scheduler)\//.test(id) ? "react" : undefined) },
       input: {
         app: fileURLToPath(new URL("./index.html", import.meta.url)),
         sobre: fileURLToPath(new URL("./sobre/index.html", import.meta.url)),
@@ -21,7 +23,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate", // atualiza sozinho quando você publica uma versão nova
+      registerType: "prompt", // versão nova: o app mostra o aviso "Atualizar" (veja src/avisos.jsx)
       includeAssets: ["icons/favicon.svg", "icons/apple-touch-icon.png", "fundos/*.jpg"],
       manifest: {
         id: "agenda-do-consultorio",
@@ -60,7 +62,7 @@ export default defineConfig({
       },
       workbox: {
         // Guarda o app para abrir offline (só as fontes .woff2 dos alfabetos latinos, para ficar leve)
-        globPatterns: ["**/*.{js,css,html,svg,png,jpg,woff2}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,jpg,webp,woff2}"],
         globIgnores: ["**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/splash/**", "**/screenshots/**", "**/landing/**"],
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/\/sobre\//], // a página de apresentação não é o app

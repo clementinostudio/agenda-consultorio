@@ -1,11 +1,14 @@
 /*
   Alvena (antes: Agenda do Consultório)
   -------------------------------------
-  O app inteiro está neste arquivo, separado em seções numeradas (procure por "====").
+  Quase todo o app está neste arquivo, separado em seções numeradas (procure por "====").
+  Telas pouco usadas (perfil, painéis, cadastro inicial, recorte de foto e o modo Pessoal) ficam em src/telas/
+  e só carregam quando são abertas: assim o app abre mais rápido.
   Para mudar textos, valores padrão, cores de paciente ou categorias, comece pela seção 1 (CONFIGURAÇÃO).
   Os estilos ficam em src/styles.css e as imagens de fundo em public/fundos/.
 */
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
+import PORQUINHO from "./assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -107,6 +110,7 @@ const imagemFundo = (f, meus = []) => !f ? null : f.id === "meu" ? f.img : f.id.
 
 // Vibração do celular (Android; o iPhone não deixa sites vibrarem)
 let VIBRAR = true;
+const ajustarVibrar = v => { VIBRAR = v; };
 const VIB = { toque: 8, ok: [14, 50, 14], aviso: [28, 40, 28], erro: [60, 40, 60] };
 // iPhone: o Safari não tem vibração, mas dá um toquinho (háptico) quando um interruptor nativo muda.
 // O app guarda um interruptor invisível e "aperta" ele no toque (funciona a partir do iOS 18).
@@ -134,12 +138,20 @@ const vibrar = (tipo = "toque") => {
 // A área que rola fica dentro do app (assim a barra de baixo nunca sai do lugar)
 const rolarTopo = () => window.scrollTo(0, 0);
 // Troca de tela com animação suave, como app nativo (View Transitions; onde não existe, troca direto)
-const comTransicao = fn => {
+// Troca de tela com animação nativa do navegador. "tipo" diz para onde a tela desliza:
+// "frente" (aba que fica depois), "tras" (aba que fica antes) ou "modo" (Consultório <-> Pessoal)
+const comTransicao = (fn, tipo = "frente") => {
   try {
-    if (document.startViewTransition && !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) { document.startViewTransition(() => flushSync(fn)); return; }
+    if (document.startViewTransition && !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+      document.documentElement.dataset.vt = tipo;
+      const t = document.startViewTransition(() => flushSync(fn));
+      t.finished.finally(() => { delete document.documentElement.dataset.vt; });
+      return;
+    }
   } catch (e) {}
   fn();
 };
+const ORDEM_ABAS = ["home", "agenda", "pac", "fin", "p-home", "p-gastos", "p-contas"];
 const brlReal = v => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brl = v => ESCONDER ? "R$ •••" : brlReal(v);
 const num = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
@@ -351,53 +363,8 @@ function situacaoConta(conta, chave) {
   if (d === 1) return { st: "breve", txt: "Vence amanhã" };
   return { st: d <= 5 ? "breve" : "ok", txt: `Vence em ${d} dias` };
 }
-function resumoPessoal(db, chave) {
-  const P = db.pessoal;
-  const saidas = P.lanc.filter(l => l.tipo === "saida" && l.data.startsWith(chave));
-  const entradas = P.lanc.filter(l => l.tipo === "entrada" && l.data.startsWith(chave));
-  const consult = P.incluirConsultorio ? liquidoMes(db, chave) : 0;
-  const pagas = P.contas.filter(c => c.pagas && c.pagas[chave]);
-  const abertas = P.contas.filter(c => !(c.pagas && c.pagas[chave]));
-  const entrou = soma(entradas, l => l.valor) + consult;
-  const saiu = soma(saidas, l => l.valor) + soma(pagas, c => c.valor);
-  const porCat = {};
-  saidas.forEach(l => { porCat[l.cat] = (porCat[l.cat] || 0) + l.valor; });
-  pagas.forEach(c => { porCat[c.cat] = (porCat[c.cat] || 0) + c.valor; });
-  return { saidas, entradas, consult, pagas, abertas, entrou, saiu, sobra: entrou - saiu, aPagar: soma(abertas, c => c.valor), porCat };
-}
+
 // Saldo acumulado dia a dia (para o gráfico)
-function serieSaldo(db, ini, fim) {
-  const P = db.pessoal, out = [];
-  let acc = 0;
-  for (let d = ini; d <= fim; d = addDays(d, 1)) {
-    acc += soma(P.lanc.filter(l => l.data === d), l => l.tipo === "entrada" ? l.valor : -l.valor);
-    if (P.incluirConsultorio) acc += liquidoDia(db, d);
-    acc -= soma(P.contas.filter(c => c.pagas && Object.values(c.pagas).includes(d)), c => c.valor);
-    out.push(acc);
-  }
-  return out;
-}
-function conversaPessoal(db, act) {
-  const t = todayISO(), chave = t.slice(0, 7), P = db.pessoal;
-  const falas = [];
-  if (P.lanc.length === 0 && P.contas.length === 0) {
-    falas.push({ txt: <>Aqui você anota o que gasta e as contas da casa. Comece por uma conta fixa, como aluguel ou luz: eu aviso antes de vencer.</>, acao: { l: "Adicionar conta", ic: <I.plus />, fn: () => act.novaConta() } });
-    return falas;
-  }
-  P.contas.forEach(c => {
-    const s = situacaoConta(c, chave);
-    if (s.st === "atrasada" || s.st === "hoje" || (s.st === "breve" && diffDias(t, vencimento(c, chave)) <= 1)) {
-      falas.push({ txt: s.st === "atrasada" ? <>A conta de <b>{c.nome}</b> {s.txt.toLowerCase()} e ainda não está marcada como paga.</> : <><b>{c.nome}</b> {s.txt.toLowerCase()}: {brl(c.valor)}.</>, acao: { l: "Já paguei", ic: <I.check />, fn: () => act.pagarConta(c.id) } });
-    }
-  });
-  const r = resumoPessoal(db, chave);
-  falas.push({ txt: <>Neste mês entrou <b>{brl(r.entrou)}</b>{r.consult > 0 ? <> (sendo {brl(r.consult)} do consultório)</> : null} e saiu <b>{brl(r.saiu)}</b>. {r.sobra >= 0 ? <>Sobram {brl(r.sobra)}.</> : <>Está {brl(-r.sobra)} no vermelho.</>}</> });
-  const top = Object.entries(r.porCat).sort((a, b) => b[1] - a[1])[0];
-  if (top) falas.push({ txt: <>O que mais pesou até agora foi <b>{catDe(top[0]).nome}</b>: {brl(top[1])}.</>, acao: { l: "Ver gastos", ic: <I.chart />, fn: () => act.setTab("p-gastos") } });
-  const ass = P.contas.filter(c => c.assinatura);
-  if (ass.length) falas.push({ txt: <>Suas {ass.length} assinaturas somam {brl(soma(ass, c => c.valor))} por mês, ou {brl(soma(ass, c => c.valor) * 12)} por ano.</>, acao: { l: "Ver assinaturas", ic: <I.bill />, fn: () => act.setTab("p-contas") } });
-  return falas.slice(0, ESTILO === "curto" ? 2 : 4);
-}
 
 /* =========================================================
    4b. FERIADOS, CLIMA, VOZ E AVISOS
@@ -1186,7 +1153,6 @@ function gerarAvisos(db, av, usaPessoal) {
   return lista.sort((a, b) => a.t - b.t).slice(0, 200);
 }
 
-
 /* =========================================================
    5. DADOS DE EXEMPLO
    ========================================================= */
@@ -1388,74 +1354,7 @@ const lerArquivo = file => new Promise((res, rej) => { const r = new FileReader(
 
 // Recortar imagem: arraste para mover, pinça (dois dedos), rodinha do mouse ou a barra para dar zoom.
 // forma "circulo" = foto de perfil; forma "tela" = fundo no formato da tela deste aparelho.
-function Cropper({ src, forma = "circulo", titulo, onDone, onCancel }) {
-  const imgRef = useRef(null), frameRef = useRef(null);
-  const ptrs = useRef(new Map()), pinca = useRef(null);
-  const [nat, setNat] = useState(null);
-  const [z, setZ] = useState(1);
-  const [o, setO] = useState({ x: 0, y: 0 });
-  const [erro, setErro] = useState("");
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let W, H;
-  if (forma === "circulo") { W = H = Math.min(300, vw - 64); }
-  else { const r = vh / vw; H = Math.min(vh * 0.56, 480); W = H / r; if (W > vw - 48) { W = vw - 48; H = W * r; } }
-  useEffect(() => { const im = new Image(); im.onload = () => { imgRef.current = im; setNat({ w: im.naturalWidth, h: im.naturalHeight }); }; im.onerror = () => setErro("Não consegui abrir essa imagem."); im.src = src; }, [src]);
-  const cover = nat ? Math.max(W / nat.w, H / nat.h) : 1;
-  const prender = (x, y, zz) => { if (!nat) return { x, y }; const s = cover * zz, mx = (nat.w * s - W) / 2, my = (nat.h * s - H) / 2; return { x: Math.max(-mx, Math.min(mx, x)), y: Math.max(-my, Math.min(my, y)) }; };
-  const mudarZoom = nz => { nz = Math.max(1, Math.min(5, nz)); setZ(nz); setO(c => prender(c.x, c.y, nz)); };
-  // rodinha do mouse (no computador)
-  useEffect(() => {
-    const el = frameRef.current; if (!el) return;
-    const f = e => { e.preventDefault(); setZ(zz => { const nz = Math.max(1, Math.min(5, zz * (e.deltaY < 0 ? 1.08 : 1 / 1.08))); setO(c => prender(c.x, c.y, nz)); return nz; }); };
-    el.addEventListener("wheel", f, { passive: false });
-    return () => el.removeEventListener("wheel", f);
-  });
-  const dist = () => { const [a, b] = [...ptrs.current.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
-  const down = e => { e.currentTarget.setPointerCapture(e.pointerId); ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (ptrs.current.size === 2) pinca.current = { d: dist(), z }; };
-  const move = e => {
-    const prev = ptrs.current.get(e.pointerId); if (!prev) return;
-    ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (ptrs.current.size === 1) setO(c => prender(c.x + e.clientX - prev.x, c.y + e.clientY - prev.y, z));
-    else if (ptrs.current.size === 2 && pinca.current) mudarZoom(pinca.current.z * dist() / pinca.current.d);
-  };
-  const up = e => { ptrs.current.delete(e.pointerId); if (ptrs.current.size < 2) pinca.current = null; };
-  const s = cover * z, dw = nat ? nat.w * s : 0, dh = nat ? nat.h * s : 0;
-  const left = (W - dw) / 2 + o.x, top = (H - dh) / 2 + o.y;
-  const usar = () => {
-    const im = imgRef.current; if (!im) return;
-    const outW = forma === "circulo" ? 400 : 1080, outH = Math.round(outW * H / W);
-    const c = document.createElement("canvas"); c.width = outW; c.height = outH;
-    c.getContext("2d").drawImage(im, -left / s, -top / s, W / s, H / s, 0, 0, outW, outH);
-    vibrar("ok");
-    onDone(c.toDataURL("image/jpeg", forma === "circulo" ? .86 : .82));
-  };
-  // Vai direto para o <body>: assim aparece por cima de tudo, mesmo aberto de dentro de um painel
-  return createPortal(
-    <div className="crop" role="dialog" aria-modal="true" aria-label={titulo || "Ajustar imagem"}>
-      <div className="crop-top"><button className="icon-btn" onClick={onCancel} aria-label="Cancelar"><I.x /></button><b>{titulo || "Ajustar imagem"}</b><span style={{ width: 42 }} /></div>
-      <div className="crop-mid">
-        <div ref={frameRef} className={"crop-frame" + (forma === "circulo" ? " circ" : "")} style={{ width: W, height: H }}
-          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
-          {nat && <img src={src} alt="" draggable="false" style={{ width: dw, height: dh, left, top }} />}
-          <span className="crop-grid" aria-hidden="true" />
-        </div>
-        <p className="crop-dica">{erro || "Arraste para posicionar. Use dois dedos ou a barra para dar zoom."}</p>
-      </div>
-      <div className="crop-bot">
-        <div className="crop-zoom">
-          <button type="button" aria-label="Diminuir zoom" onClick={() => mudarZoom(z / 1.2)}><I.minus /></button>
-          <input type="range" min="1" max="5" step="0.01" value={z} onChange={e => mudarZoom(Number(e.target.value))} aria-label="Zoom" />
-          <button type="button" aria-label="Aumentar zoom" onClick={() => mudarZoom(z * 1.2)}><I.plus /></button>
-        </div>
-        <div className="btn-row">
-          <button className="btn ghost" onClick={onCancel}>Cancelar</button>
-          <button className="btn" onClick={usar} disabled={!nat}><I.check /> Usar</button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
+const Cropper = lazy(() => import("./telas/recorte.jsx").then(m => ({ default: m.Cropper })));
 
 function PhotoPicker({ nome, foto, onChange }) {
   const [erro, setErro] = useState("");
@@ -1476,7 +1375,7 @@ function PhotoPicker({ nome, foto, onChange }) {
         {foto && <button type="button" className="rm" onClick={() => onChange(null)}>Remover foto</button>}
         {erro && <span className="error" style={{ padding: 0 }}>{erro}</span>}
       </div>
-      {recortar && <Cropper src={recortar} forma="circulo" titulo="Foto de perfil" onCancel={() => setRecortar(null)} onDone={url => { onChange(url); setRecortar(null); }} />}
+      {recortar && <Suspense fallback={null}><Cropper src={recortar} forma="circulo" titulo="Foto de perfil" onCancel={() => setRecortar(null)} onDone={url => { onChange(url); setRecortar(null); }} /></Suspense>}
     </div>
   );
 }
@@ -2269,6 +2168,27 @@ function PatientForm({ initial, total = 0, perfil, pre, onSave, onClose }) {
   );
 }
 
+/* Porquinho do card "Guarde R$": a imagem sai pela borda de cima do card e uma moeda dourada
+   cai na fenda de tempos em tempos (o porquinho dá um pulinho quando ela entra). */
+const Porquinho = () => (
+  <div className="porco" aria-hidden="true">
+    <svg className="moeda" viewBox="0 0 64 68">
+      <defs>
+        <radialGradient id="mo-face" cx="36%" cy="30%" r="78%"><stop offset="0" stopColor="#FFF6C4" /><stop offset=".32" stopColor="#FFD75E" /><stop offset=".72" stopColor="#F3AC23" /><stop offset="1" stopColor="#C77D0B" /></radialGradient>
+        <linearGradient id="mo-aro" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#E49A16" /><stop offset="1" stopColor="#A7650A" /></linearGradient>
+      </defs>
+      <circle cx="32" cy="35" r="29" fill="url(#mo-aro)" />
+      <circle cx="32" cy="31" r="29" fill="url(#mo-face)" />
+      <circle cx="32" cy="31" r="21.5" fill="none" stroke="#D9900F" strokeWidth="2.6" opacity=".85" />
+      <circle cx="32" cy="31.8" r="21.5" fill="none" stroke="#FFF1B3" strokeWidth="1.2" opacity=".7" />
+      <path d="M32 19.5l3.3 6.9 7.5 1-5.5 5.2 1.4 7.4L32 36.4l-6.7 3.6 1.4-7.4-5.5-5.2 7.5-1z" fill="#E9A21C" />
+      <path d="M32 18.6l3.3 6.9 7.5 1-5.5 5.2 1.4 7.4L32 35.5l-6.7 3.6 1.4-7.4-5.5-5.2 7.5-1z" fill="#FFE07A" />
+      <ellipse cx="22" cy="17" rx="7" ry="3.2" fill="#fff" opacity=".55" transform="rotate(-32 22 17)" />
+    </svg>
+    <img src={PORQUINHO} alt="" width="380" height="389" decoding="async" />
+  </div>
+);
+
 /* =========================================================
    12. CONSULTÓRIO · FINANÇAS
    ========================================================= */
@@ -2358,9 +2278,9 @@ function FinanceTab({ db, act, tema, meta }) {
             </div>
           </section>
           {PERFIL.reserva > 0 && liq > 0 && (
-            <div className="reserve">
-              <span className="ic"><I.piggy /></span>
+            <div className="reserve com-porco">
               <div style={{ minWidth: 0 }}><b>Guarde {brl(liq * PERFIL.reserva / 100)}</b><span>Para o imposto deste mês ({String(PERFIL.reserva).replace(".", ",")}% do líquido). É uma estimativa simples: confirme com seu contador.</span></div>
+              <Porquinho />
             </div>
           )}
           <div className="small-acts">
@@ -2444,197 +2364,12 @@ function ChargeSheet({ db, cid, fresh, nomeProf, onClose, act }) {
 /* =========================================================
    13. PESSOAL · INÍCIO, GASTOS E CONTAS
    ========================================================= */
-function LancRow({ l, act }) {
-  const cat = catDe(l.cat);
-  return (
-    <button className="txn" onClick={() => act.editLanc(l.id)}>
-      <MarcaLogo key={l.marca || l.cat} marca={l.marca || (acharMarca(l.desc || "") || {}).id} cat={cat} className="txn-av" />
-      <span className="mid"><span className="nm">{l.desc || cat.nome}</span><span className="sb">{cat.nome} · {relativo(l.data).toLowerCase()}</span></span>
-      <span className={"amt" + (l.tipo === "entrada" ? " pos" : "")}>{l.tipo === "entrada" ? "+" : "−"}<Money v={l.valor} /></span>
-    </button>
-  );
-}
 
-function BillRow({ c, chave, act }) {
-  const s = situacaoConta(c, chave), cat = catDe(c.cat);
-  const chip = s.st === "paga" ? "mint" : s.st === "atrasada" ? "rose" : s.st === "hoje" || s.st === "breve" ? "amber" : "ghost";
-  return (
-    <div className="txn">
-      <CalBadge iso={vencimento(c, chave)} />
-      <button className="mid" style={{ textAlign: "left" }} onClick={() => act.editConta(c.id)}>
-        <span className="nm">{c.nome}</span>
-        <span className="sb"><span className={"chip " + chip}>{s.txt}</span><span>{cat.nome}</span></span>
-      </button>
-      <span className="amt"><Money v={c.valor} /></span>
-      <button className={"box " + (s.st === "paga" ? "done" : s.st === "atrasada" || s.st === "hoje" ? "late" : "up")} onClick={() => s.st === "paga" ? act.despagarConta(c.id) : act.pagarConta(c.id)} aria-label={s.st === "paga" ? `Desmarcar ${c.nome}` : `Marcar ${c.nome} como paga`}>
-        {s.st === "paga" && <I.check />}
-      </button>
-    </div>
-  );
-}
+const PessoalHome = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.PessoalHome })));
 
-function PessoalHome({ db, conta, now, act, tema }) {
-  const t = todayISO(), chave = t.slice(0, 7);
-  const [rng, setRng] = useState("mes");
-  const r = resumoPessoal(db, chave);
-  const falas = conversaPessoal(db, act);
-  const ini = rng === "7" ? addDays(t, -6) : rng === "30" ? addDays(t, -29) : `${chave}-01`;
-  const serie = serieSaldo(db, ini, t);
-  const saldo = serie.length ? serie[serie.length - 1] : 0;
-  const proximas = db.pessoal.contas.filter(c => !(c.pagas && c.pagas[chave])).sort((a, b) => a.dia - b.dia).slice(0, 4);
-  const ultimos = [...db.pessoal.lanc].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 5);
-  const d = new Date();
-  const rotulo = rng === "mes" ? `Sobra de ${MES_LONGO[d.getMonth()]}` : `Saldo dos últimos ${rng} dias`;
-  return (
-    <div className="page">
-      <HelloRow conta={conta} act={act} tema={tema} modo="pessoal" />
-      <h1 className="hello-t">{saudacao(now)}, <b>{conta.nome}</b>.<br />Vamos ver como está a casa?</h1>
-      <WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} />
-      <div className="cols">
-        <div className="col">
-          <Talk falas={falas} />
-          <section className="bal">
-            <div className="bal-top">
-              <span className="lab">{rotulo} <button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></span>
-            </div>
-            <div className={"bal-amt" + (saldo < 0 ? " neg" : "")}><Money v={saldo} /></div>
-            <div className="bal-sub"><span className="up">+{brl(r.entrou)}</span><span className="trend dn">−{brl(r.saiu)}</span><span style={{ color: "var(--muted)", fontWeight: 600, fontSize: 13 }}>no mês</span></div>
-            <AreaChart serie={serie} />
-            <div className="ranges" role="tablist">
-              {[["7", "7 dias"], ["30", "30 dias"], ["mes", "Mês"]].map(([v, l]) => <button key={v} role="tab" aria-selected={rng === v} className={"rg" + (rng === v ? " on" : "")} onClick={() => setRng(v)}>{l}</button>)}
-            </div>
-          </section>
-          <div className="tiles">
-            <div className="tile"><I.down /><div><span>Entrou</span><b style={{ color: "var(--mint)" }}><Money v={r.entrou} /></b></div></div>
-            <div className="tile"><I.up /><div><span>Saiu</span><b><Money v={r.saiu} /></b></div></div>
-            <button className="tile" onClick={() => act.setTab("p-contas")}><I.bill /><div><span>A pagar</span><b style={{ color: r.aPagar ? "var(--amber)" : undefined }}><Money v={r.aPagar} /></b></div></button>
-          </div>
-          <div className="acts narrow-only">
-            <button className="act" onClick={act.falarGasto}><i><I.mic /></i>Falar</button>
-            <button className="act" onClick={() => act.novoLanc("saida")}><i><I.minus /></i>Gasto</button>
-            <button className="act" onClick={() => act.novoLanc("entrada")}><i><I.plus /></i>Entrada</button>
-            <button className="act" onClick={() => act.novaConta()}><i><I.bill /></i>Conta fixa</button>
-          </div>
-        </div>
-        <div className="col">
-          <div className="panel">
-            <div className="panel-head"><h3>Próximas contas</h3><button className="link" onClick={() => act.setTab("p-contas")}>Ver todas</button></div>
-            {proximas.length === 0 ? <div className="empty"><b>Nada para pagar</b>Todas as contas do mês estão pagas.</div> : proximas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
-          </div>
-          <div className="panel">
-            <div className="panel-head"><h3>Últimos lançamentos</h3><button className="link" onClick={() => act.setTab("p-gastos")}>Ver tudo</button></div>
-            {ultimos.length === 0 ? <div className="empty">Nada anotado ainda. Toque em + para o primeiro gasto.</div> : ultimos.map(l => <LancRow key={l.id} l={l} act={act} />)}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+const GastosTab = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.GastosTab })));
 
-function GastosTab({ db, act, tema }) {
-  const [off, setOff] = useState(0);
-  const [filtro, setFiltro] = useState("tudo");
-  const base = new Date();
-  const m = new Date(base.getFullYear(), base.getMonth() + off, 1);
-  const chave = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
-  const r = resumoPessoal(db, chave);
-  const cats = Object.entries(r.porCat).sort((a, b) => b[1] - a[1]);
-  const totalCat = soma(cats, c => c[1]) || 1;
-  let lista = db.pessoal.lanc.filter(l => l.data.startsWith(chave));
-  if (filtro === "saida") lista = lista.filter(l => l.tipo === "saida");
-  if (filtro === "entrada") lista = lista.filter(l => l.tipo === "entrada");
-  lista.sort((a, b) => b.data.localeCompare(a.data));
-  const grupos = []; lista.forEach(l => { const g = grupos[grupos.length - 1]; if (g && g.d === l.data) g.itens.push(l); else grupos.push({ d: l.data, itens: [l] }); });
-  const nav = <>
-    <button className="icon-btn" onClick={() => setOff(off - 1)} aria-label="Mês anterior"><I.chevL /></button>
-    <button className="icon-btn" onClick={() => setOff(off + 1)} aria-label="Próximo mês"><I.chev /></button>
-  </>;
-  return (
-    <div className="page">
-      <TopBar eyebrow={`${MES_LONGO[m.getMonth()]} de ${m.getFullYear()}`} title="Gastos" act={act} tema={tema} extra={nav} />
-      <div className="cols">
-        <div className="col">
-          <section className="bal">
-            <div className="bal-top"><span className="lab">Saiu no mês</span><span className="trend">{r.sobra >= 0 ? `Sobra ${brl(r.sobra)}` : `Faltam ${brl(-r.sobra)}`}</span></div>
-            <div className="bal-amt"><Money v={r.saiu} /></div>
-            {cats.length > 0 && <div className="catbar" aria-hidden="true">{cats.map(([id, v]) => <i key={id} style={{ width: `${v / totalCat * 100}%`, background: (CORES.find(c => c.id === catDe(id).cor) || CORES[0]).cor }} />)}</div>}
-            {cats.length === 0 ? <div className="empty">Nenhum gasto neste mês.</div> : cats.map(([id, v]) => {
-              const cat = catDe(id);
-              return (
-                <div className="catrow" key={id} style={catVars(cat)}>
-                  <span className="ci"><CatIcon cat={cat} /></span>
-                  <div style={{ minWidth: 0 }}><b>{cat.nome}</b><div className="bar"><i style={{ width: `${v / cats[0][1] * 100}%` }} /></div></div>
-                  <span className="v"><Money v={v} /></span>
-                </div>
-              );
-            })}
-          </section>
-        </div>
-        <div className="col">
-          <div className="panel">
-            <div className="panel-head"><h3>Lançamentos</h3><button className="link" onClick={() => act.novoLanc("saida")}>+ Novo</button></div>
-            <div className="chips" role="tablist">
-              {[["tudo", "Tudo"], ["saida", "Gastos"], ["entrada", "Entradas"]].map(([v, l]) => <button key={v} role="tab" aria-selected={filtro === v} className={"fchip" + (filtro === v ? " on" : "")} onClick={() => setFiltro(v)}>{l}</button>)}
-            </div>
-            {r.consult > 0 && filtro !== "saida" && (
-              <div className="txn">
-                <span className="txn-av cat" style={catVars({ cor: "azul" })}><I.logo /></span>
-                <span className="mid"><span className="nm">Consultório</span><span className="sb">Líquido das sessões do mês</span></span>
-                <span className="amt pos">+<Money v={r.consult} /></span>
-              </div>
-            )}
-            {grupos.length === 0 && !(r.consult > 0 && filtro !== "saida") && <div className="empty">Nada por aqui neste mês.</div>}
-            {grupos.map(g => (
-              <React.Fragment key={g.d}>
-                <div className="day-sep">{relativo(g.d)}</div>
-                {g.itens.map(l => <LancRow key={l.id} l={l} act={act} />)}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ContasTab({ db, act, tema }) {
-  const t = todayISO(), chave = t.slice(0, 7);
-  const contas = [...db.pessoal.contas].sort((a, b) => a.dia - b.dia);
-  const abertas = contas.filter(c => !(c.pagas && c.pagas[chave]));
-  const pagas = contas.filter(c => c.pagas && c.pagas[chave]);
-  return (
-    <div className="page" style={{ maxWidth: 820 }}>
-      <TopBar eyebrow={`${MES_LONGO[fromISO(t).getMonth()]} · ${pagas.length} de ${contas.length} pagas`} title="Contas fixas" act={act} tema={tema}
-        extra={<button className="icon-btn" onClick={() => act.novaConta()} aria-label="Nova conta"><I.plus /></button>} />
-      <div className="stack">
-        <section className="bal">
-          <div className="bal-top"><span className="lab">Falta pagar este mês</span></div>
-          <div className="bal-amt" style={{ marginBottom: 2 }}><Money v={soma(abertas, c => c.valor)} /></div>
-          <div className="hint" style={{ padding: 0 }}>Já pago: {brl(soma(pagas, c => c.valor))}. Eu aviso no Início um dia antes de cada vencimento.</div>
-        </section>
-        <div className="panel">
-          <div className="panel-head"><h3>A pagar</h3></div>
-          {abertas.length === 0 ? <div className="empty"><b>Tudo pago</b>Nenhuma conta pendente neste mês.</div> : abertas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
-        </div>
-        {pagas.length > 0 && <div className="panel"><div className="panel-head"><h3>Pagas</h3></div>{pagas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}</div>}
-        {contas.some(c => c.assinatura) && (
-          <div className="panel">
-            <div className="panel-head"><h3>Assinaturas</h3><span className="hint" style={{ padding: 0 }}>{brl(soma(contas.filter(c => c.assinatura), c => c.valor))}/mês · {brl(soma(contas.filter(c => c.assinatura), c => c.valor) * 12)}/ano</span></div>
-            {contas.filter(c => c.assinatura).map(c => (
-              <button key={c.id} className="txn" onClick={() => act.editConta(c.id)}>
-                <MarcaLogo marca={(acharMarca(c.nome) || {}).id} cat={catDe(c.cat)} className="txn-av" />
-                <span className="mid"><span className="nm">{c.nome}</span><span className="sb">Todo dia {c.dia} · {brl(c.valor * 12)} por ano</span></span>
-                <span className="amt"><Money v={c.valor} /></span>
-              </button>
-            ))}
-            <p className="hint" style={{ padding: "4px 0 12px" }}>Ainda usa todas? Cancelar uma que você esqueceu é dinheiro de volta todo mês.</p>
-          </div>
-        )}
-        {contas.length === 0 && <button className="btn mode" onClick={() => act.novaConta()}><I.plus /> Adicionar primeira conta</button>}
-      </div>
-    </div>
-  );
-}
+const ContasTab = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.ContasTab })));
 
 /* ---------- Falar na própria tela (sem abrir janela) ----------
    O botão de microfone da barra de baixo acende um degradê colorido de baixo para cima,
@@ -2879,92 +2614,9 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   );
 }
 
-function LancSheet({ inicial, pre, tipo: tipo0, onVoz, onSave, onDelete, onClose }) {
-  const [tipo, setTipo] = useState(inicial ? inicial.tipo : pre ? pre.tipo : tipo0);
-  const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : pre && pre.valor ? fmtNum(pre.valor) : "");
-  const [cat, setCat] = useState(inicial ? inicial.cat : pre ? pre.cat : null);
-  const [desc, setDesc] = useState(inicial ? inicial.desc : pre ? pre.desc : "");
-  const [data, setData] = useState(inicial ? inicial.data : pre ? addDays(todayISO(), -(pre.off || 0)) : todayISO());
-  const [frase, setFrase] = useState("");
-  const [entendi, setEntendi] = useState(null);
-  const aplicar = txt => {
-    setFrase(txt);
-    if (!txt.trim()) { setEntendi(null); return; }
-    const r = interpretarFala(txt);
-    setTipo(r.tipo); setCat(r.cat); setData(addDays(todayISO(), -r.off));
-    if (r.valor) setValor(fmtNum(r.valor));
-    if (r.desc) setDesc(r.desc);
-    setEntendi(r);
-  };
-  const lista = tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
-  const v = num(valor);
-  const ok = v > 0 && cat && lista.some(c => c.id === cat);
-  return (
-    <Sheet title={inicial ? "Editar lançamento" : tipo === "entrada" ? "Nova entrada" : "Novo gasto"} onClose={onClose}>
-      {!inicial && <>
-        <div className="voice">
-          <input id="l-frase" value={frase} onChange={e => aplicar(e.target.value)} placeholder='Fale ou escreva: "gastei 32 na padaria"' enterKeyHint="done" autoComplete="off" aria-label="Descreva o gasto em uma frase" />
-          <button type="button" className="mic" onClick={onVoz} aria-label="Falar"><I.mic /></button>
-        </div>
-        {entendi && entendi.valor > 0 && <div className="voice-ok"><I.check /><span>Entendi: {entendi.tipo === "entrada" ? "entrada" : "gasto"} de {brlReal(entendi.valor)} em {catDe(entendi.cat).nome}{entendi.off ? (entendi.off === 1 ? ", ontem" : ", anteontem") : ", hoje"}. Confira e salve.</span></div>}
-      </>}
-      <Seg big value={tipo} onChange={x => { setTipo(x); setCat(null); }} options={[{ v: "saida", l: "Gasto" }, { v: "entrada", l: "Entrada" }]} />
-      <label className={"big-amt" + (tipo === "entrada" ? " in" : "")} htmlFor="l-valor"><span>R$</span>
-        <input id="l-valor" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" autoFocus={!inicial} placeholder="0,00" value={valor} onChange={e => setValor(soNumero(e.target.value))} aria-label="Valor" />
-      </label>
-      <div className="cats" role="radiogroup" aria-label="Categoria">
-        {lista.map(c => (
-          <button type="button" key={c.id} role="radio" aria-checked={cat === c.id} className={"cat" + (cat === c.id ? " on" : "")} style={catVars(c)} onClick={() => setCat(c.id)}>
-            <span className="ci"><CatIcon cat={c} /></span>{c.nome}
-          </button>
-        ))}
-      </div>
-      <div className="fields">
-        <Field label="Descrição (opcional)" htmlFor="l-desc"><input id="l-desc" value={desc} onChange={e => setDesc(e.target.value)} placeholder={tipo === "entrada" ? "Ex.: Freela" : "Ex.: Padaria"} /></Field>
-        <Field label="Quando" htmlFor="l-data"><input id="l-data" type="date" value={data} onChange={e => e.target.value && setData(e.target.value)} /></Field>
-      </div>
-      {!ok && <div className="hint">{!(v > 0) ? "Digite o valor e escolha uma categoria." : "Escolha uma categoria."}</div>}
-      <button className="btn mode" disabled={!ok} onClick={() => onSave({ id: inicial ? inicial.id : uid(), tipo, valor: v, cat, desc: desc.trim(), data })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
-      {inicial && <ConfirmButton label="Apagar lançamento" titulo="Apagar este lançamento?" texto="Ele sai do seu extrato e dos totais do mês." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
-    </Sheet>
-  );
-}
+const LancSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.LancSheet })));
 
-function ContaSheet({ inicial, onSave, onDelete, onClose }) {
-  const [nome, setNome] = useState(inicial ? inicial.nome : "");
-  const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : "");
-  const [dia, setDia] = useState(inicial ? inicial.dia : 10);
-  const [cat, setCat] = useState(inicial ? inicial.cat : "casa");
-  const [assin, setAssin] = useState(inicial ? !!inicial.assinatura : false);
-  const v = num(valor);
-  const ok = nome.trim() && v > 0;
-  return (
-    <Sheet title={inicial ? "Editar conta" : "Nova conta fixa"} sub="Repete todo mês. Eu aviso antes de vencer." onClose={onClose}>
-      <div className="fields">
-        <Field label="Nome da conta" icon={<I.bill />} htmlFor="c-nome"><input id="c-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Aluguel, Luz, Internet" /></Field>
-        <Field label="Valor (R$)" icon={<I.money />} htmlFor="c-valor"><input id="c-valor" inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="0,00" /></Field>
-        <Field label="Vence todo dia">
-          <div className="stepper">
-            <button type="button" aria-label="Dia anterior" onClick={() => setDia(Math.max(1, dia - 1))}>−</button>
-            <b className="num">{dia}</b>
-            <button type="button" aria-label="Próximo dia" onClick={() => setDia(Math.min(31, dia + 1))}>+</button>
-            <span style={{ color: "var(--muted)", fontWeight: 600 }}>do mês</span>
-          </div>
-        </Field>
-      </div>
-      <div className="cats" role="radiogroup" aria-label="Categoria">
-        {CATEGORIAS.map(c => (
-          <button type="button" key={c.id} role="radio" aria-checked={cat === c.id} className={"cat" + (cat === c.id ? " on" : "")} style={catVars(c)} onClick={() => setCat(c.id)}>
-            <span className="ci"><CatIcon cat={c} /></span>{c.nome}
-          </button>
-        ))}
-      </div>
-      <Toggle on={assin} onClick={() => setAssin(!assin)}>É uma assinatura (streaming, app, academia)</Toggle>
-      <button className="btn mode" disabled={!ok} onClick={() => onSave({ ...(inicial || { pagas: {} }), id: inicial ? inicial.id : uid(), nome: nome.trim(), valor: v, dia, cat, assinatura: assin })}><I.check /> {inicial ? "Salvar" : "Adicionar conta"}</button>
-      {inicial && <ConfirmButton label="Apagar conta" titulo="Apagar esta conta fixa?" texto="Ela para de aparecer nos próximos meses e nos lembretes." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
-    </Sheet>
-  );
-}
+const ContaSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.ContaSheet })));
 
 // Meta do mês em arco (inspirado no "Retirement")
 function arco(cx, cy, r, a0, a1) {
@@ -3046,397 +2698,15 @@ function SaudeConsultorio({ db, chave, meta }) {
 }
 
 // Perguntas iniciais: uma por tela, com o porquê de cada pergunta
-function Onboarding({ conta, onDone, onSair }) {
-  const p0 = conta.perfil || {};
-  const [i, setI] = useState(0);
-  const [nome, setNome] = useState(conta.nome || "");
-  const [foto, setFoto] = useState(conta.foto || null);
-  const [nasc, setNasc] = useState(p0.nascimento || "");
-  const [prof, setProf] = useState(p0.profissao ? (PROFISSOES.some(x => x.id === p0.profissao) ? p0.profissao : "Outra") : "");
-  const [outra, setOutra] = useState(p0.profissao && !PROFISSOES.some(x => x.id === p0.profissao) ? p0.profissao : "");
-  const [termo, setTermo] = useState(p0.termo || "");
-  const [dur, setDur] = useState(p0.duracao || 0);
-  const [valor, setValor] = useState(p0.valorPadrao ? fmtNum(p0.valorPadrao) : "");
-  const [temSub, setTemSub] = useState(p0.subPadrao ? "sim" : p0.valorPadrao ? "nao" : "");
-  const [sub, setSub] = useState(p0.subPadrao ? String(p0.subPadrao).replace(".", ",") : "");
-  const [subTipo, setSubTipo] = useState(p0.subTipo || "fixed");
-  const [meta, setMeta] = useState(p0.meta ? fmtNum(p0.meta) : "");
-  const [estilo, setEstilo] = useState(p0.estilo || "");
-  const [pessoal, setPessoal] = useState(p0.pessoal === undefined ? "" : p0.pessoal ? "sim" : "nao");
-  const [cidade, setCidade] = useState(p0.cidade || "");
-  const [erro, setErro] = useState("");
-  const idade = idadeDe(nasc);
-  const profissao = prof === "Outra" ? outra.trim() : prof;
-  const escolherProf = id => { setProf(id); const d = (PROFISSOES.find(x => x.id === id) || { termo: "Cliente" }).termo; if (!termo || termo !== d) setTermo(d); };
-  const Choice = ({ on, onClick, children, sub, wide }) => <button type="button" className={"choice" + (on ? " on" : "") + (wide ? " wide" : "")} aria-pressed={on} onClick={onClick}>{children}{sub && <small>{sub}</small>}</button>;
-
-  const passos = [
-    { q: "Como você quer ser chamado(a)?", why: "É assim que eu vou falar com você todo dia.",
-      valida: () => nome.trim() ? "" : "Escreva como quer ser chamado(a).",
-      body: <><PhotoPicker nome={nome} foto={foto} onChange={setFoto} /><div className="fields"><Field label="Seu nome" icon={<I.user />} htmlFor="o-nome"><input id="o-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Camila" /></Field></div></> },
-    { q: "Quando você nasceu?", why: "Pra eu lembrar do seu aniversário e deixar o dia mais leve.",
-      valida: () => !nasc ? "Escolha sua data de nascimento." : idade < 16 || idade > 100 ? "Confere o ano, por favor." : "",
-      body: <><div className="fields"><Field label="Data de nascimento" icon={<I.cal />} htmlFor="o-nasc"><input id="o-nasc" type="date" value={nasc} max={todayISO()} onChange={e => setNasc(e.target.value)} /></Field></div>{idade >= 16 && idade <= 100 && <div className="big-num num">{idade} <span style={{ fontSize: 20, color: "var(--muted)" }}>anos</span></div>}</> },
-    { q: "Qual é a sua área?", why: "Assim eu uso as palavras certas da sua profissão.",
-      valida: () => profissao ? "" : prof === "Outra" ? "Escreva sua área." : "Escolha uma opção.",
-      body: <><div className="choices">{PROFISSOES.map(x => <Choice key={x.id} on={prof === x.id} onClick={() => escolherProf(x.id)}>{x.id}</Choice>)}<Choice wide on={prof === "Outra"} onClick={() => escolherProf("Outra")}>Outra área</Choice></div>
-        {prof === "Outra" && <div className="fields"><Field label="Qual?" htmlFor="o-outra"><input id="o-outra" value={outra} onChange={e => setOutra(e.target.value)} placeholder="Ex.: Arteterapia" /></Field></div>}</> },
-    { q: "Como você chama quem você atende?", why: "Vou usar essa palavra no app inteiro: nos botões, nas listas e nos avisos.",
-      valida: () => termo ? "" : "Escolha uma opção.",
-      body: <div className="choices">{[["Paciente", "Novo paciente"], ["Cliente", "Novo cliente"], ["Analisando", "Novo analisando"]].map(([v, ex]) => <Choice key={v} wide on={termo === v} onClick={() => setTermo(v)} sub={`Ex.: "${ex}"`}>{v}</Choice>)}</div> },
-    { q: "Quanto tempo dura cada sessão?", why: "Uso isso pra montar sua linha do tempo e mostrar os intervalos livres.",
-      valida: () => dur ? "" : "Escolha a duração.",
-      body: <div className="choices">{DURACOES.map(d => <Choice key={d} on={dur === d} onClick={() => setDur(d)} wide={d === 50}>{d} minutos</Choice>)}</div> },
-    { q: "Qual o valor normal da sessão?", why: "Já deixo esse valor pronto quando você cadastrar alguém. Dá pra mudar a qualquer hora.",
-      valida: () => !(num(valor) > 0) ? "Digite o valor da sessão." : !temSub ? "Diga se paga sublocação." : temSub === "sim" && !(num(sub) > 0) ? "Digite o valor da sublocação." : "",
-      body: <><label className="big-amt" htmlFor="o-valor"><span>R$</span><input id="o-valor" inputMode="decimal" placeholder="0,00" value={valor} onChange={e => setValor(soNumero(e.target.value))} aria-label="Valor da sessão" /></label>
-        <div className="hint">Você paga sublocação de sala?</div>
-        <div className="choices"><Choice on={temSub === "sim"} onClick={() => setTemSub("sim")}>Sim</Choice><Choice on={temSub === "nao"} onClick={() => setTemSub("nao")}>Não</Choice></div>
-        {temSub === "sim" && <div className="fields"><Field label={subTipo === "percent" ? "Sublocação (% da sessão)" : "Sublocação por sessão (R$)"} icon={<I.door />} htmlFor="o-sub"><input id="o-sub" inputMode="decimal" value={sub} onChange={e => setSub(soNumero(e.target.value))} placeholder={subTipo === "percent" ? "20" : "25,00"} /><Seg value={subTipo} onChange={setSubTipo} options={[{ v: "fixed", l: "Valor fixo" }, { v: "percent", l: "Porcentagem" }]} /></Field></div>}</> },
-    { q: "Quanto você quer ganhar por mês?", why: "Com uma meta, eu mostro se o mês está no ritmo e quantas sessões faltam. Pode pular.", opcional: true,
-      valida: () => "",
-      body: <><label className="big-amt in" htmlFor="o-meta"><span>R$</span><input id="o-meta" inputMode="decimal" placeholder="0,00" value={meta} onChange={e => setMeta(soNumero(e.target.value))} aria-label="Meta mensal" /></label><div className="hint" style={{ textAlign: "center" }}>Valor líquido, já sem a sublocação.</div></> },
-    { q: "Em que cidade você atende?", why: "Pra eu avisar quando for chover perto do horário das suas sessões. Pode pular.", opcional: true,
-      valida: () => "",
-      body: <div className="fields"><Field label="Cidade" icon={<I.cloud />} htmlFor="o-cidade"><input id="o-cidade" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex.: Curitiba" autoComplete="address-level2" /></Field></div> },
-    { q: "Como prefere que eu fale com você?", why: "Tem dia que menos é mais. Você muda isso quando quiser.",
-      valida: () => !estilo ? "Escolha como prefere o resumo." : !pessoal ? "Diga se quer usar o modo Pessoal." : "",
-      body: <><div className="choices"><Choice wide on={estilo === "curto"} onClick={() => setEstilo("curto")} sub="Só os 2 avisos mais importantes">Direto ao ponto</Choice><Choice wide on={estilo === "detalhado"} onClick={() => setEstilo("detalhado")} sub="Até 4 avisos, com mais contexto">Completo</Choice></div>
-        <div className="hint">Quer anotar também os gastos e as contas da casa?</div>
-        <div className="choices"><Choice on={pessoal === "sim"} onClick={() => setPessoal("sim")}>Sim, quero</Choice><Choice on={pessoal === "nao"} onClick={() => setPessoal("nao")}>Só o consultório</Choice></div></> },
-  ];
-  const n = passos.length, P = passos[i];
-  const terminar = () => onDone({ nome: nome.trim(), foto, perfil: { nascimento: nasc, profissao, termo, duracao: dur, valorPadrao: num(valor), subPadrao: temSub === "sim" ? num(sub) : 0, subTipo, meta: num(meta) || 0, estilo, pessoal: pessoal === "sim", cidade: cidade.trim(), avisos: p0.avisos || AVISOS_PADRAO } });
-  const avancar = () => { const e = P.valida(); if (e) { vibrar("erro"); return setErro(e); } vibrar("toque"); setErro(""); if (i === n - 1) terminar(); else { setI(i + 1); window.scrollTo(0, 0); } };
-  return (
-    <main className="ob">
-      <div className="ob-top">
-        {i > 0 ? <button className="icon-btn" onClick={() => { setI(i - 1); setErro(""); }} aria-label="Voltar"><I.chevL /></button> : <button className="icon-btn" onClick={onSair} aria-label="Sair"><I.x /></button>}
-        <div className="ob-prog" style={{ gridTemplateColumns: `repeat(${n},1fr)` }} aria-hidden="true">{passos.map((_, k) => <i key={k} className={k <= i ? "on" : ""} />)}</div>
-        <span className="ob-step">{i + 1} de {n}</span>
-      </div>
-      <div>
-        <h1 className="ob-q">{P.q}</h1>
-        <div className="ob-why"><I.chat /><span>{P.why}</span></div>
-      </div>
-      <div className="ob-body" key={i}>{P.body}</div>
-      {erro && <div className="error" role="alert">{erro}</div>}
-      <div className="ob-foot">
-        <button className="btn" onClick={avancar}>{i === n - 1 ? "Tudo certo, começar" : "Continuar"}</button>
-        {P.opcional && <button className="btn text" onClick={() => { if (i === 6) setMeta(""); else setCidade(""); setErro(""); if (i === n - 1) terminar(); else setI(i + 1); }}>Pular por agora</button>}
-      </div>
-    </main>
-  );
-}
+const Onboarding = lazy(() => import("./telas/inicio.jsx").then(m => ({ default: m.Onboarding })));
 
 /* ---------- Avisos com o app fechado: cartão dos Ajustes ---------- */
-const TXT_PUSH = {
-  servidor: "Falta ligar o servidor de avisos (uma vez só). No computador, dentro da pasta do app, rode: bash servidor-avisos/instalar-avisos.sh",
-  instalar: "No iPhone, os avisos com o app fechado só funcionam com o app instalado: no Safari, toque em Compartilhar → Adicionar à Tela de Início e abra pelo ícone.",
-  indisponivel: "Este navegador não recebe avisos com o app fechado. No iPhone, precisa do iOS 16.4 ou mais novo e do app instalado na tela inicial.",
-  negado: "As notificações estão bloqueadas para o app.",
-  permissao: "Toque em Ligar e escolha Permitir.",
-  "servidor-fora": "Não consegui falar com o servidor de avisos. Confira a internet e tente de novo.",
-  "sem-sw": "O app ainda está terminando de instalar. Feche, abra de novo pelo ícone e tente outra vez.",
-  tempo: "Demorou demais para responder. Tente de novo.",
-};
-const textoNegado = () => ehIOS()
-  ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Alvena → Permitir Notificações. Depois volte aqui."
-  : "As notificações estão bloqueadas. Libere nas configurações do celular: Apps → Alvena (ou Chrome) → Notificações. Depois volte aqui.";
-
-function AvisosFechado({ act }) {
-  const [ligado, setLigado] = useState(() => pushLigado());
-  const [estado, setEstado] = useState(null);
-  const [url, setUrl] = useState(() => lerJSON(K_PUSH_URL, ""));
-  const motivo = motivoSemPush();
-  const st = lerJSON(K_PUSH, {});
-  const explica = m => m === "negado" ? textoNegado() : TXT_PUSH[m] || `Não deu certo (${m}). Tente de novo.`;
-  const rodar = async (fn, okTxt) => {
-    setEstado({ tipo: "carregando" });
-    const r = await fn();
-    setLigado(pushLigado());
-    setEstado(r === "ok" ? { tipo: "ok", txt: okTxt } : { tipo: "erro", txt: explica(r) });
-  };
-  return (
-    <div className="push-card">
-      <div className="push-head">
-        <i className={ligado ? "on" : ""}><I.bell /></i>
-        <div>
-          <b>Avisos com o app fechado</b>
-          <span>{ligado ? `Ligados · ${st.total ?? 0} avisos guardados para os próximos dias` : "Sessão chegando, conta vencendo e fechar o dia, mesmo com o celular bloqueado."}</span>
-        </div>
-      </div>
-      {!ligado && motivo && <div className="test-res"><div className="no"><I.alert /><span>{explica(motivo)}</span></div></div>}
-      {!ligado && motivo === "servidor" && (
-        <Field label="Ou cole o endereço do servidor" icon={<I.send />} htmlFor="s-srv">
-          <input id="s-srv" inputMode="url" autoCapitalize="off" autoCorrect="off" value={url} placeholder="https://agenda-avisos….workers.dev" onChange={e => { setUrl(e.target.value); act.setServidor(e.target.value); }} />
-        </Field>
-      )}
-      {!ligado && !motivo && <button className="btn" disabled={estado && estado.tipo === "carregando"} onClick={() => rodar(act.ligarPush, "Pronto! Agora teste: toque em “Testar em 10 s” e feche o app.")}><I.bell /> Ligar avisos com o app fechado</button>}
-      {ligado && (
-        <div className="btn-row">
-          <button className="btn ghost" onClick={() => rodar(() => act.testarPush(0), "Enviado! Deve chegar em alguns segundos.")}>Testar agora</button>
-          <button className="btn ghost" onClick={() => rodar(() => act.testarPush(10000), "Agora feche o app (vá para a tela inicial) e espere 10 segundos.")}>Testar em 10 s</button>
-        </div>
-      )}
-      {estado && (estado.tipo === "carregando"
-        ? <div className="test-res"><div><I.clock /><span>Só um instante…</span></div></div>
-        : <div className="test-res"><div className={estado.tipo === "ok" ? "ok" : "no"}>{estado.tipo === "ok" ? <I.check /> : <I.alert />}<span>{estado.txt}</span></div></div>)}
-      {ligado && st.erro && !estado && <div className="hint">Último problema: {explica(st.erro)}</div>}
-      {ligado && <button className="btn text" onClick={async () => { await act.desligarPush(); setLigado(false); setEstado(null); }}>Desligar avisos com o app fechado</button>}
-    </div>
-  );
-}
 
 /* =========================================================
    PERFIL (Sua conta): cartão com seus números + seções que abrem em páginas.
    Tudo salva sozinho (sem botão "Salvar" para esquecer de apertar).
    ========================================================= */
-function PerfilPage({ db, conta, tema, inicio, onClose, act }) {
-  const pf = conta.perfil || {};
-  const [aba, setAba] = useState(inicio || null);
-  const [nome, setNome] = useState(conta.nome);
-  const [foto, setFoto] = useState(conta.foto || null);
-  const [profissao, setProfissao] = useState(pf.profissao || "Psicologia");
-  const [nasc, setNasc] = useState(pf.nascimento || "");
-  const [cidade, setCidade] = useState(pf.cidade || "");
-  const [pix, setPix] = useState(db.settings.pix || "");
-  const [termo, setTermo] = useState(pf.termo || "Paciente");
-  const [dur, setDur] = useState(pf.duracao || 50);
-  const [hIni, setHIni] = useState(pf.horaIni ?? 8);
-  const [hFim, setHFim] = useState(pf.horaFim ?? 20);
-  const [diasT, setDiasT] = useState(pf.diasTrab || [1, 2, 3, 4, 5]);
-  const [falta, setFalta] = useState(pf.falta || { cobrar: false, horas: 24 });
-  const [regLembrar, setRegLembrar] = useState(pf.registro !== false);
-  const [meta, setMeta] = useState(pf.meta ? fmtNum(pf.meta) : "");
-  const [valorPadrao, setValorPadrao] = useState(pf.valorPadrao ? fmtNum(pf.valorPadrao) : "");
-  const [subPadrao, setSubPadrao] = useState(pf.subPadrao ? fmtNum(pf.subPadrao) : "");
-  const [reserva, setReserva] = useState(pf.reserva || 0);
-  const av0 = { ...AVISOS_PADRAO, ...(pf.avisos || {}) };
-  const [avAtivo, setAvAtivo] = useState(av0.ativo);
-  const [antec, setAntec] = useState(av0.antecedencia);
-  const [avNomes, setAvNomes] = useState(!!av0.nomes);
-  const [avResumo, setAvResumo] = useState(av0.resumo !== false);
-  const [avFechar, setAvFechar] = useState(av0.fechar !== false);
-  const [estilo, setEstilo] = useState(pf.estilo || "detalhado");
-  const [vib, setVib] = useState(pf.vibrar !== false);
-  const [pessoal, setPessoal] = useState(pf.pessoal !== false);
-  const [permissao, setPermissao] = useState(() => "Notification" in window ? Notification.permission : "indisponivel");
-  const [teste, setTeste] = useState(null);
-  const [salvo, setSalvo] = useState(false);
-  const primeira = useRef(true);
-  const topo = useRef(null);
-
-  // Salva sozinho meio segundo depois da última mudança
-  useEffect(() => {
-    if (primeira.current) { primeira.current = false; return; }
-    const t = setTimeout(() => {
-      const atual = conta.perfil || {};
-      act.salvarPerfil({
-        nome: nome.trim() || conta.nome, foto,
-        perfil: { ...atual, profissao, nascimento: nasc, cidade: cidade.trim(), termo, duracao: dur, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar,
-          meta: num(meta) || 0, valorPadrao: num(valorPadrao) || atual.valorPadrao || 0, subPadrao: num(subPadrao), reserva,
-          avisos: { ...av0, ...(atual.avisos || {}), ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar },
-          estilo, vibrar: vib, pessoal },
-      }, pix.trim());
-      setSalvo(true);
-    }, 450);
-    return () => clearTimeout(t);
-  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, hIni, hFim, diasT, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, estilo, vib, pessoal]);
-  useEffect(() => { if (!salvo) return; const t = setTimeout(() => setSalvo(false), 1600); return () => clearTimeout(t); }, [salvo]);
-  useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba]);
-  useEffect(() => {
-    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
-    const k = e => { if (e.key === "Escape") { if (aba) setAba(null); else onClose(); } };
-    window.addEventListener("keydown", k);
-    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", k); };
-  }, [aba]);
-
-  const testar = atraso => { setTeste({ esperando: atraso > 0 }); act.testarAviso(atraso).then(r => { setTeste({ r }); if ("Notification" in window) setPermissao(Notification.permission); }); };
-  const textoTeste = {
-    ok: "Notificação enviada. Se não apareceu, confira se o app pode mostrar notificações nas configurações do celular.",
-    negado: "As notificações estão bloqueadas. Libere nas configurações do celular.",
-    pendente: "Você ainda não permitiu as notificações. Toque em Testar e escolha Permitir.",
-    indisponivel: "Este navegador não tem notificações. No iPhone, instale o app na tela inicial (iOS 16.4 ou mais novo).",
-    bloqueado: "O navegador bloqueou a notificação. Instale o app na tela inicial e teste de novo.",
-  };
-  const textoPermissao = { granted: "Permitidas", denied: "Bloqueadas", default: "Ainda não pedidas", indisponivel: "Indisponíveis neste navegador" };
-
-  // Números do cartão
-  const hoje = todayISO(), chave = hoje.slice(0, 7);
-  const ativos = db.patients.filter(p => p.active).length;
-  const sessMes = db.sessions.filter(s => s.status === "done" && s.date.startsWith(chave)).length;
-  const liqMes = liquidoMes(db, chave);
-  let seguidos = 0;
-  for (let i = 1; i < 60; i++) { const d = addDays(hoje, -i); if (!itensDoDia(db, d).length) continue; if ((db.fechados || {})[d]) seguidos++; else break; }
-  const idade = idadeDe(nasc);
-  const T = termoDe(termo);
-  const diasTxt = diasT.length === 5 && [1, 2, 3, 4, 5].every(d => diasT.includes(d)) ? "seg a sex" : [1, 2, 3, 4, 5, 6, 0].filter(d => diasT.includes(d)).map(d => DIA_CURTO[d].toLowerCase()).join(", ");
-  const temaNome = { dark: "Escuro", light: "Claro", auto: "Do aparelho" }[tema.modo];
-
-  const secoes = [
-    { grupo: "Você", itens: [
-      { id: "dados", ic: <I.user />, t: "Dados pessoais", v: [profissao, cidade].filter(Boolean).join(" · ") || "Nome, foto e cidade" },
-      { id: "pix", ic: <I.key />, t: "Chave Pix", v: pix ? "Entra nas cobranças" : "Ainda não colocou" },
-    ] },
-    { grupo: "Consultório", itens: [
-      { id: "agenda", ic: <I.cal />, t: "Agenda", v: `${hIni}h às ${hFim}h · ${diasTxt || "sem dias"}` },
-      { id: "dinheiro", ic: <I.wallet />, t: "Valores e metas", v: meta ? `Meta de ${brl(num(meta))}` : "Sem meta" },
-      { id: "avisos", ic: <I.bell />, t: "Avisos", v: !avAtivo ? "Desligados" : pushLigado() ? `Com o app fechado · ${antec} min antes` : `${antec} min antes` },
-    ] },
-    { grupo: "App", itens: [
-      { id: "visual", ic: <I.sun />, t: "Aparência e fundo", v: temaNome },
-      ...[{ id: "pessoal", ic: <I.piggy />, t: "Modo Pessoal", v: pessoal ? "Ligado" : "Desligado" }],
-      { id: "app", ic: <I.down />, t: "Instalar e atalhos", v: appInstalado() ? "Instalado" : "Colocar na tela inicial" },
-    ] },
-  ];
-  const titulo = { dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Modo Pessoal", app: "Instalar e atalhos" }[aba];
-
-  return createPortal(
-    <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
-      <div className="perfil-in">
-        <div className="perfil-top">
-          <button className="icon-btn" onClick={() => aba ? setAba(null) : onClose()} aria-label={aba ? "Voltar" : "Fechar"}>{aba ? <I.chevL /> : <I.x />}</button>
-          <b>{titulo || "Perfil"}</b>
-          <span className={"perfil-salvo" + (salvo ? " on" : "")} aria-live="polite">{salvo ? <><I.check /> Salvo</> : ""}</span>
-        </div>
-
-        {!aba && <>
-          <div className="perfil-hero">
-            <button className="perfil-foto" onClick={() => setAba("dados")} aria-label="Trocar foto e dados">
-              <Avatar conta={{ nome: nome || "?", foto }} /><i><I.pencil /></i>
-            </button>
-            <h2>{nome || conta.nome}</h2>
-            <p>{[profissao, idade ? `${idade} anos` : null].filter(Boolean).join(" · ")}</p>
-            <span className="perfil-email">{conta.email}{conta.demo ? " · demonstração" : ""}</span>
-            <div className="perfil-nums">
-              <div><b>{ativos}</b><span>{ativos === 1 ? `${T.s} ativo` : `${T.p} ativos`}</span></div>
-              <div><b>{sessMes}</b><span>{sessMes === 1 ? "sessão no mês" : "sessões no mês"}</span></div>
-              <div><b className="num">{ESCONDER ? "R$ •••" : `R$ ${Math.round(liqMes).toLocaleString("pt-BR")}`}</b><span>líquido no mês</span></div>
-            </div>
-            {seguidos >= 2 && <div className="perfil-seq"><I.flag /> Você fechou o dia {seguidos} vezes seguidas</div>}
-          </div>
-
-          {secoes.map(g => (
-            <div key={g.grupo} className="perfil-grupo">
-              <h3>{g.grupo}</h3>
-              <div className="perfil-lista">
-                {g.itens.map(it => (
-                  <button key={it.id} className="perfil-row" onClick={() => setAba(it.id)}>
-                    <i>{it.ic}</i><span><b>{it.t}</b><small>{it.v}</small></span><I.chev />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          <div className="perfil-grupo">
-            <h3>Conta</h3>
-            <div className="perfil-lista">
-              <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
-              <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>Seus dados ficam guardados neste aparelho</small></span><I.chev /></button>
-            </div>
-          </div>
-          <ConfirmButton label="Apagar meus dados" titulo="Apagar todos os seus dados?" texto="Pacientes, sessões, cobranças e gastos deste aparelho somem de vez. Isso não dá para desfazer." acao="Apagar tudo" onConfirm={act.zerar} />
-          {db.patients.length === 0 && <button className="btn text" onClick={act.carregarExemplo}>Carregar dados de exemplo</button>}
-        </>}
-
-        {aba === "dados" && <div className="stack">
-          <PhotoPicker nome={nome} foto={foto} onChange={setFoto} />
-          <div className="fields">
-            <Field label="Como quer ser chamado(a)" icon={<I.user />} htmlFor="p-nome"><input id="p-nome" value={nome} onChange={e => setNome(e.target.value)} /></Field>
-            <Field label="Data de nascimento" htmlFor="p-nasc"><input id="p-nasc" type="date" value={nasc} onChange={e => setNasc(e.target.value)} /></Field>
-            <Field label="Cidade (para o clima e a chuva)" icon={<I.cloud />} htmlFor="p-cidade"><input id="p-cidade" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex.: Curitiba" /></Field>
-          </div>
-          <h3 className="section-title">Profissão</h3>
-          <div className="chips-wrap">{PROFISSOES.map(p => <button type="button" key={p.id} className={"chip-op" + (profissao === p.id ? " on" : "")} aria-pressed={profissao === p.id} onClick={() => { setProfissao(p.id); setTermo(p.termo); }}>{p.id}</button>)}</div>
-          <div className="fields"><Field label="Quem você atende"><Seg value={termo} onChange={setTermo} options={["Paciente", "Cliente", "Analisando"].map(v => ({ v, l: v }))} /></Field></div>
-          {ehAniversario({ nascimento: nasc }) && <div className="note mint"><I.star /><span>Feliz aniversário! Hoje o app fica mais leve com você.</span></div>}
-        </div>}
-
-        {aba === "pix" && <div className="stack">
-          <div className="fields"><Field label="Sua chave Pix" icon={<I.key />} htmlFor="p-pix"><input id="p-pix" value={pix} onChange={e => setPix(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" autoCapitalize="off" /></Field></div>
-          <div className="hint">Ela entra sozinha no fim das mensagens de cobrança, para o {T.s} só copiar e pagar.</div>
-        </div>}
-
-        {aba === "agenda" && <div className="stack">
-          <div className="fields">
-            <Field label="Horário de atendimento">
-              <div className="stepper">
-                <button type="button" aria-label="Começa mais cedo" onClick={() => setHIni(Math.max(5, hIni - 1))}>−</button><b className="num">{hIni}h</b><button type="button" aria-label="Começa mais tarde" onClick={() => setHIni(Math.min(hFim - 1, hIni + 1))}>+</button>
-                <span style={{ color: "var(--muted)", fontWeight: 600 }}>até</span>
-                <button type="button" aria-label="Termina mais cedo" onClick={() => setHFim(Math.max(hIni + 1, hFim - 1))}>−</button><b className="num">{hFim}h</b><button type="button" aria-label="Termina mais tarde" onClick={() => setHFim(Math.min(23, hFim + 1))}>+</button>
-              </div>
-            </Field>
-            <Field label="Dias em que atende">
-              <div className="slots">{[1, 2, 3, 4, 5, 6, 0].map(d => <button type="button" key={d} className={"slot" + (diasT.includes(d) ? "" : " off")} style={{ textDecoration: "none" }} aria-pressed={diasT.includes(d)} onClick={() => setDiasT(diasT.includes(d) ? diasT.filter(x => x !== d) : [...diasT, d])}>{DIA_CURTO[d]}</button>)}</div>
-            </Field>
-            <Field label="Duração da sessão (minutos)"><Seg value={dur} onChange={setDur} options={DURACOES.map(d => ({ v: d, l: String(d) }))} /></Field>
-          </div>
-          <Toggle on={regLembrar} onClick={() => setRegLembrar(!regLembrar)}>Lembrar do registro depois de cada sessão</Toggle>
-          <Toggle on={falta.cobrar} onClick={() => setFalta({ ...falta, cobrar: !falta.cobrar })}>Cobrar falta sem aviso</Toggle>
-          {falta.cobrar && <div className="fields"><Field label="Aviso mínimo para não cobrar (horas)"><Seg value={falta.horas} onChange={h => setFalta({ ...falta, horas: h })} options={[12, 24, 48].map(h => ({ v: h, l: `${h}h` }))} /></Field></div>}
-        </div>}
-
-        {aba === "dinheiro" && <div className="stack">
-          <div className="fields">
-            <Field label="Meta líquida do mês (R$)" icon={<I.target />} htmlFor="p-meta"><input id="p-meta" inputMode="decimal" value={meta} onChange={e => setMeta(soNumero(e.target.value))} placeholder="Sem meta" /></Field>
-            <Field label={`Valor padrão da sessão para ${T.p} novos (R$)`} icon={<I.money />} htmlFor="p-valor"><input id="p-valor" inputMode="decimal" value={valorPadrao} onChange={e => setValorPadrao(soNumero(e.target.value))} placeholder="0,00" /></Field>
-            <Field label="Sublocação padrão por sessão (R$)" icon={<I.door />} htmlFor="p-sub"><input id="p-sub" inputMode="decimal" value={subPadrao} onChange={e => setSubPadrao(soNumero(e.target.value))} placeholder="Sem sublocação" /></Field>
-            <Field label="Separar para o imposto (% do líquido)"><Seg value={reserva} onChange={setReserva} options={[0, 10, 15, 20, 27.5].map(v => ({ v, l: v ? String(v).replace(".", ",") : "Não" }))} /></Field>
-          </div>
-          <div className="hint">Estimativa simples para não levar susto. O valor certo do Carnê-Leão quem calcula é o contador.</div>
-          <div className="fields"><Field label="Resumo do Início"><Seg value={estilo} onChange={setEstilo} options={[{ v: "curto", l: "Direto ao ponto" }, { v: "detalhado", l: "Completo" }]} /></Field></div>
-        </div>}
-
-        {aba === "avisos" && <div className="stack">
-          <div className="fields">
-            <Field label="Avisos de sessão, contas e pendências"><Seg value={avAtivo} onChange={setAvAtivo} options={[{ v: true, l: "Ligados" }, { v: false, l: "Desligados" }]} /></Field>
-            <Field label="Avisar antes da sessão (minutos)"><Seg value={antec} onChange={setAntec} options={[5, 10, 15, 30].map(m => ({ v: m, l: String(m) }))} /></Field>
-          </div>
-          <Toggle on={avResumo} onClick={() => setAvResumo(!avResumo)}>Resumo do dia de manhã</Toggle>
-          <Toggle on={avFechar} onClick={() => setAvFechar(!avFechar)}>Lembrar de fechar o dia</Toggle>
-          <Toggle on={avNomes} onClick={() => setAvNomes(!avNomes)}>Mostrar o nome do {T.s} no aviso</Toggle>
-          {!avNomes && <div className="hint">O aviso diz só “Sessão em {antec} min”, sem nome. Mais discreto na tela bloqueada.</div>}
-          <AvisosFechado act={act} />
-          {!pushLigado() && <>
-            <div className="hint">Teste com o app aberto · notificações: <b>{textoPermissao[permissao] || permissao}</b></div>
-            <div className="btn-row">
-              <button className="btn ghost" onClick={() => testar(0)}><I.bell /> Testar aqui</button>
-              <button className="btn ghost" onClick={() => testar(10000)}>Em 10 segundos</button>
-            </div>
-            {teste && (teste.esperando
-              ? <div className="test-res"><div><I.clock /><span>Aguarde 10 segundos com o app aberto.</span></div></div>
-              : <div className="test-res"><div className={teste.r === "ok" ? "ok" : "no"}>{teste.r === "ok" ? <I.check /> : <I.alert />}<span>{textoTeste[teste.r] || textoTeste.bloqueado}</span></div></div>)}
-          </>}
-        </div>}
-
-        {aba === "visual" && <div className="stack">
-          <div className="fields"><Field label="Aparência"><Seg value={tema.modo} onChange={tema.setModo} options={[{ v: "dark", l: "Escuro" }, { v: "light", l: "Claro" }, { v: "auto", l: "Do aparelho" }]} /></Field></div>
-          <h3 className="section-title">Fundo do app</h3>
-          <FundoPicker fundo={conta.fundo} meus={act.meusFundos} onChange={act.setFundo} onAdd={act.addFundo} onUpdate={act.updFundo} onDelete={act.delFundo} />
-          <Toggle on={conta.vidro !== false} onClick={() => act.setVidro(conta.vidro === false)}>Efeito de vidro</Toggle>
-          <div className="hint">{conta.vidro === false ? "Desligado: cartões, botões e a fala ficam sólidos, mais nítidos e mais leves no celular. A foto de fundo continua aparecendo atrás." : "Ligado: cartões e botões ficam transparentes, deixando a foto de fundo aparecer por trás. Desligue se preferir tudo sólido."}</div>
-          <Toggle on={vib} onClick={() => { setVib(!vib); VIBRAR = !vib; if (!vib) vibrar("ok"); }}>Vibrar nos toques</Toggle>
-          <div className="hint">No iPhone a vibração é bem leve (o iPhone só deixa apps da web darem um toquinho).</div>
-        </div>}
-
-        {aba === "pessoal" && <div className="stack">
-          <div className="note"><I.piggy /><span>O modo Pessoal guarda os gastos da casa, as contas fixas e o que sobra no mês, separado do consultório.</span></div>
-          <Toggle on={pessoal} onClick={() => setPessoal(!pessoal)}>Usar também o modo Pessoal</Toggle>
-          {pessoal && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
-        </div>}
-
-        {aba === "app" && <div className="stack">
-          <InstalarApp />
-          <a className="btn ghost" href={`${BASE}sobre/`} target="_blank" rel="noopener"><I.share /> Página do app, para indicar a colegas</a>
-          <div className="hint">Atalhos: links do app terminados em <b>#gasto</b>, <b>#agora</b>, <b>#fechar</b> ou <b>#livres</b> abrem direto o gasto por voz, o Só o agora, o Fechar o dia e os horários livres. No Android, segure o ícone do app para ver os atalhos.</div>
-        </div>}
-      </div>
-    </div>,
-    document.body
-  );
-}
+const PerfilPage = lazy(() => import("./telas/perfil.jsx").then(m => ({ default: m.PerfilPage })));
 
 /* =========================================================
    12b. ROTINAS E FERRAMENTAS (Fechar o dia, Só o agora, Revisão,
@@ -3446,8 +2716,7 @@ function copiarTexto(txt, act, ok = "Copiado") {
   try { navigator.clipboard.writeText(txt).then(() => act.toast(ok), () => act.toast("Não consegui copiar aqui. Segure o texto para copiar.")); }
   catch (e) { act.toast("Não consegui copiar aqui. Segure o texto para copiar."); }
 }
-const waLink = (phone, txt) => { const d = (phone || "").replace(/\D/g, ""); const f = d.length >= 10 && d.length <= 11 ? "55" + d : d; return `https://wa.me/${f}?text=${encodeURIComponent(txt)}`; };
-const msgConfirma = (p, iso, time) => `Oi, ${primeiro(p.name)}! Tudo bem? Confirmando nossa sessão ${iso === addDays(todayISO(), 1) ? "amanhã" : `de ${DIA_LONGO[fromISO(iso).getDay()]}`} (${dm(iso)}) às ${time}. Até lá!`;
+
 const registroPendente = db => PERFIL.registro === false ? [] : db.sessions.filter(s => s.status === "done" && !s.registro && s.date >= addDays(todayISO(), -7)).sort((a, b) => a.date.localeCompare(b.date));
 const semanaKey = iso => segunda(iso);
 
@@ -3469,85 +2738,7 @@ const hTxt = m => m % 60 ? hhmm(m) : `${Math.floor(m / 60)}h`;
 const periodoDe = m => m < 12 * 60 ? "manhã" : m < 18 * 60 ? "tarde" : "noite";
 
 // FECHAR O DIA: uma etapa por vez
-function FecharDia({ db, conta, onClose, act }) {
-  const t = todayISO();
-  const amanha = addDays(t, 1);
-  const etapas = ["sessoes", ...(PERFIL.registro === false ? [] : ["registros"]), "cobrancas", "amanha", ...(PERFIL.pessoal !== false ? ["gastos"] : []), "fim"];
-  const [i, setI] = useState(0);
-  const e = etapas[i];
-  const hoje = itensDoDia(db, t);
-  const abertosHoje = hoje.filter(x => x.kind === "next");
-  const regs = registroPendente(db);
-  const cobr = db.charges.filter(c => !c.paid);
-  const amanhaIts = itensDoDia(db, amanha).filter(x => x.kind !== "log");
-  const gastosHoje = (db.pessoal.lanc || []).filter(l => l.data === t);
-  const feitos = hoje.filter(x => x.kind === "log" && contaDinheiro(x.session));
-  const pac = id => db.patients.find(p => p.id === id) || { name: "Removido" };
-  const titulos = { sessoes: "Sessões de hoje", registros: "Registros das sessões", cobrancas: "Quem precisa ser cobrado", amanha: "Amanhã", gastos: "Gastos de hoje", fim: "Dia fechado" };
-  const prox = () => { if (i < etapas.length - 1) setI(i + 1); };
-  useEffect(() => { if (e === "fim") act.marcarFechado(t); }, [e]);
-  return (
-    <Sheet title={titulos[e]} sub={e === "fim" ? diaCurto(t) : `Passo ${i + 1} de ${etapas.length - 1} para fechar o dia`} onClose={onClose}>
-      <div className="ob-prog" style={{ gridTemplateColumns: `repeat(${etapas.length},1fr)` }} aria-hidden="true">{etapas.map((_, k) => <i key={k} className={k <= i ? "on" : ""} />)}</div>
-      {e === "sessoes" && (abertosHoje.length === 0
-        ? <div className="note mint"><I.check /><span>Todas as sessões de hoje estão marcadas.</span></div>
-        : <div className="panel">{abertosHoje.map(x => (
-            <div className="txn" key={x.patient.id}>
-              <span className="txn-av">{iniciais(x.patient.name)}<i className="cdot" style={{ background: corDe(x.patient).cor }} /></span>
-              <span className="mid"><span className="nm">{x.patient.name}</span><span className="sb">{x.time}</span></span>
-              <button className="pill go" style={{ height: 40, padding: "0 14px" }} onClick={() => act.rapido(x.patient.id, "done", true)}><I.check /> Veio</button>
-              <button className="pill no" style={{ height: 40, padding: "0 12px", background: "var(--surface-2)" }} onClick={() => act.rapido(x.patient.id, "missed", true)}>Faltou</button>
-            </div>))}</div>)}
-      {e === "registros" && (regs.length === 0
-        ? <div className="note mint"><I.check /><span>Nenhum registro pendente.</span></div>
-        : <><div className="hint">Toque para marcar o que você já registrou. Eu guardo só o "feito", nunca o conteúdo.</div>
-          <div className="panel">{regs.map(s => (
-            <button className="txn" key={s.id} onClick={() => act.toggleRegistro(s.id)}>
-              <span className="txn-av">{iniciais(pac(s.patientId).name)}</span>
-              <span className="mid"><span className="nm">{pac(s.patientId).name}</span><span className="sb">{relativo(s.date)} · {s.time}</span></span>
-              <span className={"box " + (s.registro ? "done" : "up")}>{s.registro && <I.check />}</span>
-            </button>))}</div></>)}
-      {e === "cobrancas" && (cobr.length === 0
-        ? <div className="note mint"><I.check /><span>Ninguém devendo agora.</span></div>
-        : <div className="panel">{cobr.map(c => (
-            <div className="txn" key={c.id}>
-              <span className="txn-av">{iniciais(pac(c.patientId).name)}</span>
-              <span className="mid"><span className="nm">{pac(c.patientId).name}</span><span className="sb num">{brl(c.amount)} · desde {dm(c.createdAt)}</span></span>
-              <button className="bub-act" onClick={() => copiarTexto(mensagem(db, c, conta.nome), act, "Mensagem copiada")}><I.copy />Copiar</button>
-            </div>))}</div>)}
-      {e === "amanha" && (amanhaIts.length === 0
-        ? <div className="note"><I.sun /><span>Amanhã está livre de sessões.</span></div>
-        : <><div className="hint">Mande a confirmação agora e tire isso da cabeça.</div>
-          <div className="panel">{amanhaIts.map(x => {
-            const ok = db.confirmados[`${x.patient.id}:${amanha}`];
-            const txt = msgConfirma(x.patient, amanha, x.time);
-            return (
-              <div className="txn" key={x.patient.id}>
-                <span className="txn-av">{iniciais(x.patient.name)}</span>
-                <span className="mid"><span className="nm">{x.patient.name}</span><span className="sb">{x.time}{ok && <span className="chip mint">Confirmado</span>}</span></span>
-                <button className="bub-act" onClick={() => { copiarTexto(txt, act, "Confirmação copiada"); act.setConfirmado(x.patient.id, amanha, true); }}><I.copy />Copiar</button>
-              </div>);
-          })}</div></>)}
-      {e === "gastos" && <>
-        <div className="note"><I.wallet /><span>{gastosHoje.length ? `Você anotou ${gastosHoje.length} ${gastosHoje.length === 1 ? "lançamento" : "lançamentos"} hoje.` : "Nenhum gasto anotado hoje. Lembra de algum?"}</span></div>
-        <button className="btn ghost" onClick={() => { onClose(); act.falarGasto(); }}><I.mic /> Anotar falando</button>
-      </>}
-      {e === "fim" && <>
-        <span className="rc-chip center"><span className="rc-ic"><I.check /></span>Dia fechado</span>
-        <div className="rc-amt"><Money v={soma(feitos, x => x.session.price - x.session.sublet)} /></div>
-        <div className="rc-cap">{feitos.length} {feitos.length === 1 ? "sessão" : "sessões"} hoje</div>
-        <hr className="dash" />
-        <div className="rc-rows">
-          <div className="rc-row"><span className="l">Amanhã</span><span className="v">{amanhaIts.length ? amanhaIts.map(x => x.time).join(" · ") : "livre"}</span></div>
-          <div className="rc-row"><span className="l">Para cobrar</span><span className="v">{cobr.length ? brl(soma(cobr, c => c.amount)) : "nada"}</span></div>
-        </div>
-        <div className="hint" style={{ textAlign: "center" }}>Pode desligar. O resto fica comigo.</div>
-        <button className="btn" onClick={onClose}>Boa noite</button>
-      </>}
-      {e !== "fim" && <button className="btn" onClick={prox}>{i === etapas.length - 2 ? "Fechar o dia" : "Próximo"}</button>}
-    </Sheet>
-  );
-}
+const FecharDia = lazy(() => import("./telas/paineis.jsx").then(m => ({ default: m.FecharDia })));
 
 // SÓ O AGORA: uma coisa por vez, em letra grande
 // Tela acesa enquanto o "Só o agora" está aberto (Screen Wake Lock)
@@ -3601,107 +2792,13 @@ function Agora({ db, conta, now, onClose, act }) {
 }
 
 // REVISÃO DA SEMANA
-function RevisaoSheet({ db, onClose, act }) {
-  const t = todayISO();
-  const ini = fromISO(t).getDay() === 0 ? segunda(t) : addDays(segunda(t), -7); // domingo: semana atual; outros dias: semana passada
-  const fim = addDays(ini, 6), iniAnt = addDays(ini, -7);
-  const naSemana = (a, b) => s => s.date >= a && s.date <= b;
-  const feitas = db.sessions.filter(s => contaDinheiro(s) && naSemana(ini, fim)(s));
-  const faltas = db.sessions.filter(s => s.status === "missed" && naSemana(ini, fim)(s)).length;
-  const liq = soma(feitas, s => s.price - s.sublet);
-  const liqAnt = soma(db.sessions.filter(s => contaDinheiro(s) && naSemana(iniAnt, addDays(ini, -1))(s)), s => s.price - s.sublet);
-  const pIni = addDays(fim, 1), pFim = addDays(pIni, 6);
-  let proxSessoes = 0; const feriadosProx = [];
-  for (let d = pIni; d <= pFim; d = addDays(d, 1)) { proxSessoes += itensDoDia(db, d).filter(i => i.kind !== "log").length; if (feriado(d)) feriadosProx.push(`${feriado(d).name} (${dm(d)})`); }
-  const contasProx = PERFIL.pessoal === false ? [] : db.pessoal.contas.filter(c => { const v = vencimento(c, pIni.slice(0, 7)); return v >= pIni && v <= pFim && !(c.pagas && c.pagas[pIni.slice(0, 7)]); });
-  const dif = liq - liqAnt;
-  useEffect(() => { act.marcarRevisao(semanaKey(t)); }, []);
-  return (
-    <Sheet onClose={onClose}>
-      <span className="rc-chip center"><span className="rc-ic blue"><I.chart /></span>Semana de {dm(ini)} a {dm(fim)}</span>
-      <div className="rc-amt"><Money v={liq} /></div>
-      <div className="rc-cap">{dif === 0 ? "igual à semana anterior" : `${dif > 0 ? "+" : "−"}${brl(Math.abs(dif))} que a semana anterior`}</div>
-      <hr className="dash" />
-      <div className="rc-rows">
-        <div className="rc-row"><span className="l">Sessões</span><span className="v">{feitas.length}</span></div>
-        <div className="rc-row"><span className="l">Faltas</span><span className="v">{faltas}</span></div>
-        <div className="rc-row"><span className="l">Para cobrar</span><span className="v">{brl(soma(db.charges.filter(c => !c.paid), c => c.amount))}</span></div>
-      </div>
-      <h3 className="section-title">Próxima semana</h3>
-      <div className="rc-rows">
-        <div className="rc-row"><span className="l">Sessões marcadas</span><span className="v">{proxSessoes}</span></div>
-        {feriadosProx.length > 0 && <div className="rc-row"><span className="l">Feriado</span><span className="v" style={{ color: "var(--rose)" }}>{feriadosProx.join(", ")}</span></div>}
-        {contasProx.length > 0 && <div className="rc-row"><span className="l">Contas vencendo</span><span className="v">{contasProx.map(c => c.nome).join(", ")}</span></div>}
-      </div>
-      <button className="btn" onClick={onClose}>Fechado, boa semana</button>
-    </Sheet>
-  );
-}
+const RevisaoSheet = lazy(() => import("./telas/paineis.jsx").then(m => ({ default: m.RevisaoSheet })));
 
 // CONFIRMAÇÃO DA VÉSPERA
-function ConfirmSheet({ db, iso, onClose, act }) {
-  const its = itensDoDia(db, iso).filter(i => i.kind !== "log");
-  const conf = db.confirmados || {};
-  const feitos = its.filter(x => conf[`${x.patient.id}:${iso}`]).length;
-  return (
-    <Sheet title={`Confirmar ${relativo(iso).toLowerCase()}`} sub={`${relativo(iso).toLowerCase() === diaCurto(iso).toLowerCase() ? "" : diaCurto(iso) + " · "}${its.length} ${its.length === 1 ? "sessão" : "sessões"}`} onClose={onClose}>
-      {its.length === 0 && <div className="empty">Nenhuma sessão nesse dia.</div>}
-      {its.length > 0 && (
-        <div className="conf-prog" aria-live="polite">
-          <span><b>{feitos} de {its.length}</b> {feitos === its.length ? "confirmadas. Tudo certo!" : "confirmadas"}</span>
-          <div className="conf-bar"><i style={{ width: `${(feitos / its.length) * 100}%` }} /></div>
-        </div>
-      )}
-      <div className="conf-lista">
-        {its.map(x => {
-          const ok = !!conf[`${x.patient.id}:${iso}`], txt = msgConfirma(x.patient, iso, x.time);
-          return (
-            <div className={"conf-item" + (ok ? " ok" : "")} key={x.patient.id}>
-              <div className="conf-top">
-                <span className="txn-av">{iniciais(x.patient.name)}<i className="cdot" style={{ background: corDe(x.patient).cor }} /></span>
-                <span className="mid"><b>{x.patient.name}</b><small>{x.time}{ok ? " · confirmado" : ""}</small></span>
-                <button className={"box " + (ok ? "done" : "up")} onClick={() => act.setConfirmado(x.patient.id, iso, !ok)} aria-label={ok ? "Desmarcar confirmação" : "Marcar como confirmado"}>{ok && <I.check />}</button>
-              </div>
-              <p className="conf-msg">{txt}</p>
-              <div className="conf-acoes">
-                <a className="conf-wa" href={waLink(x.patient.phone, txt)} target="_blank" rel="noopener noreferrer" onClick={() => act.setConfirmado(x.patient.id, iso, true)}><I.send /> {ok ? "Enviar de novo" : "Enviar no WhatsApp"}</a>
-                <button className="conf-copy" onClick={() => { copiarTexto(txt, act, "Confirmação copiada"); act.setConfirmado(x.patient.id, iso, true); }} aria-label="Copiar mensagem"><I.copy /></button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </Sheet>
-  );
-}
+const ConfirmSheet = lazy(() => import("./telas/paineis.jsx").then(m => ({ default: m.ConfirmSheet })));
 
 // HORÁRIOS LIVRES PARA DIVULGAR
-function LivresSheet({ db, onClose, act }) {
-  const inicio = addDays(todayISO(), 1);
-  const [dias, setDias] = useState(7);
-  const [fora, setFora] = useState({});
-  const lista = horariosLivres(db, inicio, dias);
-  const texto = "Olá! Tenho estes horários livres " + (dias === 7 ? "nos próximos dias" : "nas próximas semanas") + ":\n" + lista.map(d => {
-    const hs = d.livres.filter(m => !fora[d.iso + m]);
-    return hs.length ? `• ${DIA_LONGO[fromISO(d.iso).getDay()].replace(/^./, c => c.toUpperCase())} (${dm(d.iso)}): ${hs.map(hTxt).join(", ")}` : null;
-  }).filter(Boolean).join("\n") + "\n\nSe algum servir, me chama por aqui.";
-  return (
-    <Sheet title="Horários livres" sub={`Entre ${PERFIL.horaIni ?? 8}h e ${PERFIL.horaFim ?? 20}h · toque para tirar um horário`} onClose={onClose}>
-      <Seg value={dias} onChange={setDias} options={[{ v: 7, l: "Próximos 7 dias" }, { v: 14, l: "14 dias" }]} />
-      {lista.length === 0 && <div className="empty"><b>Agenda cheia</b>Nenhum horário livre nesse período.</div>}
-      {lista.map(d => (
-        <div key={d.iso}>
-          <div className="day-sep" style={{ color: feriado(d.iso) ? "var(--rose)" : undefined }}>{diaCurto(d.iso)}</div>
-          <div className="slots">{d.livres.map(m => <button key={m} className={"slot" + (fora[d.iso + m] ? " off" : "")} onClick={() => setFora({ ...fora, [d.iso + m]: !fora[d.iso + m] })}>{hTxt(m)}</button>)}</div>
-        </div>
-      ))}
-      {lista.length > 0 && <>
-        <textarea className="msg" style={{ minHeight: 150 }} readOnly value={texto} aria-label="Texto para divulgar" />
-        <button className="btn" onClick={() => copiarTexto(texto, act, "Horários copiados")}><I.copy /> Copiar texto</button>
-      </>}
-    </Sheet>
-  );
-}
+const LivresSheet = lazy(() => import("./telas/paineis.jsx").then(m => ({ default: m.LivresSheet })));
 
 // LISTA DE ESPERA
 function EsperaSheet({ inicial, onSave, onDelete, onClose }) {
@@ -3725,25 +2822,7 @@ function EsperaSheet({ inicial, onSave, onDelete, onClose }) {
 }
 
 // REGISTROS PENDENTES
-function RegistrosSheet({ db, onClose, act }) {
-  const regs = db.sessions.filter(s => s.status === "done" && s.date >= addDays(todayISO(), -7)).sort((a, b) => b.date.localeCompare(a.date));
-  const pac = id => db.patients.find(p => p.id === id) || { name: "Removido" };
-  return (
-    <Sheet title="Registros das sessões" sub="Últimos 7 dias. Eu guardo só o “feito”, nunca o conteúdo." onClose={onClose}>
-      <div className="panel">
-        {regs.length === 0 && <div className="empty">Nenhuma sessão nos últimos 7 dias.</div>}
-        {regs.map(s => (
-          <button className="txn" key={s.id} onClick={() => act.toggleRegistro(s.id)}>
-            <span className="txn-av">{iniciais(pac(s.patientId).name)}</span>
-            <span className="mid"><span className="nm">{pac(s.patientId).name}</span><span className="sb">{relativo(s.date)} · {s.time}</span></span>
-            <span className={"box " + (s.registro ? "done" : "up")}>{s.registro && <I.check />}</span>
-          </button>
-        ))}
-      </div>
-      <button className="btn" onClick={onClose}>Pronto</button>
-    </Sheet>
-  );
-}
+const RegistrosSheet = lazy(() => import("./telas/paineis.jsx").then(m => ({ default: m.RegistrosSheet })));
 
 // Exportar o mês para o contador (planilha .csv)
 async function exportarMes(db, chave, act) {
@@ -3765,6 +2844,7 @@ async function exportarMes(db, chave, act) {
 
 // Instalar na tela inicial: Android/PC usam o pedido do navegador; iPhone precisa do menu Compartilhar
 let pedidoInstalar = null;
+const limparPedidoInstalar = () => { pedidoInstalar = null; };
 // Aviso discreto no topo quando o app está aberto no navegador e não instalado
 function DicaInstalar() {
   const [fechada, setFechada] = useState(() => lerJSON("agenda-dica-instalar", false) || appInstalado());
@@ -3788,19 +2868,9 @@ function DicaInstalar() {
 if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); pedidoInstalar = e; window.dispatchEvent(new Event("pode-instalar")); });
 }
-function InstalarApp() {
-  const [pode, setPode] = useState(!!pedidoInstalar);
-  const instalado = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
-  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  useEffect(() => { const f = () => setPode(true); window.addEventListener("pode-instalar", f); return () => window.removeEventListener("pode-instalar", f); }, []);
-  if (instalado) return <div className="note mint"><I.check /><span>O app já está instalado neste aparelho.</span></div>;
-  if (pode) return <button className="btn ghost" onClick={async () => { pedidoInstalar.prompt(); await pedidoInstalar.userChoice; pedidoInstalar = null; setPode(false); }}><I.down /> Instalar na tela inicial</button>;
-  if (ios) return <div className="note"><I.share /><span>Para instalar no iPhone: abra no Safari, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Assim os avisos funcionam.</span></div>;
-  return null;
-}
 
 // Fundos do usuário ficam no IndexedDB do aparelho (cabe muito mais que o localStorage)
-const LIMITE_FUNDOS = 10;
+
 const IDB = (() => {
   let conexao = null;
   const abrir = () => conexao || (conexao = new Promise((res, rej) => {
@@ -3820,60 +2890,6 @@ const IDB = (() => {
 })();
 
 // Escolher o fundo do app: 3 prontos + até 10 fotos suas, com recorte
-function FundoPicker({ fundo, meus, onChange, onAdd, onUpdate, onDelete }) {
-  const [erro, setErro] = useState("");
-  const [recortar, setRecortar] = useState(null); // { src, alvo: "novo" | id do fundo }
-  const [apagando, setApagando] = useState(null);
-  const atual = fundo && fundo.id;
-  const sel = id => atual === id || (!atual && !id);
-  const carregar = async e => {
-    const f = e.target.files && e.target.files[0]; e.target.value = "";
-    if (!f) return;
-    if (!f.type.startsWith("image/")) return setErro("Escolha um arquivo de imagem.");
-    try { setRecortar({ src: await lerArquivo(f), alvo: "novo" }); setErro(""); } catch (x) { setErro("Não consegui abrir essa imagem."); }
-  };
-  const escolher = id => onChange(id ? { ...(fundo || {}), id } : null);
-  const atualSrc = atual ? (atual.startsWith("u:") ? (meus.find(m => "u:" + m.id === atual) || {}).img : (FUNDOS.find(f => f.id === atual) || {}).img) : null;
-  return (
-    <>
-      <div className="fundos" role="radiogroup" aria-label="Fundo do app">
-        <button type="button" role="radio" aria-checked={sel(null)} className={"fundo" + (sel(null) ? " on" : "")} onClick={() => escolher(null)}><span className="fundo-img"><I.x /></span>Sem fundo</button>
-        {FUNDOS.map(o => (
-          <button type="button" key={o.id} role="radio" aria-checked={sel(o.id)} className={"fundo" + (sel(o.id) ? " on" : "")} onClick={() => escolher(o.id)}>
-            <span className="fundo-img" style={{ backgroundImage: `url(${o.thumb})` }} />{o.nome}
-          </button>
-        ))}
-        {meus.map((m, i) => (
-          <div key={m.id} className={"fundo" + (sel("u:" + m.id) ? " on" : "")}>
-            <button type="button" role="radio" aria-checked={sel("u:" + m.id)} className="fundo-img" style={{ backgroundImage: `url(${m.img})` }} onClick={() => escolher("u:" + m.id)} aria-label={`Sua foto ${i + 1}`} />
-            <button type="button" className={"fundo-del" + (apagando === m.id ? " armado" : "")} aria-label={apagando === m.id ? "Toque de novo para excluir" : "Excluir este fundo"}
-              onClick={() => { if (apagando === m.id) { onDelete(m.id); setApagando(null); } else { vibrar("aviso"); setApagando(m.id); setTimeout(() => setApagando(a => a === m.id ? null : a), 3500); } }}>
-              {apagando === m.id ? "Excluir?" : <I.x />}
-            </button>
-            Sua foto {i + 1}
-          </div>
-        ))}
-        {meus.length < LIMITE_FUNDOS && (
-          <label className="fundo" htmlFor="fundo-in"><span className="fundo-img add"><I.plus /></span>Adicionar</label>
-        )}
-        <input id="fundo-in" className="sr" type="file" accept="image/*" onChange={carregar} />
-      </div>
-      <div className="hint">{meus.length}/{LIMITE_FUNDOS} fotos suas{meus.length >= LIMITE_FUNDOS ? ": exclua uma para adicionar outra" : ""}.</div>
-      {erro && <div className="error">{erro}</div>}
-      {fundo && atualSrc && <button className="btn ghost" onClick={() => setRecortar({ src: atualSrc, alvo: atual.startsWith("u:") ? atual.slice(2) : "novo" })}><I.pencil /> Ajustar enquadramento deste fundo</button>}
-      {fundo && <Field label="Escurecer o fundo (deixa o texto mais fácil de ler)"><Seg value={fundo.veu || "medio"} onChange={v => onChange({ ...fundo, veu: v })} options={[{ v: "leve", l: "Leve" }, { v: "medio", l: "Médio" }, { v: "forte", l: "Forte" }]} /></Field>}
-      {recortar && <Cropper src={recortar.src} forma="tela" titulo="Ajustar fundo"
-        onCancel={() => setRecortar(null)}
-        onDone={async url => {
-          const alvo = recortar.alvo; setRecortar(null);
-          try {
-            if (alvo === "novo") { if (meus.length >= LIMITE_FUNDOS) return setErro("Você chegou ao limite de 10 fotos. Exclua uma para adicionar outra."); await onAdd(url); }
-            else await onUpdate(alvo, url);
-          } catch (x) { setErro("Não consegui guardar essa imagem neste aparelho."); }
-        }} />}
-    </>
-  );
-}
 
 /* =========================================================
    14. TEMA
@@ -4001,6 +3017,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   }, [pendIcone]);
   // Pede ao navegador para não apagar os dados do app quando faltar espaço
   useEffect(() => { try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {} }, []);
+  // Depois que o app abriu, deixa as outras telas prontas em segundo plano (abrem na hora, sem esperar)
+  useEffect(() => {
+    const pre = () => ["perfil", "paineis", "recorte", "pessoal"].forEach(n => {
+      ({ perfil: () => import("./telas/perfil.jsx"), paineis: () => import("./telas/paineis.jsx"), recorte: () => import("./telas/recorte.jsx"), pessoal: () => import("./telas/pessoal.jsx") })[n]().catch(() => {});
+    });
+    const t = setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(pre, { timeout: 3000 }) : pre()), 3500);
+    return () => clearTimeout(t);
+  }, []);
 
   // Puxar para recarregar: arrastar a tela para baixo no topo atualiza clima, feriados, avisos e o próprio app
   const [puxar, setPuxar] = useState(0);
@@ -4126,8 +3150,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
 
   const act = {
     toast: m => notify(m),
-    setTab: t => comTransicao(() => { setTab(t); rolarTopo(); }),
-    setModo: m => comTransicao(() => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(m === "pessoal" ? "p-home" : "home"); rolarTopo(); }),
+    setTab: t => { if (t === tab) return rolarTopo(); comTransicao(() => { setTab(t); rolarTopo(); }, ORDEM_ABAS.indexOf(t) < ORDEM_ABAS.indexOf(tab) ? "tras" : "frente"); },
+    setModo: m => comTransicao(() => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(m === "pessoal" ? "p-home" : "home"); rolarTopo(); }, "modo"),
     toggleOculto: () => setOculto(o => !o),
     testarAviso: async (atraso = 0) => {
       // pede a permissão na hora do toque (o navegador só deixa pedir assim)
@@ -4295,15 +3319,15 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       {sheet && sheet.type === "patient" && <PatientSheet db={db} pid={sheet.pid} onClose={close} act={act} />}
       {sheet && sheet.type === "form" && <PatientForm total={db.patients.length} perfil={perfil} pre={sheet.pre} initial={sheet.pid ? db.patients.find(p => p.id === sheet.pid) : null} onSave={act.salvarPaciente} onClose={close} />}
       {sheet && sheet.type === "charge" && <ChargeSheet key={sheet.cid} db={db} cid={sheet.cid} fresh={sheet.fresh} nomeProf={conta.nome} onClose={close} act={act} />}
-      {sheet && sheet.type === "settings" && <PerfilPage db={db} conta={conta} tema={tema} inicio={sheet.aba} onClose={close} act={act} />}
-      {sheet && sheet.type === "fechar" && <FecharDia db={db} conta={conta} onClose={close} act={act} />}
-      {sheet && sheet.type === "revisao" && <RevisaoSheet db={db} onClose={close} act={act} />}
-      {sheet && sheet.type === "confirmar" && <ConfirmSheet db={db} iso={sheet.iso} onClose={close} act={act} />}
-      {sheet && sheet.type === "livres" && <LivresSheet db={db} onClose={close} act={act} />}
-      {sheet && sheet.type === "registros" && <RegistrosSheet db={db} onClose={close} act={act} />}
+      {sheet && sheet.type === "settings" && <Suspense fallback={null}><PerfilPage db={db} conta={conta} tema={tema} inicio={sheet.aba} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "fechar" && <Suspense fallback={null}><FecharDia db={db} conta={conta} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "revisao" && <Suspense fallback={null}><RevisaoSheet db={db} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "confirmar" && <Suspense fallback={null}><ConfirmSheet db={db} iso={sheet.iso} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "livres" && <Suspense fallback={null}><LivresSheet db={db} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
-      {sheet && sheet.type === "lanc" && <LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} />}
-      {sheet && sheet.type === "conta" && <ContaSheet key={sheet.id || "nova"} inicial={contaSel} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} />}
+      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "conta" && <Suspense fallback={null}><ContaSheet key={sheet.id || "nova"} inicial={contaSel} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} /></Suspense>}
     </>
   );
   if (!saindo) paineisCong.current = paineis;
@@ -4354,9 +3378,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
         {tabEf === "agenda" && <AgendaTab db={db} now={now} act={act} tema={tema} />}
         {tabEf === "pac" && <PatientsTab db={db} act={act} tema={tema} vista={pacVista} setVista={setPacVista} />}
         {tabEf === "fin" && <FinanceTab db={db} act={act} tema={tema} meta={perfil.meta} />}
-        {tabEf === "p-home" && <PessoalHome db={db} conta={conta} now={now} act={act} tema={tema} />}
-        {tabEf === "p-gastos" && <GastosTab db={db} act={act} tema={tema} />}
-        {tabEf === "p-contas" && <ContasTab db={db} act={act} tema={tema} />}
+        {tabEf === "p-home" && <Suspense fallback={null}><PessoalHome db={db} conta={conta} now={now} act={act} tema={tema} /></Suspense>}
+        {tabEf === "p-gastos" && <Suspense fallback={null}><GastosTab db={db} act={act} tema={tema} /></Suspense>}
+        {tabEf === "p-contas" && <Suspense fallback={null}><ContasTab db={db} act={act} tema={tema} /></Suspense>}
       </main>
 
       <div className={"topo-fixo" + (rolou && !sheet ? " on" : "")} aria-hidden={!(rolou && !sheet)} inert={rolou && !sheet ? undefined : ""}>
@@ -4426,9 +3450,12 @@ function App() {
     setSessao(s => ({ ...s, ...extra, conta: { ...s.conta, ...patch } }));
   };
   if (!sessao) return <Auth onLogin={entrar} />;
-  if (!sessao.conta.perfil || sessao.conta.perfil.refazer) return <Onboarding conta={sessao.conta} onSair={sair} onDone={d => { atualizar(d, { pronto: true }); window.scrollTo(0, 0); }} />;
+  if (!sessao.conta.perfil || sessao.conta.perfil.refazer) return <Suspense fallback={null}><Onboarding conta={sessao.conta} onSair={sair} onDone={d => { atualizar(d, { pronto: true }); window.scrollTo(0, 0); }} /></Suspense>;
   return <Painel key={sessao.conta.email} conta={sessao.conta} novo={sessao.novo} pronto={sessao.pronto} tema={tema} onSair={sair} onAtualizar={atualizar} />;
 }
 
+
+// Peças usadas pelas telas carregadas sob demanda (pasta telas/)
+export { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar };
 
 export default App;

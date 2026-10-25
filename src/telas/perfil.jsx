@@ -1,0 +1,380 @@
+// Parte do app carregada sob demanda (só quando é aberta). Gerado a partir do App.jsx.
+import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
+import PORQUINHO from "../assets/porquinho.webp";
+import { createPortal, flushSync } from "react-dom";
+import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar } from "../App.jsx";
+
+const TXT_PUSH = {
+  servidor: "Falta ligar o servidor de avisos (uma vez só). No computador, dentro da pasta do app, rode: bash servidor-avisos/instalar-avisos.sh",
+  instalar: "No iPhone, os avisos com o app fechado só funcionam com o app instalado: no Safari, toque em Compartilhar → Adicionar à Tela de Início e abra pelo ícone.",
+  indisponivel: "Este navegador não recebe avisos com o app fechado. No iPhone, precisa do iOS 16.4 ou mais novo e do app instalado na tela inicial.",
+  negado: "As notificações estão bloqueadas para o app.",
+  permissao: "Toque em Ligar e escolha Permitir.",
+  "servidor-fora": "Não consegui falar com o servidor de avisos. Confira a internet e tente de novo.",
+  "sem-sw": "O app ainda está terminando de instalar. Feche, abra de novo pelo ícone e tente outra vez.",
+  tempo: "Demorou demais para responder. Tente de novo.",
+};
+
+const textoNegado = () => ehIOS()
+  ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Alvena → Permitir Notificações. Depois volte aqui."
+  : "As notificações estão bloqueadas. Libere nas configurações do celular: Apps → Alvena (ou Chrome) → Notificações. Depois volte aqui.";
+
+function AvisosFechado({ act }) {
+  const [ligado, setLigado] = useState(() => pushLigado());
+  const [estado, setEstado] = useState(null);
+  const [url, setUrl] = useState(() => lerJSON(K_PUSH_URL, ""));
+  const motivo = motivoSemPush();
+  const st = lerJSON(K_PUSH, {});
+  const explica = m => m === "negado" ? textoNegado() : TXT_PUSH[m] || `Não deu certo (${m}). Tente de novo.`;
+  const rodar = async (fn, okTxt) => {
+    setEstado({ tipo: "carregando" });
+    const r = await fn();
+    setLigado(pushLigado());
+    setEstado(r === "ok" ? { tipo: "ok", txt: okTxt } : { tipo: "erro", txt: explica(r) });
+  };
+  return (
+    <div className="push-card">
+      <div className="push-head">
+        <i className={ligado ? "on" : ""}><I.bell /></i>
+        <div>
+          <b>Avisos com o app fechado</b>
+          <span>{ligado ? `Ligados · ${st.total ?? 0} avisos guardados para os próximos dias` : "Sessão chegando, conta vencendo e fechar o dia, mesmo com o celular bloqueado."}</span>
+        </div>
+      </div>
+      {!ligado && motivo && <div className="test-res"><div className="no"><I.alert /><span>{explica(motivo)}</span></div></div>}
+      {!ligado && motivo === "servidor" && (
+        <Field label="Ou cole o endereço do servidor" icon={<I.send />} htmlFor="s-srv">
+          <input id="s-srv" inputMode="url" autoCapitalize="off" autoCorrect="off" value={url} placeholder="https://agenda-avisos….workers.dev" onChange={e => { setUrl(e.target.value); act.setServidor(e.target.value); }} />
+        </Field>
+      )}
+      {!ligado && !motivo && <button className="btn" disabled={estado && estado.tipo === "carregando"} onClick={() => rodar(act.ligarPush, "Pronto! Agora teste: toque em “Testar em 10 s” e feche o app.")}><I.bell /> Ligar avisos com o app fechado</button>}
+      {ligado && (
+        <div className="btn-row">
+          <button className="btn ghost" onClick={() => rodar(() => act.testarPush(0), "Enviado! Deve chegar em alguns segundos.")}>Testar agora</button>
+          <button className="btn ghost" onClick={() => rodar(() => act.testarPush(10000), "Agora feche o app (vá para a tela inicial) e espere 10 segundos.")}>Testar em 10 s</button>
+        </div>
+      )}
+      {estado && (estado.tipo === "carregando"
+        ? <div className="test-res"><div><I.clock /><span>Só um instante…</span></div></div>
+        : <div className="test-res"><div className={estado.tipo === "ok" ? "ok" : "no"}>{estado.tipo === "ok" ? <I.check /> : <I.alert />}<span>{estado.txt}</span></div></div>)}
+      {ligado && st.erro && !estado && <div className="hint">Último problema: {explica(st.erro)}</div>}
+      {ligado && <button className="btn text" onClick={async () => { await act.desligarPush(); setLigado(false); setEstado(null); }}>Desligar avisos com o app fechado</button>}
+    </div>
+  );
+}
+
+function PerfilPage({ db, conta, tema, inicio, onClose, act }) {
+  const pf = conta.perfil || {};
+  const [aba, setAba] = useState(inicio || null);
+  const [nome, setNome] = useState(conta.nome);
+  const [foto, setFoto] = useState(conta.foto || null);
+  const [profissao, setProfissao] = useState(pf.profissao || "Psicologia");
+  const [nasc, setNasc] = useState(pf.nascimento || "");
+  const [cidade, setCidade] = useState(pf.cidade || "");
+  const [pix, setPix] = useState(db.settings.pix || "");
+  const [termo, setTermo] = useState(pf.termo || "Paciente");
+  const [dur, setDur] = useState(pf.duracao || 50);
+  const [hIni, setHIni] = useState(pf.horaIni ?? 8);
+  const [hFim, setHFim] = useState(pf.horaFim ?? 20);
+  const [diasT, setDiasT] = useState(pf.diasTrab || [1, 2, 3, 4, 5]);
+  const [falta, setFalta] = useState(pf.falta || { cobrar: false, horas: 24 });
+  const [regLembrar, setRegLembrar] = useState(pf.registro !== false);
+  const [meta, setMeta] = useState(pf.meta ? fmtNum(pf.meta) : "");
+  const [valorPadrao, setValorPadrao] = useState(pf.valorPadrao ? fmtNum(pf.valorPadrao) : "");
+  const [subPadrao, setSubPadrao] = useState(pf.subPadrao ? fmtNum(pf.subPadrao) : "");
+  const [reserva, setReserva] = useState(pf.reserva || 0);
+  const av0 = { ...AVISOS_PADRAO, ...(pf.avisos || {}) };
+  const [avAtivo, setAvAtivo] = useState(av0.ativo);
+  const [antec, setAntec] = useState(av0.antecedencia);
+  const [avNomes, setAvNomes] = useState(!!av0.nomes);
+  const [avResumo, setAvResumo] = useState(av0.resumo !== false);
+  const [avFechar, setAvFechar] = useState(av0.fechar !== false);
+  const [estilo, setEstilo] = useState(pf.estilo || "detalhado");
+  const [vib, setVib] = useState(pf.vibrar !== false);
+  const [pessoal, setPessoal] = useState(pf.pessoal !== false);
+  const [permissao, setPermissao] = useState(() => "Notification" in window ? Notification.permission : "indisponivel");
+  const [teste, setTeste] = useState(null);
+  const [salvo, setSalvo] = useState(false);
+  const primeira = useRef(true);
+  const topo = useRef(null);
+
+  // Salva sozinho meio segundo depois da última mudança
+  useEffect(() => {
+    if (primeira.current) { primeira.current = false; return; }
+    const t = setTimeout(() => {
+      const atual = conta.perfil || {};
+      act.salvarPerfil({
+        nome: nome.trim() || conta.nome, foto,
+        perfil: { ...atual, profissao, nascimento: nasc, cidade: cidade.trim(), termo, duracao: dur, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar,
+          meta: num(meta) || 0, valorPadrao: num(valorPadrao) || atual.valorPadrao || 0, subPadrao: num(subPadrao), reserva,
+          avisos: { ...av0, ...(atual.avisos || {}), ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar },
+          estilo, vibrar: vib, pessoal },
+      }, pix.trim());
+      setSalvo(true);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, hIni, hFim, diasT, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, estilo, vib, pessoal]);
+  useEffect(() => { if (!salvo) return; const t = setTimeout(() => setSalvo(false), 1600); return () => clearTimeout(t); }, [salvo]);
+  useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba]);
+  useEffect(() => {
+    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
+    const k = e => { if (e.key === "Escape") { if (aba) setAba(null); else onClose(); } };
+    window.addEventListener("keydown", k);
+    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", k); };
+  }, [aba]);
+
+  const testar = atraso => { setTeste({ esperando: atraso > 0 }); act.testarAviso(atraso).then(r => { setTeste({ r }); if ("Notification" in window) setPermissao(Notification.permission); }); };
+  const textoTeste = {
+    ok: "Notificação enviada. Se não apareceu, confira se o app pode mostrar notificações nas configurações do celular.",
+    negado: "As notificações estão bloqueadas. Libere nas configurações do celular.",
+    pendente: "Você ainda não permitiu as notificações. Toque em Testar e escolha Permitir.",
+    indisponivel: "Este navegador não tem notificações. No iPhone, instale o app na tela inicial (iOS 16.4 ou mais novo).",
+    bloqueado: "O navegador bloqueou a notificação. Instale o app na tela inicial e teste de novo.",
+  };
+  const textoPermissao = { granted: "Permitidas", denied: "Bloqueadas", default: "Ainda não pedidas", indisponivel: "Indisponíveis neste navegador" };
+
+  // Números do cartão
+  const hoje = todayISO(), chave = hoje.slice(0, 7);
+  const ativos = db.patients.filter(p => p.active).length;
+  const sessMes = db.sessions.filter(s => s.status === "done" && s.date.startsWith(chave)).length;
+  const liqMes = liquidoMes(db, chave);
+  let seguidos = 0;
+  for (let i = 1; i < 60; i++) { const d = addDays(hoje, -i); if (!itensDoDia(db, d).length) continue; if ((db.fechados || {})[d]) seguidos++; else break; }
+  const idade = idadeDe(nasc);
+  const T = termoDe(termo);
+  const diasTxt = diasT.length === 5 && [1, 2, 3, 4, 5].every(d => diasT.includes(d)) ? "seg a sex" : [1, 2, 3, 4, 5, 6, 0].filter(d => diasT.includes(d)).map(d => DIA_CURTO[d].toLowerCase()).join(", ");
+  const temaNome = { dark: "Escuro", light: "Claro", auto: "Do aparelho" }[tema.modo];
+
+  const secoes = [
+    { grupo: "Você", itens: [
+      { id: "dados", ic: <I.user />, t: "Dados pessoais", v: [profissao, cidade].filter(Boolean).join(" · ") || "Nome, foto e cidade" },
+      { id: "pix", ic: <I.key />, t: "Chave Pix", v: pix ? "Entra nas cobranças" : "Ainda não colocou" },
+    ] },
+    { grupo: "Consultório", itens: [
+      { id: "agenda", ic: <I.cal />, t: "Agenda", v: `${hIni}h às ${hFim}h · ${diasTxt || "sem dias"}` },
+      { id: "dinheiro", ic: <I.wallet />, t: "Valores e metas", v: meta ? `Meta de ${brl(num(meta))}` : "Sem meta" },
+      { id: "avisos", ic: <I.bell />, t: "Avisos", v: !avAtivo ? "Desligados" : pushLigado() ? `Com o app fechado · ${antec} min antes` : `${antec} min antes` },
+    ] },
+    { grupo: "App", itens: [
+      { id: "visual", ic: <I.sun />, t: "Aparência e fundo", v: temaNome },
+      ...[{ id: "pessoal", ic: <I.piggy />, t: "Modo Pessoal", v: pessoal ? "Ligado" : "Desligado" }],
+      { id: "app", ic: <I.down />, t: "Instalar e atalhos", v: appInstalado() ? "Instalado" : "Colocar na tela inicial" },
+    ] },
+  ];
+  const titulo = { dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Modo Pessoal", app: "Instalar e atalhos" }[aba];
+
+  return createPortal(
+    <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
+      <div className="perfil-in">
+        <div className="perfil-top">
+          <button className="icon-btn" onClick={() => aba ? setAba(null) : onClose()} aria-label={aba ? "Voltar" : "Fechar"}>{aba ? <I.chevL /> : <I.x />}</button>
+          <b>{titulo || "Perfil"}</b>
+          <span className={"perfil-salvo" + (salvo ? " on" : "")} aria-live="polite">{salvo ? <><I.check /> Salvo</> : ""}</span>
+        </div>
+
+        {!aba && <>
+          <div className="perfil-hero">
+            <button className="perfil-foto" onClick={() => setAba("dados")} aria-label="Trocar foto e dados">
+              <Avatar conta={{ nome: nome || "?", foto }} /><i><I.pencil /></i>
+            </button>
+            <h2>{nome || conta.nome}</h2>
+            <p>{[profissao, idade ? `${idade} anos` : null].filter(Boolean).join(" · ")}</p>
+            <span className="perfil-email">{conta.email}{conta.demo ? " · demonstração" : ""}</span>
+            <div className="perfil-nums">
+              <div><b>{ativos}</b><span>{ativos === 1 ? `${T.s} ativo` : `${T.p} ativos`}</span></div>
+              <div><b>{sessMes}</b><span>{sessMes === 1 ? "sessão no mês" : "sessões no mês"}</span></div>
+              <div><b className="num">{ESCONDER ? "R$ •••" : `R$ ${Math.round(liqMes).toLocaleString("pt-BR")}`}</b><span>líquido no mês</span></div>
+            </div>
+            {seguidos >= 2 && <div className="perfil-seq"><I.flag /> Você fechou o dia {seguidos} vezes seguidas</div>}
+          </div>
+
+          {secoes.map(g => (
+            <div key={g.grupo} className="perfil-grupo">
+              <h3>{g.grupo}</h3>
+              <div className="perfil-lista">
+                {g.itens.map(it => (
+                  <button key={it.id} className="perfil-row" onClick={() => setAba(it.id)}>
+                    <i>{it.ic}</i><span><b>{it.t}</b><small>{it.v}</small></span><I.chev />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="perfil-grupo">
+            <h3>Conta</h3>
+            <div className="perfil-lista">
+              <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
+              <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>Seus dados ficam guardados neste aparelho</small></span><I.chev /></button>
+            </div>
+          </div>
+          <ConfirmButton label="Apagar meus dados" titulo="Apagar todos os seus dados?" texto="Pacientes, sessões, cobranças e gastos deste aparelho somem de vez. Isso não dá para desfazer." acao="Apagar tudo" onConfirm={act.zerar} />
+          {db.patients.length === 0 && <button className="btn text" onClick={act.carregarExemplo}>Carregar dados de exemplo</button>}
+        </>}
+
+        {aba === "dados" && <div className="stack">
+          <PhotoPicker nome={nome} foto={foto} onChange={setFoto} />
+          <div className="fields">
+            <Field label="Como quer ser chamado(a)" icon={<I.user />} htmlFor="p-nome"><input id="p-nome" value={nome} onChange={e => setNome(e.target.value)} /></Field>
+            <Field label="Data de nascimento" htmlFor="p-nasc"><input id="p-nasc" type="date" value={nasc} onChange={e => setNasc(e.target.value)} /></Field>
+            <Field label="Cidade (para o clima e a chuva)" icon={<I.cloud />} htmlFor="p-cidade"><input id="p-cidade" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex.: Curitiba" /></Field>
+          </div>
+          <h3 className="section-title">Profissão</h3>
+          <div className="chips-wrap">{PROFISSOES.map(p => <button type="button" key={p.id} className={"chip-op" + (profissao === p.id ? " on" : "")} aria-pressed={profissao === p.id} onClick={() => { setProfissao(p.id); setTermo(p.termo); }}>{p.id}</button>)}</div>
+          <div className="fields"><Field label="Quem você atende"><Seg value={termo} onChange={setTermo} options={["Paciente", "Cliente", "Analisando"].map(v => ({ v, l: v }))} /></Field></div>
+          {ehAniversario({ nascimento: nasc }) && <div className="note mint"><I.star /><span>Feliz aniversário! Hoje o app fica mais leve com você.</span></div>}
+        </div>}
+
+        {aba === "pix" && <div className="stack">
+          <div className="fields"><Field label="Sua chave Pix" icon={<I.key />} htmlFor="p-pix"><input id="p-pix" value={pix} onChange={e => setPix(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" autoCapitalize="off" /></Field></div>
+          <div className="hint">Ela entra sozinha no fim das mensagens de cobrança, para o {T.s} só copiar e pagar.</div>
+        </div>}
+
+        {aba === "agenda" && <div className="stack">
+          <div className="fields">
+            <Field label="Horário de atendimento">
+              <div className="stepper">
+                <button type="button" aria-label="Começa mais cedo" onClick={() => setHIni(Math.max(5, hIni - 1))}>−</button><b className="num">{hIni}h</b><button type="button" aria-label="Começa mais tarde" onClick={() => setHIni(Math.min(hFim - 1, hIni + 1))}>+</button>
+                <span style={{ color: "var(--muted)", fontWeight: 600 }}>até</span>
+                <button type="button" aria-label="Termina mais cedo" onClick={() => setHFim(Math.max(hIni + 1, hFim - 1))}>−</button><b className="num">{hFim}h</b><button type="button" aria-label="Termina mais tarde" onClick={() => setHFim(Math.min(23, hFim + 1))}>+</button>
+              </div>
+            </Field>
+            <Field label="Dias em que atende">
+              <div className="slots">{[1, 2, 3, 4, 5, 6, 0].map(d => <button type="button" key={d} className={"slot" + (diasT.includes(d) ? "" : " off")} style={{ textDecoration: "none" }} aria-pressed={diasT.includes(d)} onClick={() => setDiasT(diasT.includes(d) ? diasT.filter(x => x !== d) : [...diasT, d])}>{DIA_CURTO[d]}</button>)}</div>
+            </Field>
+            <Field label="Duração da sessão (minutos)"><Seg value={dur} onChange={setDur} options={DURACOES.map(d => ({ v: d, l: String(d) }))} /></Field>
+          </div>
+          <Toggle on={regLembrar} onClick={() => setRegLembrar(!regLembrar)}>Lembrar do registro depois de cada sessão</Toggle>
+          <Toggle on={falta.cobrar} onClick={() => setFalta({ ...falta, cobrar: !falta.cobrar })}>Cobrar falta sem aviso</Toggle>
+          {falta.cobrar && <div className="fields"><Field label="Aviso mínimo para não cobrar (horas)"><Seg value={falta.horas} onChange={h => setFalta({ ...falta, horas: h })} options={[12, 24, 48].map(h => ({ v: h, l: `${h}h` }))} /></Field></div>}
+        </div>}
+
+        {aba === "dinheiro" && <div className="stack">
+          <div className="fields">
+            <Field label="Meta líquida do mês (R$)" icon={<I.target />} htmlFor="p-meta"><input id="p-meta" inputMode="decimal" value={meta} onChange={e => setMeta(soNumero(e.target.value))} placeholder="Sem meta" /></Field>
+            <Field label={`Valor padrão da sessão para ${T.p} novos (R$)`} icon={<I.money />} htmlFor="p-valor"><input id="p-valor" inputMode="decimal" value={valorPadrao} onChange={e => setValorPadrao(soNumero(e.target.value))} placeholder="0,00" /></Field>
+            <Field label="Sublocação padrão por sessão (R$)" icon={<I.door />} htmlFor="p-sub"><input id="p-sub" inputMode="decimal" value={subPadrao} onChange={e => setSubPadrao(soNumero(e.target.value))} placeholder="Sem sublocação" /></Field>
+            <Field label="Separar para o imposto (% do líquido)"><Seg value={reserva} onChange={setReserva} options={[0, 10, 15, 20, 27.5].map(v => ({ v, l: v ? String(v).replace(".", ",") : "Não" }))} /></Field>
+          </div>
+          <div className="hint">Estimativa simples para não levar susto. O valor certo do Carnê-Leão quem calcula é o contador.</div>
+          <div className="fields"><Field label="Resumo do Início"><Seg value={estilo} onChange={setEstilo} options={[{ v: "curto", l: "Direto ao ponto" }, { v: "detalhado", l: "Completo" }]} /></Field></div>
+        </div>}
+
+        {aba === "avisos" && <div className="stack">
+          <div className="fields">
+            <Field label="Avisos de sessão, contas e pendências"><Seg value={avAtivo} onChange={setAvAtivo} options={[{ v: true, l: "Ligados" }, { v: false, l: "Desligados" }]} /></Field>
+            <Field label="Avisar antes da sessão (minutos)"><Seg value={antec} onChange={setAntec} options={[5, 10, 15, 30].map(m => ({ v: m, l: String(m) }))} /></Field>
+          </div>
+          <Toggle on={avResumo} onClick={() => setAvResumo(!avResumo)}>Resumo do dia de manhã</Toggle>
+          <Toggle on={avFechar} onClick={() => setAvFechar(!avFechar)}>Lembrar de fechar o dia</Toggle>
+          <Toggle on={avNomes} onClick={() => setAvNomes(!avNomes)}>Mostrar o nome do {T.s} no aviso</Toggle>
+          {!avNomes && <div className="hint">O aviso diz só “Sessão em {antec} min”, sem nome. Mais discreto na tela bloqueada.</div>}
+          <AvisosFechado act={act} />
+          {!pushLigado() && <>
+            <div className="hint">Teste com o app aberto · notificações: <b>{textoPermissao[permissao] || permissao}</b></div>
+            <div className="btn-row">
+              <button className="btn ghost" onClick={() => testar(0)}><I.bell /> Testar aqui</button>
+              <button className="btn ghost" onClick={() => testar(10000)}>Em 10 segundos</button>
+            </div>
+            {teste && (teste.esperando
+              ? <div className="test-res"><div><I.clock /><span>Aguarde 10 segundos com o app aberto.</span></div></div>
+              : <div className="test-res"><div className={teste.r === "ok" ? "ok" : "no"}>{teste.r === "ok" ? <I.check /> : <I.alert />}<span>{textoTeste[teste.r] || textoTeste.bloqueado}</span></div></div>)}
+          </>}
+        </div>}
+
+        {aba === "visual" && <div className="stack">
+          <div className="fields"><Field label="Aparência"><Seg value={tema.modo} onChange={tema.setModo} options={[{ v: "dark", l: "Escuro" }, { v: "light", l: "Claro" }, { v: "auto", l: "Do aparelho" }]} /></Field></div>
+          <h3 className="section-title">Fundo do app</h3>
+          <FundoPicker fundo={conta.fundo} meus={act.meusFundos} onChange={act.setFundo} onAdd={act.addFundo} onUpdate={act.updFundo} onDelete={act.delFundo} />
+          <Toggle on={conta.vidro !== false} onClick={() => act.setVidro(conta.vidro === false)}>Efeito de vidro</Toggle>
+          <div className="hint">{conta.vidro === false ? "Desligado: cartões, botões e a fala ficam sólidos, mais nítidos e mais leves no celular. A foto de fundo continua aparecendo atrás." : "Ligado: cartões e botões ficam transparentes, deixando a foto de fundo aparecer por trás. Desligue se preferir tudo sólido."}</div>
+          <Toggle on={vib} onClick={() => { setVib(!vib); ajustarVibrar(!vib); if (!vib) vibrar("ok"); }}>Vibrar nos toques</Toggle>
+          <div className="hint">No iPhone a vibração é bem leve (o iPhone só deixa apps da web darem um toquinho).</div>
+        </div>}
+
+        {aba === "pessoal" && <div className="stack">
+          <div className="note"><I.piggy /><span>O modo Pessoal guarda os gastos da casa, as contas fixas e o que sobra no mês, separado do consultório.</span></div>
+          <Toggle on={pessoal} onClick={() => setPessoal(!pessoal)}>Usar também o modo Pessoal</Toggle>
+          {pessoal && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
+        </div>}
+
+        {aba === "app" && <div className="stack">
+          <InstalarApp />
+          <a className="btn ghost" href={`${BASE}sobre/`} target="_blank" rel="noopener"><I.share /> Página do app, para indicar a colegas</a>
+          <div className="hint">Atalhos: links do app terminados em <b>#gasto</b>, <b>#agora</b>, <b>#fechar</b> ou <b>#livres</b> abrem direto o gasto por voz, o Só o agora, o Fechar o dia e os horários livres. No Android, segure o ícone do app para ver os atalhos.</div>
+        </div>}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function InstalarApp() {
+  const [pode, setPode] = useState(!!pedidoInstalar);
+  const instalado = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  useEffect(() => { const f = () => setPode(true); window.addEventListener("pode-instalar", f); return () => window.removeEventListener("pode-instalar", f); }, []);
+  if (instalado) return <div className="note mint"><I.check /><span>O app já está instalado neste aparelho.</span></div>;
+  if (pode) return <button className="btn ghost" onClick={async () => { pedidoInstalar.prompt(); await pedidoInstalar.userChoice; limparPedidoInstalar(); setPode(false); }}><I.down /> Instalar na tela inicial</button>;
+  if (ios) return <div className="note"><I.share /><span>Para instalar no iPhone: abra no Safari, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Assim os avisos funcionam.</span></div>;
+  return null;
+}
+
+const LIMITE_FUNDOS = 10;
+
+function FundoPicker({ fundo, meus, onChange, onAdd, onUpdate, onDelete }) {
+  const [erro, setErro] = useState("");
+  const [recortar, setRecortar] = useState(null); // { src, alvo: "novo" | id do fundo }
+  const [apagando, setApagando] = useState(null);
+  const atual = fundo && fundo.id;
+  const sel = id => atual === id || (!atual && !id);
+  const carregar = async e => {
+    const f = e.target.files && e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    if (!f.type.startsWith("image/")) return setErro("Escolha um arquivo de imagem.");
+    try { setRecortar({ src: await lerArquivo(f), alvo: "novo" }); setErro(""); } catch (x) { setErro("Não consegui abrir essa imagem."); }
+  };
+  const escolher = id => onChange(id ? { ...(fundo || {}), id } : null);
+  const atualSrc = atual ? (atual.startsWith("u:") ? (meus.find(m => "u:" + m.id === atual) || {}).img : (FUNDOS.find(f => f.id === atual) || {}).img) : null;
+  return (
+    <>
+      <div className="fundos" role="radiogroup" aria-label="Fundo do app">
+        <button type="button" role="radio" aria-checked={sel(null)} className={"fundo" + (sel(null) ? " on" : "")} onClick={() => escolher(null)}><span className="fundo-img"><I.x /></span>Sem fundo</button>
+        {FUNDOS.map(o => (
+          <button type="button" key={o.id} role="radio" aria-checked={sel(o.id)} className={"fundo" + (sel(o.id) ? " on" : "")} onClick={() => escolher(o.id)}>
+            <span className="fundo-img" style={{ backgroundImage: `url(${o.thumb})` }} />{o.nome}
+          </button>
+        ))}
+        {meus.map((m, i) => (
+          <div key={m.id} className={"fundo" + (sel("u:" + m.id) ? " on" : "")}>
+            <button type="button" role="radio" aria-checked={sel("u:" + m.id)} className="fundo-img" style={{ backgroundImage: `url(${m.img})` }} onClick={() => escolher("u:" + m.id)} aria-label={`Sua foto ${i + 1}`} />
+            <button type="button" className={"fundo-del" + (apagando === m.id ? " armado" : "")} aria-label={apagando === m.id ? "Toque de novo para excluir" : "Excluir este fundo"}
+              onClick={() => { if (apagando === m.id) { onDelete(m.id); setApagando(null); } else { vibrar("aviso"); setApagando(m.id); setTimeout(() => setApagando(a => a === m.id ? null : a), 3500); } }}>
+              {apagando === m.id ? "Excluir?" : <I.x />}
+            </button>
+            Sua foto {i + 1}
+          </div>
+        ))}
+        {meus.length < LIMITE_FUNDOS && (
+          <label className="fundo" htmlFor="fundo-in"><span className="fundo-img add"><I.plus /></span>Adicionar</label>
+        )}
+        <input id="fundo-in" className="sr" type="file" accept="image/*" onChange={carregar} />
+      </div>
+      <div className="hint">{meus.length}/{LIMITE_FUNDOS} fotos suas{meus.length >= LIMITE_FUNDOS ? ": exclua uma para adicionar outra" : ""}.</div>
+      {erro && <div className="error">{erro}</div>}
+      {fundo && atualSrc && <button className="btn ghost" onClick={() => setRecortar({ src: atualSrc, alvo: atual.startsWith("u:") ? atual.slice(2) : "novo" })}><I.pencil /> Ajustar enquadramento deste fundo</button>}
+      {fundo && <Field label="Escurecer o fundo (deixa o texto mais fácil de ler)"><Seg value={fundo.veu || "medio"} onChange={v => onChange({ ...fundo, veu: v })} options={[{ v: "leve", l: "Leve" }, { v: "medio", l: "Médio" }, { v: "forte", l: "Forte" }]} /></Field>}
+      {recortar && <Suspense fallback={null}><Cropper src={recortar.src} forma="tela" titulo="Ajustar fundo"
+        onCancel={() => setRecortar(null)}
+        onDone={async url => {
+          const alvo = recortar.alvo; setRecortar(null);
+          try {
+            if (alvo === "novo") { if (meus.length >= LIMITE_FUNDOS) return setErro("Você chegou ao limite de 10 fotos. Exclua uma para adicionar outra."); await onAdd(url); }
+            else await onUpdate(alvo, url);
+          } catch (x) { setErro("Não consegui guardar essa imagem neste aparelho."); }
+        }} /></Suspense>}
+    </>
+  );
+}
+
+export { PerfilPage };

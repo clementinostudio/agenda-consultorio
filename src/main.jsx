@@ -15,6 +15,7 @@ import "@fontsource/sora/700.css";
 
 import "./styles.css";
 import App from "./App.jsx";
+import AvisosSistema, { avisarNovaVersao } from "./avisos.jsx";
 
 // Quem não está logado e abriu pelo navegador vê primeiro a página de apresentação (sobre/).
 // Quem já está logado, ou abriu pelo app instalado, vai direto para o app.
@@ -28,11 +29,22 @@ const vemDaApresentacao = ["#entrar", "#criar", "#demo"].includes(location.hash)
 if (!logado && !instalado && !vemDaApresentacao) {
   location.replace(`${BASE}sobre/`);
 } else {
-  // Service worker do PWA: deixa o app abrir offline e atualiza sozinho
-  registerSW({ immediate: true });
+  // Service worker do PWA: deixa o app abrir offline. Quando sai uma versão nova, mostra o aviso "Atualizar"
+  // (em vez de trocar sozinho no meio do uso). Procura novidades ao abrir, ao voltar para o app e a cada 30 min.
+  const atualizar = registerSW({
+    immediate: true,
+    onNeedRefresh() { avisarNovaVersao(atualizar); },
+    onRegisteredSW(url, reg) {
+      if (!reg) return;
+      const procurar = () => { if (navigator.onLine !== false) reg.update().catch(() => {}); };
+      setInterval(procurar, 30 * 60 * 1000);
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") procurar(); });
+    },
+  });
   createRoot(document.getElementById("root")).render(
     <React.StrictMode>
       <App />
+      <AvisosSistema />
     </React.StrictMode>
   );
 }
