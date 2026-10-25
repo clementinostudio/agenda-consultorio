@@ -1261,11 +1261,10 @@ const vazio = () => ({ settings: { pix: "" }, patients: [], sessions: [], charge
    6. ÍCONES
    ========================================================= */
 const Svg = ({ children, sw = 1.8 }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{children}</svg>;
-// Logo do Cais: o C de enseada com o barquinho, branco que esmaece embaixo
+// Logo do Cais: anel em C (a enseada) com o barquinho, branco sobre o azul
 const Marca = () => (
   <svg viewBox="0 0 512 512" aria-hidden="true">
-    <defs><linearGradient id="marca-g" x1="0" y1="120" x2="0" y2="392" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#fff" /><stop offset=".55" stopColor="#F4F1FF" stopOpacity=".95" /><stop offset="1" stopColor="#D9CCFF" stopOpacity=".6" /></linearGradient></defs>
-    <path d="M256 120A136 136 0 1 0 392 256H300A44 44 0 1 1 256 212Z" fill="url(#marca-g)" /><circle cx="340" cy="172" r="30" fill="url(#marca-g)" />
+    <path d="M256 160A96 96 0 1 0 352 256" fill="none" stroke="#fff" strokeWidth="68" /><circle cx="323.9" cy="188.1" r="34" fill="#fff" />
   </svg>
 );
 const I = {
