@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { fileURLToPath } from "node:url";
 
 // BASE_PATH: no GitHub Pages o app fica em /nome-do-repositorio/ (o workflow já preenche isso).
 // Na Vercel, Netlify ou rodando local, fica "/".
@@ -8,6 +9,15 @@ const base = process.env.BASE_PATH || "/";
 
 export default defineConfig({
   base,
+  // Duas páginas: o app (index.html) e a página de apresentação (sobre/index.html)
+  build: {
+    rollupOptions: {
+      input: {
+        app: fileURLToPath(new URL("./index.html", import.meta.url)),
+        sobre: fileURLToPath(new URL("./sobre/index.html", import.meta.url)),
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
@@ -53,6 +63,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,woff2}"],
         globIgnores: ["**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/splash/**", "**/screenshots/**"],
         navigateFallback: "index.html",
+        navigateFallbackDenylist: [/\/sobre\//], // a página de apresentação não é o app
         importScripts: ["sw-extra.js"], // abre o app ao tocar numa notificação
         runtimeCaching: [
           { // Clima (Open-Meteo): tenta a internet, usa o último resultado se estiver offline

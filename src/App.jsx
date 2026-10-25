@@ -3086,6 +3086,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act }) {
 
         {aba === "app" && <div className="stack">
           <InstalarApp />
+          <a className="btn ghost" href={`${BASE}sobre/`} target="_blank" rel="noopener"><I.share /> Página do app, para indicar a colegas</a>
           <div className="hint">Atalhos: links do app terminados em <b>#gasto</b>, <b>#agora</b>, <b>#fechar</b> ou <b>#livres</b> abrem direto o gasto por voz, o Só o agora, o Fechar o dia e os horários livres. No Android, segure o ícone do app para ver os atalhos.</div>
         </div>}
       </div>

@@ -142,6 +142,9 @@ Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da
 - Empresas conhecidas (Uber, 99, iFood, Netflix, Amazon, mercados, farmácias, postos, bancos...) entram com o nome certo, a categoria certa e a logo oficial, que vem do ícone do próprio site da empresa e fica guardada no aparelho. A lista fica em `MARCAS`, no `App.jsx`.
 - Se o aparelho não liberar o reconhecimento (acontece em alguns iPhones com o app instalado), o app abre o teclado: toque no microfone do teclado e fale.
 
+### Página de apresentação (landing page)
+Fica em `sobre/index.html` e é publicada junto com o app: `https://SEU-USUARIO.github.io/agenda-consultorio/sobre/`. Os textos estão direto no HTML; o visual fica em `src/landing.css`. As fotos do app vêm de `public/screenshots/`.
+
 ### Cara de app
 - Bolinha, o mascote do microfone: uma bola minimalista com dois olhinhos que flutua, pisca, olha em volta, faz caras sozinha, reage à sua voz, fica feliz quando entende e confusa quando não entende.
 - A barra de baixo desce e some enquanto a tela rola, e volta subindo com uma mola suave quando para.
