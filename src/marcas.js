@@ -532,7 +532,7 @@ function distancia(a, b, max) {
 }
 const tolerancia = len => (len <= 3 ? 0 : len <= 5 ? 1 : len <= 9 ? 2 : 3);
 // palavras comuns que não podem virar marca por engano ("mercado" não é "Mercadão")
-const COMUNS = new Set("mercado mercados supermercado supermercados super atacado atacadista atacadistas farmacia farmacias drogaria drogarias posto postos loja lojas casa conta contas banco cartao padaria restaurante lanchonete academia escola curso internet energia agua luz gas aluguel hiper mini mais menos gastei paguei comprei hoje ontem reais real pix caixa light nacional mundial formosa lider pinheiro planalto unidas movida decolar original natural".split(" "));
+const COMUNS = new Set("mercado mercados supermercado supermercados super atacado atacadista atacadistas farmacia farmacias drogaria drogarias posto postos loja lojas casa conta contas banco cartao padaria restaurante lanchonete academia escola curso internet energia agua luz gas aluguel hiper mini mais menos gastei paguei comprei hoje ontem reais real pix caixa light nacional mundial formosa lider pinheiro planalto unidas movida decolar original natural conto contos pila pilas mango mangos paus torrei gastou deu dei recebi ganhei".split(" "));
 
 // Pontua o quanto o texto digitado combina com uma marca (0 a 100)
 function pontuar(q, m) {

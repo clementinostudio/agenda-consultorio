@@ -29,3 +29,22 @@ self.addEventListener("notificationclick", event => {
 
 // Se o aparelho trocar a inscrição sozinho, o app refaz na próxima vez que abrir
 self.addEventListener("pushsubscriptionchange", () => {});
+
+// "Compartilhar com o Alvena" (Android): foto de comprovante, código de boleto ou texto.
+// Guarda o que chegou e abre o app, que lê e mostra para você conferir.
+self.addEventListener("fetch", event => {
+  const req = event.request;
+  if (req.method !== "POST" || !new URL(req.url).pathname.endsWith("/compartilhar")) return;
+  event.respondWith((async () => {
+    try {
+      const form = await req.formData();
+      const c = await caches.open("compartilhado");
+      const u = n => new URL(`__compartilhado/${n}`, self.registration.scope).href;
+      const arq = form.getAll("arquivo").find(f => f && typeof f === "object" && f.size);
+      if (arq) await c.put(u("arquivo"), new Response(arq, { headers: { "content-type": arq.type || "image/jpeg" } }));
+      const texto = ["title", "text", "url"].map(k => form.get(k)).filter(v => typeof v === "string" && v.trim()).join(" ").trim();
+      if (texto) await c.put(u("texto"), new Response(texto, { headers: { "content-type": "text/plain; charset=utf-8" } }));
+    } catch (e) {}
+    return Response.redirect(self.registration.scope + "#compartilhado", 303);
+  })());
+});

@@ -37,7 +37,7 @@ if [ -z "$KV_ID" ]; then
 fi
 [ -n "$KV_ID" ] || erro "Não consegui criar o armazenamento na Cloudflare. Rode o comando de novo."
 node -e '
-  const fs = require("fs"); let t = fs.readFileSync("wrangler.jsonc", "utf8");
+  const fs = require("fs"); let t = fs.readFileSync("wrangler.jsonc", "utf8").replace(/\r\n/g, "\n");
   t = t.replace(/,\s*"kv_namespaces"[\s\S]*?\]\s*(?=\n\})/, "");
   t = t.replace(/\n\}\s*$/, `,\n  "kv_namespaces": [{ "binding": "AVISOS", "id": "${process.argv[1]}" }]\n}\n`);
   fs.writeFileSync("wrangler.jsonc", t);' "$KV_ID"

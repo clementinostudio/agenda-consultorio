@@ -89,6 +89,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   const [avNomes, setAvNomes] = useState(!!av0.nomes);
   const [avResumo, setAvResumo] = useState(av0.resumo !== false);
   const [avFechar, setAvFechar] = useState(av0.fechar !== false);
+  const [avSemana, setAvSemana] = useState(av0.semana !== false);
   const [estilo, setEstilo] = useState(pf.estilo || "detalhado");
   const [vib, setVib] = useState(pf.vibrar !== false);
   const [pessoal, setPessoal] = useState(pf.pessoal !== false);
@@ -107,13 +108,13 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
         nome: nome.trim() || conta.nome, foto,
         perfil: { ...atual, profissao, nascimento: nasc, cidade: cidade.trim(), termo, duracao: dur, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar,
           meta: num(meta) || 0, valorPadrao: num(valorPadrao) || atual.valorPadrao || 0, subPadrao: num(subPadrao), reserva,
-          avisos: { ...av0, ...(atual.avisos || {}), ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar },
+          avisos: { ...av0, ...(atual.avisos || {}), ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar, semana: avSemana },
           estilo, vibrar: vib, pessoal },
       }, pix.trim());
       setSalvo(true);
     }, 450);
     return () => clearTimeout(t);
-  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, hIni, hFim, diasT, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, estilo, vib, pessoal]);
+  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, hIni, hFim, diasT, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, avSemana, estilo, vib, pessoal]);
   useEffect(() => { if (!salvo) return; const t = setTimeout(() => setSalvo(false), 1600); return () => clearTimeout(t); }, [salvo]);
   useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba]);
   useEffect(() => {
@@ -269,6 +270,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
           </div>
           <Toggle on={avResumo} onClick={() => setAvResumo(!avResumo)}>Resumo do dia de manhã</Toggle>
           <Toggle on={avFechar} onClick={() => setAvFechar(!avFechar)}>Lembrar de fechar o dia</Toggle>
+          <Toggle on={avSemana} onClick={() => setAvSemana(!avSemana)}>Resumo da semana no domingo às 20h</Toggle>
           <Toggle on={avNomes} onClick={() => setAvNomes(!avNomes)}>Mostrar o nome do {T.s} no aviso</Toggle>
           {!avNomes && <div className="hint">O aviso diz só “Sessão em {antec} min”, sem nome. Mais discreto na tela bloqueada.</div>}
           <AvisosFechado act={act} />

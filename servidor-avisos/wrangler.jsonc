@@ -3,8 +3,10 @@
   "name": "agenda-avisos",
   "main": "src/index.js",
   "compatibility_date": "2026-09-01",
-  // Workers AI: transcreve a fala do app (Whisper), dentro da cota grátis da Cloudflare
+  // Workers AI: transcreve a fala do app (Whisper) e entende frases e fotos, dentro da cota grátis da Cloudflare
   "ai": { "binding": "AI" },
-  "triggers": { "crons": ["* * * * *"] },
+  "triggers": { "crons": ["* * * * *"] },
+  // Endereço do app (só ele pode usar a fala e a IA) e contato dos avisos
+  "vars": { "ORIGEM": "https://clementinostudio.github.io", "VAPID_SUB": "https://clementinostudio.github.io/agenda-consultorio/" },
   "kv_namespaces": [{ "binding": "AVISOS", "id": "9f010db2187d4adf8a567f0c41cf2a9f" }]
 }

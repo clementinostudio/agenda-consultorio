@@ -9,6 +9,11 @@
   - O texto vai criptografado de ponta a ponta até o seu aparelho (RFC 8291).
   - /transcrever: recebe a fala gravada no app (WAV curtinho) e devolve o texto, usando o
     Whisper do Workers AI (cota grátis diária da Cloudflare). Nada é guardado.
+  - /entender: quando o app não entende uma frase sozinho, a IA de texto transforma em gasto ou atendimento.
+  - /perguntar: "quanto gastei de Uber em outubro?" — o app manda um resumo dos números e a pergunta.
+  - /ler-imagem: foto de comprovante ou nota vira valor, loja e data.
+  Tudo dentro da cota grátis do Workers AI. No plano gratuito, quando a cota do dia acaba,
+  a IA só para de responder até o dia seguinte (nunca gera cobrança). Nada fica guardado.
 */
 
 const CHAVE = "dados"; // tudo fica numa chave só do KV (um app pessoal, poucos aparelhos)
@@ -64,6 +69,49 @@ const gravar = (env, dados) => env.AVISOS.put(CHAVE, JSON.stringify(dados));
 const valido = sub => sub && typeof sub.endpoint === "string" && sub.endpoint.startsWith("https://") && sub.keys && sub.keys.p256dh && sub.keys.auth;
 const limpar = (s, n) => String(s || "").slice(0, n);
 
+// Frases que o Whisper inventa quando só ouve ruído (vícios de legendas do YouTube)
+const INVENTADO = /^\s*(se inscrev[ae]|inscreva-se|ative o sininho|obrigad[oa] por assistir|legendas? (pela|por|da)|amara\.org|tchau,? tchau|até a próxima|e aí,? pessoal|(muito )?obrigad[oa])[\s\S]{0,40}$/i;
+
+/* ---------- IA de texto e de imagem (Workers AI) ---------- */
+const IA_TEXTO = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const IA_VISAO = "@cf/meta/llama-4-scout-17b-16e-instruct";
+// tira o JSON de dentro da resposta (às vezes vem com texto ou ```json em volta)
+function lerJson(r) {
+  const v = r && (r.response !== undefined ? r.response : r);
+  if (v && typeof v === "object") return v;
+  const s = String(v || ""), i = s.indexOf("{"), f = s.lastIndexOf("}");
+  if (i < 0 || f <= i) return null;
+  try { return JSON.parse(s.slice(i, f + 1)); } catch (e) { return null; }
+}
+const textoDe = r => String((r && (typeof r.response === "string" ? r.response : r.response && JSON.stringify(r.response))) || "").trim();
+
+const PROMPT_ENTENDER = `Você transforma frases faladas em português do Brasil em anotações de um app de finanças e agenda de um profissional de saúde mental.
+Responda SÓ com JSON, neste formato:
+{"tipo":"gastos"|"consultorio"|"pergunta"|"nada",
+ "itens":[{"tipo":"saida"|"entrada","valor":número em reais,"categoria":uma das categorias,"descricao":"nome curto da loja ou do que foi","dias_atras":0}],
+ "consultorio":{"paciente":"nome como foi dito","acao":"veio"|"falta"|"pagou"|"remarcar","pagou":true|false,"data":"AAAA-MM-DD" ou "","hora":"HH:MM" ou ""}}
+Regras:
+- "gastos": dinheiro que saiu (gastei, paguei, comprei, torrei, foi, deu) ou entrou (recebi, ganhei, caiu, entrou). Pode ter vários itens.
+- Valores: "30 conto" = 30; "dez e cinquenta" = 10.5; "mil e duzentos" = 1200; "um real" = 1. Sem valor: use 0.
+- dias_atras: hoje 0, ontem 1, anteontem 2; dia da semana passado = dias até ele.
+- "consultorio": a frase fala de um paciente da lista (veio, faltou, pagou, remarcar). Datas relativas a HOJE.
+- "pergunta": a pessoa está perguntando algo (quanto gastei, quem deve, quando...).
+- "nada": não dá para entender.
+Não invente valores nem nomes.`;
+
+const PROMPT_PERGUNTAR = `Você é o assistente do Alvena, um app de agenda e finanças de um profissional de saúde mental.
+Responda em português do Brasil, em 1 a 3 frases curtas, usando SÓ os DADOS abaixo. Valores no formato R$ 1.234,56.
+Some e compare com cuidado. Se a resposta não estiver nos dados, diga isso em uma frase e sugira onde olhar no app.
+Não dê conselhos financeiros ou clínicos longos. Sem listas grandes: no máximo 5 itens.`;
+
+const PROMPT_IMAGEM = `Esta é uma foto de comprovante, nota fiscal, recibo, cupom ou print de pagamento (Pix, cartão, boleto).
+Responda SÓ com JSON: {"valor":número total pago em reais,"descricao":"nome curto da loja ou de quem recebeu","data":"AAAA-MM-DD" ou "","tipo":"saida"|"entrada","categoria":uma das categorias}
+"entrada" só se a foto mostrar dinheiro RECEBIDO (Pix recebido, transferência recebida). Use o valor TOTAL. Se não der para ler, use valor 0.`;
+
+async function rodarTexto(env, sistema, usuario, max = 400) {
+  return env.AI.run(IA_TEXTO, { messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }], max_tokens: max, temperature: 0.1 });
+}
+
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
@@ -104,13 +152,54 @@ export default {
       if (!env.AI) return json({ erro: "sem-ia" }, 501);
       const audio = typeof b.audio === "string" ? b.audio : "";
       if (audio.length < 2000 || audio.length > 2500000) return json({ erro: "Áudio vazio ou grande demais" }, 400);
-      const entrada = { audio, task: "transcribe", language: "pt", condition_on_previous_text: false };
+      // vad_filter: o próprio Whisper descarta o que não é voz (sem ele, ruído vira "Se inscreva no canal.")
+      const entrada = { audio, task: "transcribe", language: "pt", condition_on_previous_text: false, vad_filter: true };
       const prompt = limpar(b.prompt, 700); if (prompt) entrada.initial_prompt = prompt;
       try {
         const r = await env.AI.run("@cf/openai/whisper-large-v3-turbo", entrada);
-        return json({ ok: true, texto: String((r && r.text) || "").trim() });
+        let texto = String((r && r.text) || "").trim();
+        if (INVENTADO.test(texto)) texto = "";
+        return json({ ok: true, texto });
       } catch (e) {
         return json({ erro: "Falha ao transcrever: " + String((e && e.message) || e).slice(0, 140) }, 502);
+      }
+    }
+
+    // IA: entender frase, responder pergunta e ler foto
+    if (url.pathname === "/entender" || url.pathname === "/perguntar" || url.pathname === "/ler-imagem") {
+      if (!permitida) return json({ erro: "Origem não permitida" }, 403);
+      if (!env.AI) return json({ erro: "sem-ia" }, 501);
+      const hoje = limpar(b.hoje, 40), cats = (Array.isArray(b.categorias) ? b.categorias : []).slice(0, 30).map(c => limpar(c, 20)).join(", ");
+      try {
+        if (url.pathname === "/entender") {
+          const texto = limpar(b.texto, 600).trim();
+          if (!texto) return json({ erro: "Frase vazia" }, 400);
+          const pac = (Array.isArray(b.pacientes) ? b.pacientes : []).slice(0, 80).map(p => limpar(p, 30)).join(", ");
+          const r = await rodarTexto(env, PROMPT_ENTENDER, `HOJE: ${hoje}\nCATEGORIAS: ${cats}\nPACIENTES: ${pac || "(nenhum)"}\nFRASE: ${texto}`, 350);
+          const dados = lerJson(r);
+          return dados ? json({ ok: true, dados }) : json({ erro: "A IA não respondeu no formato certo" }, 502);
+        }
+        if (url.pathname === "/perguntar") {
+          const pergunta = limpar(b.pergunta, 400).trim(), contexto = limpar(b.contexto, 40000);
+          if (!pergunta) return json({ erro: "Pergunta vazia" }, 400);
+          const r = await rodarTexto(env, PROMPT_PERGUNTAR, `HOJE: ${hoje}\n\nDADOS:\n${contexto}\n\nPERGUNTA: ${pergunta}`, 350);
+          const resposta = textoDe(r);
+          return resposta ? json({ ok: true, resposta }) : json({ erro: "A IA não respondeu" }, 502);
+        }
+        // /ler-imagem
+        const imagem = typeof b.imagem === "string" ? b.imagem : "";
+        if (!/^data:image\/(jpeg|png|webp);base64,/.test(imagem) || imagem.length > 1600000) return json({ erro: "Imagem inválida ou grande demais" }, 400);
+        const r = await env.AI.run(IA_VISAO, {
+          messages: [{ role: "user", content: [{ type: "text", text: `${PROMPT_IMAGEM}\nHOJE: ${hoje}\nCATEGORIAS: ${cats}` }, { type: "image_url", image_url: { url: imagem } }] }],
+          max_tokens: 250, temperature: 0.1,
+        });
+        const dados = lerJson(r);
+        return dados ? json({ ok: true, dados }) : json({ erro: "Não consegui ler a foto" }, 502);
+      } catch (e) {
+        const msg = String((e && e.message) || e);
+        // cota grátis do dia acabou (ou a IA está ocupada): o app avisa e segue sem IA
+        if (/limit|quota|neurons|capacity|429|3036|3040/i.test(msg)) return json({ erro: "cota", detalhe: msg.slice(0, 140) }, 429);
+        return json({ erro: "Falha na IA: " + msg.slice(0, 140) }, 502);
       }
     }
 

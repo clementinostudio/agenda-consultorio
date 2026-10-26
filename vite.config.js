@@ -39,6 +39,11 @@ export default defineConfig({
         categories: ["productivity", "medical", "finance"],
         prefer_related_applications: false,
         launch_handler: { client_mode: ["focus-existing", "auto"] },
+        // Android: o Alvena aparece no "Compartilhar" (foto de comprovante, código de boleto, texto)
+        share_target: {
+          action: "./compartilhar", method: "POST", enctype: "multipart/form-data",
+          params: { title: "title", text: "text", url: "url", files: [{ name: "arquivo", accept: ["image/*"] }] },
+        },
         // Fotos que o Android mostra na janela de instalar (fica com cara de loja de apps)
         screenshots: [
           { src: "screenshots/inicio.png", sizes: "780x1688", type: "image/png", form_factor: "narrow", label: "Início: o que importa hoje" },
@@ -68,6 +73,11 @@ export default defineConfig({
         navigateFallbackDenylist: [/\/sobre\//], // a página de apresentação não é o app
         importScripts: ["sw-extra.js"], // abre o app ao tocar numa notificação
         runtimeCaching: [
+          { // Leitor de código de barras (boleto): baixa só quando usado e fica guardado para funcionar offline
+            urlPattern: /\.wasm$/i,
+            handler: "CacheFirst",
+            options: { cacheName: "leitor-boleto", expiration: { maxEntries: 3 } },
+          },
           { // Clima (Open-Meteo): tenta a internet, usa o último resultado se estiver offline
             urlPattern: /^https:\/\/(api|geocoding-api)\.open-meteo\.com\/.*/i,
             handler: "NetworkFirst",

@@ -85,12 +85,15 @@ agenda-consultorio/
 ├── public/
 │   ├── icons/               ← ícones do app (troque pelos seus, mesmos nomes e tamanhos)
 │   └── fundos/              ← imagens de fundo (cada uma tem a versão "-mini" para a miniatura)
-├── servidor-avisos/         ← servidor que manda os avisos com o app fechado (Cloudflare, grátis)
+├── servidor-avisos/         ← avisos com o app fechado + IA (fala, perguntas, fotos), Cloudflare grátis
 ├── supabase/migrations/     ← o banco de dados na nuvem (tabelas e regras de segurança)
 └── src/
     ├── main.jsx             ← liga o app, as fontes e o service worker
     ├── styles.css           ← todas as cores, tamanhos e o visual (claro, escuro e vidro)
     ├── nuvem.js             ← login de verdade e sincronização com o Supabase
+    ├── boleto.js            ← entende código de barras e linha digitável de boleto
+    ├── extrato.js           ← lê o OFX/CSV exportado pelos bancos
+    ├── telas/ferramentas.jsx ← telas de ler boleto e importar extrato
     └── App.jsx              ← o app inteiro, separado em seções numeradas
 ```
 
@@ -124,6 +127,12 @@ Para adicionar um fundo novo: coloque `meu-fundo.jpg` e `meu-fundo-mini.jpg` em 
 - Foto de perfil e até 10 fundos próprios, com recorte (arrastar e zoom). Os fundos ficam guardados no aparelho.
 - Vibração nos toques (só Android: o iPhone não deixa sites vibrarem).
 - Planilha .csv do mês para o contador.
+- **Teto do mês por categoria** (Gastos → toque numa categoria): aviso no celular em 80% e quando passa do teto.
+- **Ler boleto** (Contas → ícone de código de barras): pela câmera, por foto/print ou colando a linha digitável. Valor e vencimento saem do próprio código (os dígitos verificadores são conferidos), sem internet. Vira conta fixa (com o código guardado para copiar) ou gasto já pago.
+- **Importar extrato** (Gastos → Importar extrato): OFX ou CSV do Nubank, Inter, Itaú, Bradesco, BB, Caixa, C6... O arquivo é lido no aparelho. Reconhece as lojas, aprende as categorias que você já usou e desmarca o que já está no app, pagamento de fatura e aplicações.
+- **Foto do comprovante** (ícone de câmera no novo gasto): a IA lê valor, loja e data. No Android, o Alvena também aparece no **Compartilhar** de outros apps (foto de comprovante ou código de boleto).
+- **Perguntar ao Alvena** pela Bolinha ou pelo teclado: "quanto gastei de Uber em outubro?", "quem está me devendo?", "quem eu atendo amanhã?". Dá para ouvir a resposta.
+- **Resumo da semana** no domingo às 20h (Ajustes → Avisos).
 
 **Banco de dados na nuvem (Supabase):** depois de rodar `bash conectar-nuvem.sh`, o login é de verdade e os dados ficam sincronizados entre celular e computador (veja abaixo). Sem isso, tudo fica só no aparelho, como antes.
 
@@ -136,8 +145,28 @@ bash servidor-avisos/instalar-avisos.sh
 
 O comando abre o navegador para você entrar na Cloudflare (crie a conta grátis se não tiver), publica o servidor e avisa o GitHub do endereço. Depois, no celular: abra o app pelo ícone → Ajustes → Avisos → **Ligar avisos com o app fechado** → Permitir. No iPhone precisa do iOS 16.4 ou mais novo e do app instalado na tela inicial. As chaves ficam em `servidor-avisos/.chaves.json`, que nunca vai para o GitHub (não apague: sem elas os aparelhos precisam ligar os avisos de novo).
 
+No Windows, se o PowerShell não achar o `bash`, rode pelo Git Bash: `& "C:\Program Files\Git\bin\bash.exe" servidor-avisos/instalar-avisos.sh`. Conta nova da Cloudflare: na primeira vez, rode `npx wrangler deploy` dentro de `servidor-avisos/` e responda **y** para criar o subdomínio `workers.dev`. Para publicar o servidor depois de mudar o `src/index.js`: `cd servidor-avisos && npx wrangler deploy` (o endereço do app fica em `vars`, no `wrangler.jsonc`).
+
+O mesmo servidor faz a IA do app (fala, perguntas e fotos): rotas `/transcrever`, `/entender`, `/perguntar` e `/ler-imagem`.
+
+**Quanto custa: nada.** Tudo roda no plano grátis da Cloudflare:
+- Workers: 100 mil pedidos por dia. Os avisos usam cerca de 1.500 (uma conferência por minuto).
+- KV (onde ficam os avisos): mil gravações por dia. O app só grava quando a lista de avisos muda.
+- Workers AI: 10 mil "neurônios" por dia. Na prática, algo como 3 horas de fala, ou centenas de frases entendidas, ou dezenas de perguntas e fotos por dia.
+- Na conta grátis, a Cloudflare não cobra nada: quando a cota do dia acaba, a IA só para de responder até o dia seguinte (o app avisa e continua funcionando sem ela). Não cadastre cartão nem mude para o plano pago (Workers Paid) se quiser manter assim.
+- O leitor de código de barras (zxing-wasm) é de código aberto (licença MIT) e vem junto com o app.
+
 ### Falar (em qualquer tela)
-**Fala pelo servidor (o jeito mais confiável):** com o servidor de avisos instalado (`bash servidor-avisos/instalar-avisos.sh`), o próprio app grava o que você fala, percebe sozinho quando você parou (1,1 s de silêncio), corta o silêncio e manda um áudio curtinho para o **seu** servidor na Cloudflare, que transcreve com o Whisper (Workers AI, dentro da cota grátis diária). Funciona igual no iPhone com o app instalado e no Android. O áudio não fica guardado; vão junto só os primeiros nomes dos pacientes, para o Whisper acertar a grafia. Sem o servidor, o app usa o reconhecimento do próprio aparelho.
+**Fala pelo servidor (o jeito mais confiável):** com o servidor de avisos instalado (`bash servidor-avisos/instalar-avisos.sh`), o próprio app grava o que você fala, percebe sozinho quando você parou, corta o silêncio e manda um áudio curtinho para o **seu** servidor na Cloudflare, que transcreve com o Whisper (Workers AI, dentro da cota grátis diária). Funciona igual no iPhone com o app instalado e no Android. O áudio não fica guardado; vão junto só os primeiros nomes dos pacientes e os nomes das lojas que você mais usa, para o Whisper acertar a grafia. Sem o servidor, o app usa o reconhecimento do próprio aparelho.
+
+Como a fala ficou mais confiável:
+- O barulho do ambiente é medido pelo menor volume (quem já começa falando não engana a medida) e acompanha o ambiente; o fim das palavras não é cortado.
+- Frase curta ("gastei…") espera 2,1 s pela continuação; frase longa encerra com 1,5 s de silêncio.
+- O áudio é convertido para 16 kHz com o conversor do próprio navegador (voz mais limpa para o Whisper), e o Whisper descarta o que não é voz (sem "Se inscreva no canal" inventado no silêncio).
+- Se faltar um pedaço ("gastei no uber"), o microfone reabre sozinho uma vez para você completar. O microfone fica aberto mais 12 s depois de cada frase: completar não pede permissão de novo.
+- Se a rede piscar, o envio tenta de novo sozinho.
+- Quando o app não entende a frase sozinho (ou o resultado parece chute), a IA do seu servidor entende: "torrei 45 conto no boteco ontem", "dei vinte pila pro flanelinha e quinze na padoca". Perguntas viram resposta.
+- "Cento e oitenta e dois e quarenta" agora é R$ 182,40 (antes virava 222).
 
 Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da tela e tudo aparece ali embaixo, sem abrir janela. Usa o reconhecimento de voz do próprio aparelho, sem servidor.
 
@@ -145,7 +174,7 @@ Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da
 - Consultório: "Felipe veio", "Felipe veio e pagou", "a Ana faltou", "Júlia pagou", "remarca o Pedro pra quinta às 15h".
 - Empresas conhecidas (Uber, 99, iFood, Netflix, Amazon, mercados, farmácias, postos, bancos...) entram com o nome certo, a categoria certa e a logo oficial, que vem do ícone do próprio site da empresa e fica guardada no aparelho. A lista fica em `MARCAS`, no `App.jsx`.
 - Se o aparelho não liberar o reconhecimento (acontece em alguns iPhones com o app instalado), o app abre o teclado: toque no microfone do teclado e fale.
-- Pode pausar no meio da frase: o app só encerra quando a frase faz sentido (1,2 s depois da última palavra) ou depois de uma pausa maior. Toque na Bolinha para terminar na hora.
+- Pode pausar no meio da frase. Toque na Bolinha para terminar na hora.
 - Se faltar algo ("gastei no uber"), toque em **Completar falando** e diga só o que faltou ("30").
 - Cada toque é uma tentativa nova: o microfone nunca fica travado. O teclado só entra quando o aparelho nega o microfone.
 - Em Perfil → Aparência e fundo dá para desligar o **Efeito de vidro** (tudo fica sólido, a foto de fundo continua atrás).

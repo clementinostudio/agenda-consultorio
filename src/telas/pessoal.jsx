@@ -6,7 +6,7 @@ import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } 
 import { DinheiroHome } from "./dinheiro.jsx";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
 import { logoPropria, lerArquivo } from "../App.jsx";
-import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes } from "../App.jsx";
+import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta } from "../App.jsx";
 
 /* ---------- Logo enquanto digita: sugere as empresas parecidas (mesmo com erro de digitação),
    tenta achar o site de quem não está na lista e deixa usar uma foto como logo ---------- */
@@ -112,6 +112,8 @@ function conversaPessoal(db, act) {
       falas.push({ txt: s.st === "atrasada" ? <>A conta de <b>{c.nome}</b> {s.txt.toLowerCase()} e ainda não está marcada como paga.</> : <><b>{c.nome}</b> {s.txt.toLowerCase()}: {brl(c.valor)}.</>, acao: { l: "Já paguei", ic: <I.check />, fn: () => act.pagarConta(c.id) } });
     }
   });
+  const tet = tetosAlerta(db, chave)[0];
+  if (tet) falas.push({ txt: tet.pct >= 1 ? <>Você passou do teto de <b>{catDe(tet.cat).nome}</b>: {brl(tet.gasto)} de {brl(tet.teto)} no mês.</> : <><b>{catDe(tet.cat).nome}</b> já está em {Math.round(tet.pct * 100)}% do teto do mês ({brl(tet.gasto)} de {brl(tet.teto)}).</>, acao: { l: "Ver gastos", ic: <I.chart />, fn: () => act.setTab("p-gastos") } });
   const r = resumoPessoal(db, chave);
   falas.push({ txt: <>Neste mês entrou <b>{brl(r.entrou)}</b>{r.consult > 0 ? <> (sendo {brl(r.consult)} do consultório)</> : null} e saiu <b>{brl(r.saiu)}</b>. {r.sobra >= 0 ? <>Sobram {brl(r.sobra)}.</> : <>Está {brl(-r.sobra)} no vermelho.</>}</> });
   const top = Object.entries(r.porCat).sort((a, b) => b[1] - a[1])[0];
@@ -218,8 +220,11 @@ function GastosTab({ db, act, tema }) {
   const m = new Date(base.getFullYear(), base.getMonth() + off, 1);
   const chave = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
   const r = resumoPessoal(db, chave);
-  const cats = Object.entries(r.porCat).sort((a, b) => b[1] - a[1]);
+  const tetos = db.pessoal.limites || {};
+  // categorias com gasto no mês + as que têm teto (mesmo sem gasto ainda)
+  const cats = [...Object.entries(r.porCat), ...Object.keys(tetos).filter(id => tetos[id] > 0 && !r.porCat[id]).map(id => [id, 0])].sort((a, b) => b[1] - a[1]);
   const totalCat = soma(cats, c => c[1]) || 1;
+  const maior = Math.max(...cats.map(c => c[1]), 1);
   let lista = db.pessoal.lanc.filter(l => l.data.startsWith(chave));
   if (filtro === "saida") lista = lista.filter(l => l.tipo === "saida");
   if (filtro === "entrada") lista = lista.filter(l => l.tipo === "entrada");
@@ -237,22 +242,23 @@ function GastosTab({ db, act, tema }) {
           <section className="bal">
             <div className="bal-top"><span className="lab">Saiu no mês</span><span className="trend">{r.sobra >= 0 ? `Sobra ${brl(r.sobra)}` : `Faltam ${brl(-r.sobra)}`}</span></div>
             <div className="bal-amt"><Money v={r.saiu} /></div>
-            {cats.length > 0 && <div className="catbar" aria-hidden="true">{cats.map(([id, v]) => <i key={id} style={{ width: `${v / totalCat * 100}%`, background: (CORES.find(c => c.id === catDe(id).cor) || CORES[0]).cor }} />)}</div>}
+            {cats.length > 0 && <div className="catbar" aria-hidden="true">{cats.filter(c => c[1] > 0).map(([id, v]) => <i key={id} style={{ width: `${v / totalCat * 100}%`, background: (CORES.find(c => c.id === catDe(id).cor) || CORES[0]).cor }} />)}</div>}
             {cats.length === 0 ? <div className="empty">Nenhum gasto neste mês.</div> : cats.map(([id, v]) => {
-              const cat = catDe(id);
+              const cat = catDe(id), teto = tetos[id] > 0 ? tetos[id] : 0, pct = teto ? v / teto : 0;
               return (
-                <div className="catrow" key={id} style={catVars(cat)}>
+                <button className={"catrow" + (teto ? pct >= 1 ? " estourou" : pct >= .8 ? " perto" : " com-teto" : "")} key={id} style={catVars(cat)} onClick={() => act.abrirTeto(id)} aria-label={`${cat.nome}: ${teto ? "mudar teto" : "definir teto"}`}>
                   <span className="ci"><CatIcon cat={cat} /></span>
-                  <div style={{ minWidth: 0 }}><b>{cat.nome}</b><div className="bar"><i style={{ width: `${v / cats[0][1] * 100}%` }} /></div></div>
-                  <span className="v"><Money v={v} /></span>
-                </div>
+                  <div style={{ minWidth: 0 }}><b>{cat.nome}{teto ? <small className="teto-txt">{pct >= 1 ? ` · passou ${brl(v - teto)}` : ` · ${Math.round(pct * 100)}% do teto`}</small> : null}</b><div className="bar"><i style={{ width: `${teto ? Math.min(100, pct * 100) : v / maior * 100}%` }} /></div></div>
+                  <span className="v"><Money v={v} />{teto ? <small className="teto-de">de {brl(teto)}</small> : null}</span>
+                </button>
               );
             })}
+            <button className="link teto-link" onClick={() => act.abrirTeto()}><I.gauge /> {Object.values(tetos).some(v => v > 0) ? "Mudar tetos do mês" : "Definir um teto por categoria"}</button>
           </section>
         </div>
         <div className="col">
           <div className="panel">
-            <div className="panel-head"><h3>Lançamentos</h3><button className="link" onClick={() => act.novoLanc("saida")}>+ Novo</button></div>
+            <div className="panel-head"><h3>Lançamentos</h3><span className="panel-acts"><button className="link" onClick={act.importar}><I.upload /> Importar extrato</button><button className="link" onClick={() => act.novoLanc("saida")}>+ Novo</button></span></div>
             <div className="chips" role="tablist">
               {[["tudo", "Tudo"], ["saida", "Gastos"], ["entrada", "Entradas"]].map(([v, l]) => <button key={v} role="tab" aria-selected={filtro === v} className={"fchip" + (filtro === v ? " on" : "")} onClick={() => setFiltro(v)}>{l}</button>)}
             </div>
@@ -285,7 +291,7 @@ function ContasTab({ db, act, tema }) {
   return (
     <div className="page" style={{ maxWidth: 820 }}>
       <TopBar eyebrow={`${MES_LONGO[fromISO(t).getMonth()]} · ${pagas.length} de ${contas.length} pagas`} title="Contas fixas" act={act} tema={tema}
-        extra={<button className="icon-btn" onClick={() => act.novaConta()} aria-label="Nova conta"><I.plus /></button>} />
+        extra={<><button className="icon-btn" onClick={act.lerBoleto} aria-label="Ler boleto"><I.scan /></button><button className="icon-btn" onClick={() => act.novaConta()} aria-label="Nova conta"><I.plus /></button></>} />
       <div className="stack">
         <section className="bal">
           <div className="bal-top"><span className="lab">Falta pagar este mês</span></div>
@@ -316,7 +322,8 @@ function ContasTab({ db, act, tema }) {
   );
 }
 
-function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete, onClose, onLogo }) {
+function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onFoto, onSave, onDelete, onClose, onLogo }) {
+  const fotoRef = useRef(null);
   const cot = useCotacoes();
   const [tipo, setTipo] = useState(inicial ? inicial.tipo : pre ? pre.tipo : tipo0);
   const orig = inicial || pre || null;
@@ -328,7 +335,7 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete,
   const [escolha, setEscolha] = useState(() => escolhaInicial(inicial));
   const efDesc = escolhaEfetiva(desc, escolha);
   useEffect(() => { if (!cat && tipo === "saida" && efDesc && efDesc.cat && CATEGORIAS.some(c => c.id === efDesc.cat)) setCat(efDesc.cat); }, [efDesc && efDesc.cat]);
-  const [data, setData] = useState(inicial ? inicial.data : pre ? addDays(todayISO(), -(pre.off || 0)) : todayISO());
+  const [data, setData] = useState(inicial ? inicial.data : pre ? pre.data || addDays(todayISO(), -(pre.off || 0)) : todayISO());
   const [frase, setFrase] = useState("");
   const [entendi, setEntendi] = useState(null);
   const aplicar = txt => {
@@ -355,8 +362,11 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete,
       {!inicial && <>
         <div className="voice">
           <input id="l-frase" value={frase} onChange={e => aplicar(e.target.value)} placeholder='Fale ou escreva: "gastei 32 na padaria"' enterKeyHint="done" autoComplete="off" aria-label="Descreva o gasto em uma frase" />
+          {onFoto && <button type="button" className="mic foto" onClick={() => fotoRef.current && fotoRef.current.click()} aria-label="Foto do comprovante"><I.camera /></button>}
           <button type="button" className="mic" onClick={onVoz} aria-label="Falar"><I.mic /></button>
+          {onFoto && <input ref={fotoRef} type="file" accept="image/*" hidden onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onFoto(f); }} />}
         </div>
+        {pre && pre.daFoto && <div className="voice-ok"><I.check /><span>Li a foto: {pre.tipo === "entrada" ? "entrada" : "gasto"} de {brlReal(pre.valor)}{pre.desc ? ` em ${pre.desc}` : ""}. Confira e salve.</span></div>}
         {entendi && entendi.valor > 0 && <div className="voice-ok"><I.check /><span>Entendi: {entendi.tipo === "entrada" ? "entrada" : "gasto"} de {entendi.moeda ? `${fmtMoeda(entendi.valorOrig, entendi.moeda)} (${brlReal(entendi.valor)})` : brlReal(entendi.valor)} em {catDe(entendi.cat).nome}{entendi.off ? (entendi.off === 1 ? ", ontem" : ", anteontem") : ", hoje"}. Confira e salve.</span></div>}
       </>}
       <Seg big value={tipo} onChange={x => { setTipo(x); setCat(null); }} options={[{ v: "saida", l: "Gasto" }, { v: "entrada", l: "Entrada" }]} />
@@ -390,18 +400,20 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onSave, onDelete,
   );
 }
 
-function ContaSheet({ inicial, onSave, onDelete, onClose, onLogo }) {
+// pre: dados vindos de um boleto lido ({ nome, valor, dia, cat, codigo })
+function ContaSheet({ inicial, pre, onSave, onDelete, onClose, onLogo, onBoleto, onCopiar }) {
   const cot = useCotacoes();
-  const [nome, setNome] = useState(inicial ? inicial.nome : "");
+  const [nome, setNome] = useState(inicial ? inicial.nome : pre && pre.nome ? pre.nome : "");
+  const codigo = (inicial && inicial.codigo) || (pre && pre.codigo) || "";
   const [escolha, setEscolha] = useState(() => escolhaInicial(inicial));
   const [catTocada, setCatTocada] = useState(!!inicial);
   const efNome = escolhaEfetiva(nome, escolha);
   useEffect(() => { if (!catTocada && efNome && efNome.cat && CATEGORIAS.some(c => c.id === efNome.cat)) setCat(efNome.cat); }, [efNome && efNome.cat, catTocada]);
   const [moeda, setMoeda] = useState(inicial && inicial.moeda ? inicial.moeda : "BRL");
   const [iof, setIof] = useState(inicial ? inicial.iof !== false : true);
-  const [valor, setValor] = useState(inicial ? fmtNum(inicial.moeda && inicial.valorOrig ? inicial.valorOrig : inicial.valor) : "");
-  const [dia, setDia] = useState(inicial ? inicial.dia : 10);
-  const [cat, setCat] = useState(inicial ? inicial.cat : "casa");
+  const [valor, setValor] = useState(inicial ? fmtNum(inicial.moeda && inicial.valorOrig ? inicial.valorOrig : inicial.valor) : pre && pre.valor ? fmtNum(pre.valor) : "");
+  const [dia, setDia] = useState(inicial ? inicial.dia : pre && pre.dia ? pre.dia : 10);
+  const [cat, setCat] = useState(inicial ? inicial.cat : pre && pre.cat ? pre.cat : "casa");
   const [assin, setAssin] = useState(inicial ? !!inicial.assinatura : false);
   const v = num(valor);
   const fora = moeda !== "BRL";
@@ -409,6 +421,8 @@ function ContaSheet({ inicial, onSave, onDelete, onClose, onLogo }) {
   const ok = nome.trim() && v > 0;
   return (
     <Sheet title={inicial ? "Editar conta" : "Nova conta fixa"} sub="Repete todo mês. Eu aviso antes de vencer." onClose={onClose}>
+      {!inicial && !pre && onBoleto && <button type="button" className="btn ghost" onClick={onBoleto}><I.scan /> Ler o boleto (preenche sozinho)</button>}
+      {pre && pre.codigo && <div className="voice-ok"><I.check /><span>Boleto lido. Confira o nome e salve.{pre.incerto ? " O vencimento não vem no código desta conta: confira o dia." : ""}</span></div>}
       <div className="fields">
         <Field label="Nome da conta" icon={escolhaEfetiva(nome, escolha) || logoPropria(nome) ? <MarcaLogo marca={(escolhaEfetiva(nome, escolha) || {}).marca} site={(escolhaEfetiva(nome, escolha) || {}).site} nome={nome} cat={catDe(cat)} className="campo-logo" /> : <I.bill />} htmlFor="c-nome"><input id="c-nome" value={nome} onChange={e => { setNome(e.target.value); setEscolha(null); }} placeholder="Ex.: Aluguel, Copel, Netflix" autoComplete="off" /></Field>
         <SugestoesMarca texto={nome} escolha={escolha} onFoto={onLogo} onEscolha={e => { setEscolha(e); if (e.nome) setNome(e.nome); if (e.cat && !inicial) setCat(e.cat); }} />
@@ -436,12 +450,42 @@ function ContaSheet({ inicial, onSave, onDelete, onClose, onLogo }) {
         ))}
       </div>
       <Toggle on={assin} onClick={() => setAssin(!assin)}>É uma assinatura (streaming, app, academia)</Toggle>
+      {codigo && <div className="boleto-cod"><span><small>Código do boleto</small><b>{codigo}</b></span>{onCopiar && <button type="button" className="pill-btn" onClick={() => onCopiar(codigo)}><I.copy /> Copiar</button>}</div>}
       {fora && <Toggle on={iof} onClick={() => setIof(!iof)}>Cobrada no cartão (soma IOF de {String(IOF_CARTAO).replace(".", ",")}%)</Toggle>}
       {fora && v > 0 && <div className="moeda-aviso">Hoje sai por <b>{brlReal(emR)}</b> por mês ({brlReal(emR * 12)} por ano). Eu atualizo esse valor com a cotação do dia.</div>}
-      <button className="btn mode" disabled={!ok} onClick={() => { const { moeda: _m, valorOrig: _vo, iof: _i, ...base } = inicial || { pagas: {} }; onSave({ ...base, id: inicial ? inicial.id : uid(), nome: nome.trim(), valor: emR, dia, cat, assinatura: assin, ...camposLogo(nome, escolha), ...(fora ? { moeda, valorOrig: v, iof } : {}) }); }}><I.check /> {inicial ? "Salvar" : "Adicionar conta"}</button>
+      <button className="btn mode" disabled={!ok} onClick={() => { const { moeda: _m, valorOrig: _vo, iof: _i, ...base } = inicial || { pagas: {} }; onSave({ ...base, id: inicial ? inicial.id : uid(), nome: nome.trim(), valor: emR, dia, cat, assinatura: assin, ...camposLogo(nome, escolha), ...(fora ? { moeda, valorOrig: v, iof } : {}), ...(codigo ? { codigo } : {}) }); }}><I.check /> {inicial ? "Salvar" : "Adicionar conta"}</button>
       {inicial && <ConfirmButton label="Apagar conta" titulo="Apagar esta conta fixa?" texto="Ela para de aparecer nos próximos meses e nos lembretes." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
 }
 
-export { PessoalHome, GastosTab, ContasTab, LancSheet, ContaSheet };
+// Teto do mês por categoria: avisa em 80% e quando passa
+function TetoSheet({ db, cat: cat0, act, onClose }) {
+  const lim = db.pessoal.limites || {}, chave = todayISO().slice(0, 7);
+  const [cat, setCat] = useState(cat0 && CATEGORIAS.some(c => c.id === cat0) ? cat0 : (CATEGORIAS.find(c => lim[c.id] > 0) || CATEGORIAS[0]).id);
+  const [valor, setValor] = useState(lim[cat] ? fmtNum(lim[cat]) : "");
+  const escolher = id => { setCat(id); setValor(lim[id] ? fmtNum(lim[id]) : ""); };
+  const gasto = resumoPessoal(db, chave).porCat[cat] || 0;
+  // sugestão: a média dos 3 meses anteriores
+  let media = 0; for (let i = 1; i <= 3; i++) { const d = new Date(); d.setMonth(d.getMonth() - i, 1); media += (resumoPessoal(db, `${d.getFullYear()}-${pad(d.getMonth() + 1)}`).porCat[cat] || 0) / 3; }
+  const v = num(valor);
+  return (
+    <Sheet title="Teto do mês" sub="Eu aviso quando chegar em 80% e se passar." onClose={onClose}>
+      <div className="cats" role="radiogroup" aria-label="Categoria">
+        {CATEGORIAS.map(c => (
+          <button type="button" key={c.id} role="radio" aria-checked={cat === c.id} className={"cat" + (cat === c.id ? " on" : "")} style={catVars(c)} onClick={() => escolher(c.id)}>
+            <span className="ci"><CatIcon cat={c} /></span>{c.nome}{lim[c.id] > 0 ? " •" : ""}
+          </button>
+        ))}
+      </div>
+      <div className="fields">
+        <Field label={`Teto para ${catDe(cat).nome} (R$ por mês)`} icon={<I.gauge />} htmlFor="t-valor"><input id="t-valor" inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder={media > 0 ? fmtNum(Math.ceil(media / 10) * 10) : "0,00"} /></Field>
+      </div>
+      <div className="hint">Neste mês: {brl(gasto)}{media > 0 ? `. Média dos últimos 3 meses: ${brl(media)}.` : "."}{v > 0 ? ` Sobra ${brl(Math.max(0, v - gasto))} até o fim do mês.` : ""}</div>
+      <button className="btn mode" disabled={!(v > 0)} onClick={() => act.salvarTeto(cat, v)}><I.check /> Salvar teto</button>
+      {lim[cat] > 0 && <button className="btn text" onClick={() => act.salvarTeto(cat, 0)}>Tirar o teto de {catDe(cat).nome}</button>}
+    </Sheet>
+  );
+}
+
+export { PessoalHome, GastosTab, ContasTab, LancSheet, ContaSheet, TetoSheet };

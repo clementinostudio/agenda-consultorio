@@ -11,7 +11,8 @@ import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "rea
 import PORQUINHO from "./assets/porquinho.webp";
 import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monograma, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
-import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, excluirContaNuvem, traduzirErro } from "./nuvem.js";
+import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro } from "./nuvem.js";
+import { lerBoleto } from "./boleto.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -368,6 +369,18 @@ function situacaoConta(conta, chave) {
   if (d === 1) return { st: "breve", txt: "Vence amanhã" };
   return { st: d <= 5 ? "breve" : "ok", txt: `Vence em ${d} dias` };
 }
+// Quanto saiu em cada categoria no mês (lançamentos + contas fixas pagas): é o que conta para os tetos
+function gastoPorCat(db, chave) {
+  const P = db.pessoal || pessoalVazio(), out = {};
+  P.lanc.forEach(l => { if (l.tipo === "saida" && l.data.startsWith(chave)) out[l.cat] = (out[l.cat] || 0) + l.valor; });
+  P.contas.forEach(c => { if (c.pagas && c.pagas[chave]) out[c.cat] = (out[c.cat] || 0) + c.valor; });
+  return out;
+}
+// Tetos que passaram de 80% (ou estouraram) neste mês: [{ cat, teto, gasto, pct }]
+function tetosAlerta(db, chave) {
+  const lim = (db.pessoal && db.pessoal.limites) || {}, g = gastoPorCat(db, chave);
+  return Object.entries(lim).filter(([, v]) => v > 0).map(([cat, teto]) => ({ cat, teto, gasto: g[cat] || 0, pct: (g[cat] || 0) / teto })).filter(x => x.pct >= .8).sort((a, b) => b.pct - a.pct);
+}
 
 // Saldo acumulado dia a dia (para o gráfico)
 
@@ -436,7 +449,7 @@ const iconeClima = code => code >= 95 ? "storm" : code >= 51 ? "rain" : code >= 
 
 // Entender frases como "gastei 32 reais na padaria ontem"
 const PALAVRAS_CAT = {
-  comida: ["padaria", "restaurante", "lanche", "lanchonete", "almoço", "jantar", "ifood", "pizza", "café", "cafeteria", "hambúrguer", "sorvete", "bar", "delivery", "açaí", "pastel", "marmita"],
+  comida: ["padaria", "padoca", "pão", "restaurante", "lanche", "lanchonete", "almoço", "jantar", "ifood", "pizza", "café", "cafeteria", "hambúrguer", "sorvete", "bar", "boteco", "cerveja", "churrasco", "sushi", "delivery", "açaí", "pastel", "marmita"],
   mercado: ["mercado", "supermercado", "feira", "açougue", "hortifruti", "sacolão", "atacadão", "atacado", "quitanda"],
   transporte: ["uber", "ônibus", "gasolina", "combustível", "posto", "estacionamento", "metrô", "táxi", "pedágio", "passagem", "etanol"],
   saude: ["farmácia", "remédio", "médico", "consulta", "exame", "dentista", "academia", "terapia", "plano de saúde"],
@@ -452,9 +465,18 @@ const semAcento = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 function numerosPorExtenso(t) {
   const w = Object.keys(NUMS).join("|");
   return t.replace(new RegExp(`\\b(?:${w})(?:\\s+(?:e\\s+)?(?:${w}))*\\b`, "g"), seq => {
-    let total = 0, cur = 0;
-    seq.split(/\s+/).forEach(p => { if (p === "e") return; if (p === "mil") { total += (cur || 1) * 1000; cur = 0; } else cur += NUMS[p]; });
-    return String(total + cur);
+    let total = 0, cur = 0, ult = Infinity, cent = null;
+    for (const p of seq.split(/\s+/)) {
+      if (p === "e") continue;
+      if (p === "mil") { total += (cur || 1) * 1000; cur = 0; ult = 1000; continue; }
+      const v = NUMS[p];
+      // cada parte de um número é menor que a anterior ("cento e oitenta e dois"); se vier uma maior
+      // depois ("…dois e quarenta", "dez e cinquenta", "um e noventa"), são os centavos
+      if (cent === null && v >= 10 && v < 100 && v > ult && total + cur > 0) { cent = v; continue; }
+      if (cent !== null) { if (v < 10 && cent % 10 === 0) cent += v; continue; }
+      cur += v; ult = v;
+    }
+    return cent !== null ? `${total + cur},${pad(cent)}` : String(total + cur);
   });
 }
 function interpretarFala(frase) {
@@ -480,7 +502,7 @@ function interpretarFala(frase) {
   }));
   if (entrada && cat === "presente") desc = "Presente";
   if (!cat) {
-    const m = t.match(/\b(?:na|no|em|de|do|da|com)\s+([a-z]+(?:\s+[a-z]+)?)/);
+    const m = t.match(/\b(?:na|no|em|de|do|da|com|pro|pra|pros|pras|para o|para a)\s+([a-z]+(?:\s+[a-z]+)?)/);
     if (m && !/^\d/.test(m[1])) desc = m[1].replace(/\b(ontem|hoje|anteontem|reais|real)\b/g, "").trim();
     desc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : "";
     cat = entrada ? "outros-e" : "outros";
@@ -529,7 +551,7 @@ function lerDiaHora(t) {
     if (!d && dia) { const n = Number(dia[1]); let c = `${hoje.slice(0, 8)}${pad(n)}`; if (c < hoje) { const m = fromISO(hoje); m.setMonth(m.getMonth() + 1, n); c = toISO(m); } data = c; }
   }
   let hora = null;
-  const h = t.match(/\b(\d{1,2})\s*(?::|h)\s*(\d{2})\b/) || t.match(/\b(\d{1,2})\s*h\b/) || t.match(/\b(?:as|pras|para as|pra)\s+(\d{1,2})(?:\s+(?:e\s+)?(\d{2}))?(?:\s+horas?)?\b/) || t.match(/\b(\d{1,2})\s+horas?\b/);
+  const h = t.match(/\b(\d{1,2})\s*(?::|h)\s*(\d{2})\b/) || t.match(/\b(\d{1,2})\s*h\b/) || t.match(/\b(?:as|pras|para as|pra)\s+(\d{1,2}),(\d{2})\b/) || t.match(/\b(?:as|pras|para as|pra)\s+(\d{1,2})(?:\s+(?:e\s+)?(\d{2}))?(?:\s+horas?)?\b/) || t.match(/\b(\d{1,2})\s+horas?\b/);
   if (h && Number(h[1]) <= 23) hora = `${pad(Number(h[1]))}:${pad(Number(h[2] || 0))}`;
   return { data, hora };
 }
@@ -757,8 +779,14 @@ let AUDIO_CTX_VOZ = null;
 let VOZ_SERVIDOR_FALHOU = false; // o servidor ainda não tem a rota de fala: nesta abertura do app usa a voz do aparelho
 const temGravador = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && !!(window.AudioContext || window.webkitAudioContext);
 const vozPeloServidor = () => !VOZ_SERVIDOR_FALHOU && !!servidorAvisos() && temGravador();
-// frases que o Whisper "inventa" quando só tem silêncio ou ruído
-const ALUCINA = /amara\.org|legendas? (pela|por|da)|inscreva-se|obrigad[oa] por assistir|^\s*(obrigad[oa]|tchau)[.!]?\s*$/i;
+// O microfone fica aberto alguns segundos depois de cada frase: completar a frase (ou falar de novo)
+// não abre o microfone outra vez, não pede permissão de novo no iPhone e não perde o comecinho da fala.
+const MIC = { stream: null, timer: 0 };
+const micVivo = () => !!MIC.stream && MIC.stream.getAudioTracks().some(t => t.readyState === "live");
+const fecharMic = () => { clearTimeout(MIC.timer); if (MIC.stream) MIC.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} }); MIC.stream = null; };
+const guardarMic = () => { clearTimeout(MIC.timer); MIC.timer = setTimeout(fecharMic, 12000); };
+// frases que o Whisper "inventa" quando só tem silêncio ou ruído (o servidor também filtra)
+const ALUCINA = /amara\.org|legendas? (pela|por|da)|inscreva-se|se inscrev[ae]|ative o sininho|obrigad[oa] por assistir|anota[cç][aã]o falada em portugu|^\s*(obrigad[oa]|tchau)[.!]?\s*$/i;
 const limparTranscricao = t => {
   let s = String(t || "").replace(/\s+/g, " ").trim();
   if (!s || ALUCINA.test(s)) return "";
@@ -766,24 +794,41 @@ const limparTranscricao = t => {
   return s ? s.charAt(0).toLowerCase() + s.slice(1) : "";
 };
 const paraBase64 = u8 => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+// Converte para 16 kHz com o conversor do próprio navegador (filtra os agudos antes; a voz chega mais limpa ao Whisper)
+async function reamostrar(pcm, taxa) {
+  if (taxa === 16000) return pcm;
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext; if (!OAC) return null;
+  const off = new OAC(1, Math.ceil(pcm.length * 16000 / taxa), 16000);
+  const buf = off.createBuffer(1, pcm.length, taxa); buf.getChannelData(0).set(pcm);
+  const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start(0);
+  const p = off.startRendering();
+  const out = p && p.then ? await p : await new Promise(ok => { off.oncomplete = e => ok(e.renderedBuffer); });
+  return out.getChannelData(0);
+}
 // junta os pedaços gravados, corta o silêncio das pontas, ajusta o volume e gera um WAV 16 kHz mono (o formato que o Whisper usa)
-function montarWav(x, manual) {
+async function montarWav(x, manual) {
   const n = x.chunks.length; if (!n) return null;
   let ini = x.fala.indexOf(true), fim = x.fala.lastIndexOf(true);
   if (ini < 0) { if (!manual) return null; ini = 0; fim = n - 1; }
-  const pad1 = Math.ceil(350 / x.msBloco), pad2 = Math.ceil(500 / x.msBloco);
+  // margem antes e depois da fala: o fim das palavras ("ontem", "reais") é baixinho e não pode ser cortado
+  const pad1 = Math.ceil(450 / x.msBloco), pad2 = Math.ceil(900 / x.msBloco);
   const pedacos = x.chunks.slice(Math.max(0, ini - pad1), Math.min(n, fim + pad2 + 1));
   let total = 0; for (const c of pedacos) total += c.length;
   if (total < x.taxa * .35) return null;
   const pcm = new Float32Array(total); let o = 0; for (const c of pedacos) { pcm.set(c, o); o += c.length; }
   let pico = 0; for (let i = 0; i < pcm.length; i++) { const a = Math.abs(pcm[i]); if (a > pico) pico = a; }
   const ganho = pico > 0 ? Math.min(8, .9 / pico) : 1;
-  const r = x.taxa / 16000, m = Math.floor(pcm.length / r), out = new Int16Array(m);
-  for (let i = 0; i < m; i++) {
-    const a = Math.floor(i * r), b = Math.max(a + 1, Math.min(pcm.length, Math.floor((i + 1) * r)));
-    let soma = 0; for (let j = a; j < b; j++) soma += pcm[j];
-    out[i] = Math.max(-1, Math.min(1, (soma / (b - a)) * ganho)) * 0x7fff;
+  let s16 = null; try { s16 = await reamostrar(pcm, x.taxa); } catch (e) {}
+  if (!s16) { // navegador antigo: média simples
+    const r = x.taxa / 16000, m0 = Math.floor(pcm.length / r); s16 = new Float32Array(m0);
+    for (let i = 0; i < m0; i++) {
+      const a = Math.floor(i * r), b = Math.max(a + 1, Math.min(pcm.length, Math.floor((i + 1) * r)));
+      let soma = 0; for (let j = a; j < b; j++) soma += pcm[j];
+      s16[i] = soma / (b - a);
+    }
   }
+  const m = s16.length, out = new Int16Array(m);
+  for (let i = 0; i < m; i++) out[i] = Math.max(-1, Math.min(1, s16[i] * ganho)) * 0x7fff;
   const buf = new ArrayBuffer(44 + m * 2), dv = new DataView(buf);
   const w = (p, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(p + i, t.charCodeAt(i)); };
   w(0, "RIFF"); dv.setUint32(4, 36 + m * 2, true); w(8, "WAVE"); w(12, "fmt "); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
@@ -798,25 +843,39 @@ function useFalaServidor({ onFinal, onFalhou, prompt }) {
   const [nivel, setNivel] = useState(0);
   const atual = useRef(null);
   const cb = useRef({}); cb.current = { onFinal, onFalhou, prompt };
-  const soltar = x => {
-    if (!x || x.solto) return; x.solto = true;
-    clearTimeout(x.teto); clearTimeout(x.semFala); clearTimeout(x.vigiaAudio);
-    try { if (x.proc) { x.proc.onaudioprocess = null; x.proc.disconnect(); } if (x.fonte) x.fonte.disconnect(); } catch (e) {}
-    if (x.stream) x.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+  // fecharMic: true quando a fala acabou de vez (Cancelar, saiu do app); senão o microfone fica aberto mais um pouco
+  const soltar = (x, fecharMicAgora) => {
+    if (x && !x.solto) {
+      x.solto = true;
+      clearTimeout(x.teto); clearTimeout(x.semFala); clearTimeout(x.vigiaAudio);
+      try { if (x.proc) { x.proc.onaudioprocess = null; x.proc.disconnect(); } if (x.fonte) x.fonte.disconnect(); } catch (e) {}
+    }
+    if (fecharMicAgora) fecharMic(); else guardarMic();
   };
-  useEffect(() => () => { const x = atual.current; if (x) { x.cancelado = true; soltar(x); } }, []);
+  useEffect(() => () => { const x = atual.current; if (x) x.cancelado = true; soltar(x, true); }, []);
   const falhar = (x, msg) => { if (x && x.cancelado) return; setNivel(0); setErro(msg); setEstado("erro"); vibrar("aviso"); };
   const terminar = async (x, manual) => {
     if (!x || x.encerrado) return; x.encerrado = true;
     soltar(x); setNivel(0);
     if (!x.falou && !manual) return falhar(x, "Não ouvi nada. Toque na Bolinha e fale de novo.");
-    const wav = x.chunks.length ? montarWav(x, manual) : null;
-    if (!wav) return falhar(x, "Não ouvi nada. Toque na Bolinha e fale de novo.");
     setEstado("processando");
+    const wav = x.chunks.length ? await montarWav(x, manual) : null;
+    if (x.cancelado) return;
+    if (!wav) return falhar(x, "Não ouvi nada. Toque na Bolinha e fale de novo.");
     const ctrl = new AbortController(); const tempo = setTimeout(() => ctrl.abort(), 20000);
     try {
-      const r = await fetch(`${servidorAvisos()}/transcrever`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio: paraBase64(wav), prompt: cb.current.prompt || "" }), signal: ctrl.signal });
-      const j = await r.json().catch(() => ({}));
+      const corpo = JSON.stringify({ audio: paraBase64(wav), prompt: cb.current.prompt || "" });
+      // rede instável: tenta mais uma vez sozinho antes de desistir
+      let r, j;
+      for (let tentativa = 0; ; tentativa++) {
+        try {
+          r = await fetch(`${servidorAvisos()}/transcrever`, { method: "POST", headers: { "content-type": "application/json" }, body: corpo, signal: ctrl.signal });
+          j = await r.json().catch(() => ({}));
+          if (r.status < 500 || tentativa >= 1) break;
+        } catch (e) { if (e.name === "AbortError" || tentativa >= 1 || navigator.onLine === false) throw e; }
+        if (x.cancelado) return;
+        await new Promise(ok => setTimeout(ok, 700));
+      }
       if (x.cancelado) return;
       if (r.status === 404 || r.status === 501 || j.erro === "sem-ia") { VOZ_SERVIDOR_FALHOU = true; return falhar(x, "Seu servidor ainda não sabe transcrever a fala. No computador, rode de novo: bash servidor-avisos/instalar-avisos.sh. Por enquanto, toque na Bolinha que eu uso a voz do aparelho."); }
       if (!r.ok || !j.ok) throw new Error(j.erro || "HTTP " + r.status);
@@ -838,10 +897,13 @@ function useFalaServidor({ onFinal, onFalhou, prompt }) {
     try { if (!AUDIO_CTX_VOZ || AUDIO_CTX_VOZ.state === "closed") AUDIO_CTX_VOZ = new AC(); if (AUDIO_CTX_VOZ.state !== "running") AUDIO_CTX_VOZ.resume().catch(() => {}); }
     catch (e) { return false; }
     const ctx = AUDIO_CTX_VOZ;
-    const x = { chunks: [], fala: [], falou: false, ruido: 0, nRuido: 0, falaMs: 0, silencio: 0, taxa: ctx.sampleRate, msBloco: 4096 / ctx.sampleRate * 1000 };
+    const x = { chunks: [], fala: [], falou: false, emFala: false, ruido: 0, nRuido: 0, falaMs: 0, silencio: 0, taxa: ctx.sampleRate, msBloco: 4096 / ctx.sampleRate * 1000 };
     atual.current = x; setEstado("ouvindo");
-    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }).then(stream => {
-      if (x.cancelado || x.encerrado) { stream.getTracks().forEach(t => t.stop()); return; }
+    clearTimeout(MIC.timer);
+    const pedir = micVivo() ? Promise.resolve(MIC.stream) : navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+    pedir.then(stream => {
+      MIC.stream = stream;
+      if (x.cancelado || x.encerrado) { guardarMic(); return; }
       x.stream = stream;
       // liga o microfone ao medidor de volume; no iPhone o áudio às vezes "congela" quando o microfone abre:
       // se nenhum som chegar em 1,5 s, recria o áudio e liga de novo (uma vez)
@@ -858,14 +920,22 @@ function useFalaServidor({ onFinal, onFalhou, prompt }) {
         const c = new Float32Array(e.inputBuffer.getChannelData(0)); x.chunks.push(c);
         let q = 0; for (let i = 0; i < c.length; i++) q += c[i] * c[i];
         const rms = Math.sqrt(q / c.length);
-        // primeiros ~350 ms: mede o barulho do ambiente
-        if (x.nRuido < 4) { x.ruido = (x.ruido * x.nRuido + rms) / (x.nRuido + 1); x.nRuido++; x.fala.push(false); setNivel(.08); return; }
-        const limiar = Math.min(.05, Math.max(.008, Math.min(x.ruido, .02) * 2.8));
-        const voz = rms > limiar; x.fala.push(voz);
-        if (!voz) x.ruido = x.ruido * .92 + rms * .08;
+        // primeiros ~350 ms: mede o barulho do ambiente pelo MENOR volume ouvido
+        // (quem já começa falando não engana a medida: entre as sílabas sempre tem um respiro)
+        if (x.nRuido < 4) { x.ruido = x.nRuido ? Math.min(x.ruido, rms) : rms; x.nRuido++; x.fala.push(false); setNivel(.08); return; }
+        const base = Math.min(Math.max(x.ruido, .0015), .02);
+        // para começar a valer como voz precisa de mais volume; para continuar, menos (não corta o fim das palavras)
+        const limiar = x.emFala ? Math.max(.004, base * 2) : Math.min(.045, Math.max(.007, base * 3));
+        const voz = rms > limiar; x.emFala = voz; x.fala.push(voz);
+        // o piso de ruído desce rápido e sobe devagar: acompanha o ambiente sem confundir com a voz
+        x.ruido = rms < x.ruido ? x.ruido * .7 + rms * .3 : x.ruido * .985 + rms * .015;
         setNivel(Math.min(1, .08 + rms / (limiar * 5)));
         if (voz) { x.falaMs += x.msBloco; x.silencio = 0; if (!x.falou && x.falaMs >= 160) { x.falou = true; clearTimeout(x.semFala); setEstado("falando"); } }
-        else if (x.falou) { x.silencio += x.msBloco; if (x.silencio >= 1100) terminar(x); } // 1,1 s calado depois de falar: terminou
+        else if (x.falou) {
+          // frase curta ("gastei…") espera mais pela continuação; frase longa encerra com 1,5 s de silêncio
+          x.silencio += x.msBloco;
+          if (x.silencio >= (x.falaMs < 1500 ? 2100 : 1500)) terminar(x);
+        }
       };
       ligar(ctx);
       x.vigiaAudio = setTimeout(() => {
@@ -888,6 +958,155 @@ function useFalaServidor({ onFinal, onFalhou, prompt }) {
   const parar = () => { const x = atual.current; if (x && !x.encerrado) terminar(x, true); };
   const cancelar = () => { const x = atual.current; if (x) { x.cancelado = true; x.encerrado = true; soltar(x); } setNivel(0); setErro(""); setEstado("parado"); };
   return { estado, erro, nivel, iniciar, parar, cancelar };
+}
+
+/* ---------- IA no seu servidor (Workers AI da Cloudflare, cota grátis diária) ----------
+   - entende frases que o app não entendeu sozinho ("torrei 45 conto no boteco ontem");
+   - responde perguntas sobre os seus números ("quanto gastei de Uber em outubro?");
+   - lê fotos de comprovante e nota.
+   Só funciona com internet e com o servidor de avisos ligado; sem eles, o app segue como antes.
+   No plano grátis da Cloudflare, se a cota do dia acabar, a IA só para até o dia seguinte: nunca gera cobrança. */
+const iaDisponivel = () => !!servidorAvisos() && navigator.onLine !== false;
+const hojeTexto = () => `${todayISO()} (${DIA_LONGO[new Date().getDay()]})`;
+async function chamarIA(rota, corpo, ms = 15000) {
+  const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(`${servidorAvisos()}${rota}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hoje: hojeTexto(), ...corpo }), signal: ctrl.signal });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 429 || j.erro === "cota") throw new Error("cota");
+    if (!r.ok || !j.ok) throw new Error(j.erro || "HTTP " + r.status);
+    return j;
+  } catch (e) { throw e && e.name === "AbortError" ? new Error("demorou") : e; }
+  finally { clearTimeout(t); }
+}
+const msgIA = e => {
+  const m = String((e && e.message) || e);
+  return m === "cota" ? "A IA já trabalhou bastante hoje (cota grátis do dia). Amanhã ela volta; o resto do app funciona normal."
+    : m === "demorou" ? "A IA demorou para responder. Tente de novo em instantes."
+    : m === "ilegivel" ? "Não consegui ler o valor nessa foto. Tente uma foto mais de perto, com o valor bem visível."
+    : navigator.onLine === false ? "Sem internet agora. Tente de novo quando a conexão voltar."
+    : "Não consegui falar com a IA agora. Tente de novo em instantes.";
+};
+const CATS_IA = () => [...CATEGORIAS, ...CAT_ENTRADA].map(c => c.id);
+// O app entendeu a frase sozinho, mas com cara de chute: não sabe onde foi o gasto,
+// ou sobrou valor na frase que não virou anotação ("…20 pro flanelinha e 15 na padoca")
+function duvidoso(r, t) {
+  if (r.tipo !== "gastos") return false;
+  if (r.itens.some(i => (i.cat === "outros" || i.cat === "outros-e") && !i.desc)) return true;
+  const s = numerosPorExtenso(semAcento(t)).replace(/\d+\s*(?:reais|real)\s*e\s*\d{1,2}(?:\s*centavos?)?/g, "1").replace(/\b(?:dia|as|às)\s+\d+/g, "");
+  return (s.match(/\b\d+(?:,\d{1,2})?\b/g) || []).length > r.itens.length;
+}
+const tituloCurto = s => { const t = String(s || "").trim().slice(0, 40); return t ? t.charAt(0).toUpperCase() + t.slice(1) : ""; };
+// "quanto gastei de uber?", "quem está devendo?" (só vale quando a frase não virou anotação)
+const ehPergunta = t => /\?\s*$/.test(String(t || "")) || /^(quanto|quantos|quantas|qual|quais|quem|quando|onde|como|o que|oque|por que|porque|sera que|me (diz|fala|mostra|conta|lembra)|tenho|tem algum|tem alguma|ja paguei|estou|devo|posso|consigo|preciso)\b/.test(semAcento(String(t || "")).trim());
+
+// Pede à IA para transformar a frase em anotação; confere tudo aqui antes de usar
+async function entenderIA(texto, db) {
+  const ativos = db.patients.filter(p => p.active);
+  const j = await chamarIA("/entender", { texto, categorias: CATS_IA(), pacientes: [...new Set(ativos.map(p => primeiro(p.name)))] }, 12000);
+  const d = j.dados || {};
+  if (d.tipo === "pergunta") return { tipo: "pergunta" };
+  if (d.tipo === "consultorio" && d.consultorio) {
+    const c = d.consultorio, p = acharPaciente(` ${semAcento(String(c.paciente || ""))} `, db);
+    if (!p || !["veio", "falta", "pagou", "remarcar"].includes(c.acao)) return null;
+    if (c.acao === "remarcar") {
+      const data = /^\d{4}-\d{2}-\d{2}$/.test(c.data || "") && c.data >= todayISO() ? c.data : null;
+      const hora = /^\d{1,2}:\d{2}$/.test(c.hora || "") ? c.hora.padStart(5, "0") : null;
+      if (!data && !hora) return null;
+      return { tipo: "consult", c: { acao: "remarcar", p, data: data || p.nextDate, hora: hora || p.time, ok: true } };
+    }
+    return { tipo: "consult", c: { acao: c.acao, p, pago: c.acao === "veio" && !!c.pagou, ok: true } };
+  }
+  if (d.tipo === "gastos" && Array.isArray(d.itens)) {
+    const itens = d.itens.slice(0, 10).map(it => {
+      const tipo = it.tipo === "entrada" ? "entrada" : "saida";
+      const lista = tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
+      const desc0 = String(it.descricao || "").trim();
+      const marca = desc0 ? acharMarca(desc0) : null;
+      let cat = lista.some(c => c.id === it.categoria) ? it.categoria : tipo === "entrada" ? "outros-e" : "outros";
+      if (marca && tipo === "saida" && CATEGORIAS.some(c => c.id === marca.cat)) cat = marca.cat;
+      return { tipo, valor: Math.round(Number(it.valor) * 100) / 100, cat, desc: marca ? marca.nome : tituloCurto(desc0), off: Math.max(0, Math.min(60, Math.round(Number(it.dias_atras) || 0))), marca: marca ? marca.id : null };
+    }).filter(i => i.valor > 0 && i.valor < 1e6);
+    if (itens.length) return { tipo: "gastos", itens };
+  }
+  return null;
+}
+
+// Resumo dos seus números para a IA responder perguntas (só primeiros nomes dos pacientes; nada fica guardado no servidor)
+function contextoPergunta(db, usaPessoal) {
+  const L = [], hoje = todayISO(), mesAt = hoje.slice(0, 7), r = brlReal;
+  const meses = []; { const d = fromISO(hoje); for (let i = 0; i < 6; i++) { const m = new Date(d.getFullYear(), d.getMonth() - i, 1); meses.push(`${m.getFullYear()}-${pad(m.getMonth() + 1)}`); } }
+  const nomeMes = ch => `${MES_LONGO[Number(ch.slice(5)) - 1]} de ${ch.slice(0, 4)}`;
+  const nomeP = id => { const p = db.patients.find(x => x.id === id); return p ? primeiro(p.name) : "?"; };
+  if (db.patients.length) {
+    L.push("## CONSULTÓRIO");
+    meses.slice(0, 4).forEach(ch => {
+      const ses = db.sessions.filter(s => s.date.startsWith(ch));
+      L.push(`${nomeMes(ch)}: ${ses.filter(s => s.status === "done").length} sessões atendidas, ${ses.filter(s => s.status === "missed").length} faltas, líquido ${r(liquidoMes(db, ch))}`);
+    });
+    const abertas = db.charges.filter(c => !c.paid && !c.hidden);
+    L.push(`Pagamentos em aberto (pacientes devendo): ${abertas.length ? abertas.map(c => `${nomeP(c.patientId)} ${r(c.amount)} desde ${dm(c.createdAt)}`).join("; ") : "nenhum"}`);
+    L.push("Pacientes ativos:");
+    db.patients.filter(p => p.active).forEach(p => {
+      const doMes = db.sessions.filter(s => s.patientId === p.id && s.date.startsWith(mesAt));
+      L.push(`- ${primeiro(p.name)}: sessão ${r(p.price)}, a cada ${p.freq} dias, próxima ${p.nextDate ? `${diaCurto(p.nextDate)} às ${p.time}` : "sem data"}; no mês ${doMes.filter(s => s.status === "done").length} sessões e ${doMes.filter(s => s.status === "missed").length} faltas`);
+    });
+    const ag = [];
+    for (let i = 0; i < 8; i++) { const iso = addDays(hoje, i), its = itensDoDia(db, iso).filter(x => x.kind === "next" || x.kind === "proj"); if (its.length) ag.push(`${diaCurto(iso)}: ${its.map(x => `${x.time} ${primeiro(x.patient.name)}`).join(", ")}`); }
+    L.push(`Agenda dos próximos dias: ${ag.length ? ag.join(" | ") : "sem sessões marcadas"}`);
+  }
+  const P = db.pessoal;
+  if (usaPessoal && P) {
+    L.push("## PESSOAL (casa)");
+    meses.forEach(ch => {
+      const ls = P.lanc.filter(l => l.data.startsWith(ch)); if (!ls.length) return;
+      const sai = ls.filter(l => l.tipo === "saida"), ent = ls.filter(l => l.tipo === "entrada"), porCat = {}, porLoja = {};
+      sai.forEach(l => { porCat[l.cat] = (porCat[l.cat] || 0) + l.valor; const k = l.desc || catDe(l.cat).nome; porLoja[k] = porLoja[k] || [0, 0]; porLoja[k][0] += l.valor; porLoja[k][1]++; });
+      L.push(`${nomeMes(ch)}: entrou ${r(soma(ent, l => l.valor))}, saiu ${r(soma(sai, l => l.valor))} (fora as contas fixas)`);
+      L.push(`  por categoria: ${Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `${catDe(c).nome} ${r(v)}`).join("; ") || "nada"}`);
+      L.push(`  por loja: ${Object.entries(porLoja).sort((a, b) => b[1][0] - a[1][0]).slice(0, 15).map(([k, [v, n]]) => `${k} ${r(v)} (${n}x)`).join("; ")}`);
+    });
+    const rec = P.lanc.filter(l => l.data >= addDays(hoje, -45)).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 120);
+    if (rec.length) L.push(`Lançamentos dos últimos 45 dias: ${rec.map(l => `${dm(l.data)} ${l.tipo === "entrada" ? "+" : "-"}${r(l.valor)} ${l.desc || catDe(l.cat).nome} [${catDe(l.cat).nome}]`).join("; ")}`);
+    L.push(`Contas fixas (todo mês): ${P.contas.map(c => `${c.nome} ${r(c.valor)} dia ${c.dia}, ${c.pagas && c.pagas[mesAt] ? "paga este mês" : "não paga este mês"}${c.assinatura ? ", assinatura" : ""}`).join("; ") || "nenhuma"}`);
+    if ((P.caixinhas || []).length) L.push(`Caixinhas: ${P.caixinhas.map(x => `${x.nome} guardado ${r(soma(x.movs || [], m => m.valor))}${x.meta ? ` de ${r(x.meta)}` : ""}`).join("; ")}`);
+    const tet = Object.entries(P.limites || {}).filter(([, v]) => v > 0);
+    if (tet.length) { const g = gastoPorCat(db, mesAt); L.push(`Tetos do mês por categoria: ${tet.map(([c, v]) => `${catDe(c).nome} teto ${r(v)}, gasto ${r(g[c] || 0)}`).join("; ")}`); }
+  }
+  return L.join("\n").slice(0, 38000);
+}
+
+// Dica para o Whisper: exemplos, nomes dos pacientes e as lojas que você mais usa (até ~680 letras)
+function dicaWhisper(db) {
+  let s = "Anotação falada em português do Brasil, sobre gastos, entradas ou atendimentos. Exemplos: Gastei R$ 30 no Uber. Comprei R$ 54,90 no iFood e R$ 120 na Amazon. Recebi R$ 200 de Pix. Felipe veio e pagou. A Ana faltou. Remarca o Pedro pra quinta às 15h. Quanto gastei no mercado este mês?";
+  const nomes = [...new Set(db.patients.filter(p => p.active).map(p => primeiro(p.name)))];
+  // só nomes curtos (até 2 palavras): "Drogasil", "Pão de Açúcar" sim; "Compra da semana" não ajuda
+  const vezes = {}; ((db.pessoal && db.pessoal.lanc) || []).forEach(l => { if (l.desc && l.desc.length <= 24 && l.desc.trim().split(/\s+/).length <= 2 && l.data >= addDays(todayISO(), -120)) vezes[l.desc] = (vezes[l.desc] || 0) + 1; });
+  const lojas = Object.entries(vezes).sort((a, b) => b[1] - a[1]).slice(0, 15).map(x => x[0]);
+  const juntar = (rot, lista) => { let out = ""; for (const n of lista) { const prox = out ? `${out}, ${n}` : n; if ((s + ` ${rot}: ${prox}.`).length > 680) break; out = prox; } if (out) s += ` ${rot}: ${out}.`; };
+  juntar("Nomes", nomes); juntar("Lojas", lojas);
+  return s;
+}
+
+// Foto de comprovante ou nota -> lançamento pronto para conferir
+async function fotoParaIA(file) {
+  const url = await lerArquivo(file);
+  const img = await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = url; });
+  const k = Math.min(1, 1400 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", .82);
+}
+async function lerComprovante(file) {
+  const j = await chamarIA("/ler-imagem", { imagem: await fotoParaIA(file), categorias: CATS_IA() }, 30000);
+  const d = j.dados || {}, valor = Math.round(Number(d.valor) * 100) / 100;
+  if (!(valor > 0 && valor < 1e6)) throw new Error("ilegivel");
+  const tipo = d.tipo === "entrada" ? "entrada" : "saida", lista = tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
+  const desc0 = String(d.descricao || "").trim(), marca = desc0 ? acharMarca(desc0) : null;
+  let cat = lista.some(c => c.id === d.categoria) ? d.categoria : null;
+  if (marca && tipo === "saida" && CATEGORIAS.some(c => c.id === marca.cat)) cat = marca.cat;
+  const data = /^\d{4}-\d{2}-\d{2}$/.test(d.data || "") && d.data <= todayISO() && d.data >= addDays(todayISO(), -400) ? d.data : todayISO();
+  return { tipo, valor, cat, desc: marca ? marca.nome : tituloCurto(desc0), data };
 }
 
 // Avisos: banner dentro do app + som + vibração; notificação do sistema quando o aparelho permitir
@@ -1003,7 +1222,34 @@ function gerarAvisos(db, av, usaPessoal) {
       add(quando(iso, "09:00"), `${c.nome} vence hoje`, `${brlReal(c.valor)} · já pagou? Marque no app.`, `c-${c.id}`);
     }
   });
+  // Resumo da semana: domingo às 20h. Os números vão até a última vez que o app mandou a lista
+  // (e ele manda de novo a cada mudança), então chega com a semana inteira.
+  if (av.semana !== false) {
+    const dom = addDays(hoje, (7 - fromISO(hoje).getDay()) % 7), s = resumoSemana(db, dom, usaPessoal);
+    add(quando(dom, "20:00"), s.titulo, s.corpo, "semana");
+  }
   return lista.sort((a, b) => a.t - b.t).slice(0, 200);
+}
+// O texto do resumo da semana (segunda a domingo). Sem nomes de pacientes: aparece na tela bloqueada.
+function resumoSemana(db, dom, usaPessoal) {
+  const seg = addDays(dom, -6), dentro = d => d >= seg && d <= dom, R = v => `R$ ${Math.round(v).toLocaleString("pt-BR")}`;
+  const partes = [];
+  const ses = db.sessions.filter(s => dentro(s.date)), feitas = ses.filter(s => s.status === "done").length, faltas = ses.filter(s => s.status === "missed").length;
+  let liq = 0; for (let d = seg; d <= dom; d = addDays(d, 1)) liq += liquidoDia(db, d);
+  if (feitas || faltas) partes.push(`${feitas} ${feitas === 1 ? "sessão" : "sessões"}${faltas ? ` e ${faltas} ${faltas === 1 ? "falta" : "faltas"}` : ""}, ${R(liq)} líquidos.`);
+  const abertas = db.charges.filter(c => !c.paid && !c.hidden);
+  if (abertas.length) { const n = new Set(abertas.map(c => c.patientId)).size; partes.push(`Falta receber ${R(soma(abertas, c => c.amount))}${n > 1 ? ` de ${n} ${TERMO.p}` : ""}.`); }
+  if (usaPessoal && db.pessoal) {
+    const ls = db.pessoal.lanc.filter(l => dentro(l.data)), sai = soma(ls.filter(l => l.tipo === "saida"), l => l.valor), ent = soma(ls.filter(l => l.tipo === "entrada"), l => l.valor);
+    if (sai || ent) partes.push(`Casa: saiu ${R(sai)}${ent ? `, entrou ${R(ent)}` : ""}.`);
+    const prox = [];
+    for (let i = 1; i <= 7; i++) { const iso = addDays(dom, i), ch = iso.slice(0, 7); db.pessoal.contas.forEach(c => { if (vencimento(c, ch) === iso && !(c.pagas && c.pagas[ch])) prox.push(c.nome); }); }
+    if (prox.length) partes.push(`Vencem: ${prox.slice(0, 3).join(", ")}${prox.length > 3 ? ` e mais ${prox.length - 3}` : ""}.`);
+    const tet = tetosAlerta(db, dom.slice(0, 7))[0];
+    if (tet) partes.push(`${catDe(tet.cat).nome}: ${Math.round(tet.pct * 100)}% do teto.`);
+  }
+  while (partes.length > 1 && partes.join(" ").length > 178) partes.pop();
+  return { titulo: "Resumo da sua semana", corpo: partes.join(" ").slice(0, 180) || "Semana tranquila, nada anotado. Bom descanso!" };
 }
 
 /* =========================================================
@@ -1150,6 +1396,11 @@ const I = {
   piggy: () => <Svg><path d="M19 11.5c0-3.6-3.1-6-7-6-1.7 0-3.3.5-4.5 1.3L5 5.5V9C4 10 3.5 11 3.5 12.5 3.5 15 5 17 7.5 18v2h3v-1.5h3V20h3v-2.2c1.4-.8 2.5-2.1 2.5-3.8h1.5v-2.5z"/><circle cx="15" cy="10.5" r=".6"/></Svg>,
   flag: () => <Svg><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></Svg>,
   logo: () => <Svg sw={2.2}><rect x="4" y="5" width="16" height="15" rx="3.5"/><path d="M4 10h16M9 15l2 2 4-4"/></Svg>,
+  sound: () => <Svg><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></Svg>,
+  camera: () => <Svg><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="12.5" r="3.5"/></Svg>,
+  scan: () => <Svg><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M7.5 8v8M10 8v8M12.5 8v8M15 8v8M16.5 8v8"/></Svg>,
+  upload: () => <Svg><path d="M12 15.5V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4.5 14v4.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V14"/></Svg>,
+  gauge: () => <Svg><path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13l3.5-4"/><circle cx="12" cy="13" r="1.2"/></Svg>,
 };
 const CatIcon = ({ cat }) => { const C = I[cat.ic] || I.more; return <C />; };
 
@@ -2313,7 +2564,7 @@ function Bolinha({ estado = "" }) {
     piscar(); espiar(); careta();
     return () => { vivo = false; ts.forEach(clearTimeout); };
   }, []);
-  const modo = estado === "contando" ? "feliz" : estado === "faltando" || estado === "erro" ? "confuso" : estado === "falando" ? "falando" : estado === "ouvindo" || estado === "teclado" ? "ouvindo" : "parado";
+  const modo = estado === "contando" || estado === "resposta" ? "feliz" : estado === "faltando" || estado === "erro" ? "confuso" : estado === "falando" ? "falando" : estado === "ouvindo" || estado === "teclado" || estado === "pensando" ? "ouvindo" : "parado";
   const c = modo === "parado" ? cara : "";
   const dir = modo === "ouvindo" || modo === "falando" ? "cima" : modo === "confuso" ? "d" : olhar;
   return (
@@ -2393,18 +2644,65 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   };
   const textoRef = useRef(""); textoRef.current = texto;
   const aplicar = t => { setTexto(t); setRes(entender(t)); };
-  const concluir = (t0, alts) => {
+  const [resposta, setResposta] = useState("");
+  const vez = useRef(0); // cada frase nova invalida uma resposta atrasada da IA
+  const autoCont = useRef(false); // já reabriu o microfone sozinho para completar esta frase
+  const pronto = () => { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); };
+  const perguntar = async (t, minha) => {
+    setFase("pensando"); setAviso("");
+    try {
+      const j = await chamarIA("/perguntar", { pergunta: t, contexto: contextoPergunta(db, usaPessoal) }, 25000);
+      if (vez.current !== minha) return;
+      setResposta(String(j.resposta || "").trim()); setFase("resposta"); vibrar("ok");
+      if (tecRef.current) tecRef.current.blur();
+    } catch (e) { if (vez.current !== minha) return; setAviso(msgIA(e)); setFase("faltando"); vibrar("aviso"); }
+  };
+  const concluir = async (t0, alts, deVoz) => {
+    const minha = ++vez.current;
     const t = alts ? melhor(t0, alts) : t0;
-    aplicar(t); setAviso("");
+    aplicar(t); setAviso(""); setResposta("");
     if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la)\b/.test(semAcento(t))) { fechar(); return; }
     const r = entender(t);
-    let ok = false, msg = "";
-    if (r.tipo === "consult") { ok = r.c.ok; if (!ok) msg = `Entendi ${primeiro(r.c.p.name)}, mas não o que aconteceu. Diga "veio", "faltou", "pagou" ou "remarca pra quinta às 15h".`; }
-    else if (!r.itens.length || !r.itens.every(i => i.valor > 0)) msg = r.itens.some(i => i.valor > 0) ? "Faltou o valor de alguma coisa." : "Não peguei o valor. Ex.: “gastei 30 no uber”.";
-    else if (!usaPessoal) msg = "Para anotar gastos, ligue o modo Pessoal em Perfil.";
-    else ok = true;
-    if (ok) { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); }
-    else { setAviso(msg); setFase("faltando"); vibrar("aviso"); }
+    if (okDe(r)) {
+      // entendeu, mas ficou com cara de chute (sem saber onde foi, ou sobrou valor na frase): confere com a IA
+      if (!(duvidoso(r, t) && iaDisponivel())) return pronto();
+      setFase("pensando");
+      try { const r2 = await entenderIA(t, db); if (vez.current !== minha) return; if (r2 && r2.tipo === "gastos") setRes(r2); }
+      catch (e) { if (vez.current !== minha) return; }
+      return pronto();
+    }
+    // pergunta ("quanto gastei de uber?"): quem responde é a IA, com os seus números
+    if (ehPergunta(t)) {
+      if (iaDisponivel()) return perguntar(t, minha);
+      setAviso("Para responder perguntas eu preciso de internet."); setFase("faltando"); vibrar("aviso"); return;
+    }
+    // o app não entendeu sozinho: pede ajuda à IA antes de desistir ("torrei 45 conto no boteco")
+    if (iaDisponivel() && t.trim().split(/\s+/).length >= 2) {
+      setFase("pensando");
+      try {
+        const r2 = await entenderIA(t, db);
+        if (vez.current !== minha) return;
+        if (r2 && r2.tipo === "pergunta") return perguntar(t, minha);
+        if (r2 && (r2.tipo === "consult" || usaPessoal)) { setRes(r2); return pronto(); }
+      } catch (e) { if (vez.current !== minha) return; }
+    }
+    let msg = "";
+    if (r.tipo === "consult") msg = `Entendi ${primeiro(r.c.p.name)}, mas não o que aconteceu. Diga "veio", "faltou", "pagou" ou "remarca pra quinta às 15h".`;
+    else if (r.itens.length && r.itens.every(i => i.valor > 0) && !usaPessoal) msg = "Para anotar gastos, ligue o modo Pessoal em Perfil.";
+    else msg = r.itens.some(i => i.valor > 0) ? "Faltou o valor de alguma coisa." : "Não peguei o valor. Ex.: “gastei 30 no uber”.";
+    setAviso(msg); setFase("faltando"); vibrar("aviso");
+    // falou e faltou um pedaço: o microfone reabre sozinho uma vez para você completar ("…30")
+    if (deVoz && pelaRede.current && !autoCont.current && usaPessoal !== false && micVivo()) {
+      autoCont.current = true;
+      setTimeout(() => { if (vez.current === minha) comecar(true, msg); }, 450);
+    }
+  };
+  // resposta lida em voz alta (voz do próprio aparelho, sem internet)
+  const ouvir = () => {
+    try {
+      const s = window.speechSynthesis; if (!s || !resposta) return;
+      s.cancel(); const u = new SpeechSynthesisUtterance(resposta.replace(/R\$\s?/g, "")); u.lang = "pt-BR"; u.rate = 1.05; s.speak(u);
+    } catch (e) {}
   };
   const irTeclado = () => { setFase("teclado"); setTimeout(() => tecRef.current && tecRef.current.focus(), 60); };
   const nat = useFalaNativa({
@@ -2413,21 +2711,22 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     onFalhou: irTeclado,
     completo: t => okDe(entender(comBase(t))),
   });
-  // dica para o Whisper: como as frases costumam ser e os nomes dos pacientes (só o primeiro nome)
-  const nomesVoz = [...new Set(db.patients.filter(p => p.active).map(p => primeiro(p.name)))].slice(0, 40);
-  const promptVoz = "Anotação falada em português do Brasil, sobre gastos ou atendimentos. Exemplos: gastei 30 reais no Uber. Comprei 54,90 no iFood e 120 na Amazon. Recebi 200 de Pix. Felipe veio e pagou. A Ana faltou. Remarca o Pedro pra quinta às 15h."
-    + (nomesVoz.length ? ` Nomes: ${nomesVoz.join(", ")}.` : "");
-  const srv = useFalaServidor({ onFinal: t => concluir(t, []), onFalhou: irTeclado, prompt: promptVoz });
+  // dica para o Whisper: como as frases costumam ser, os nomes dos pacientes (só o primeiro nome)
+  // e as lojas que você mais usa (assim ele escreve "Drogasil" e não "droga sil")
+  const promptVoz = useMemo(() => dicaWhisper(db), [db.patients, db.pessoal && db.pessoal.lanc]);
+  const srv = useFalaServidor({ onFinal: t => concluir(t, [], true), onFalhou: irTeclado, prompt: promptVoz });
   const pelaRede = useRef(false);
   const fala = pelaRede.current ? srv : nat;
-  const pararTudo = () => { nat.cancelar(); srv.cancelar(); };
-  const abrirTeclado = () => { pararTudo(); setAviso(""); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
+  const pararTudo = () => { nat.cancelar(); srv.cancelar(); vez.current++; try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} };
+  const abrirTeclado = () => { pararTudo(); setAviso(""); setResposta(""); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
   // chamado direto no toque (o iPhone só libera microfone e teclado dentro do toque)
-  const comecar = continuar => {
+  // continuar: completa a frase anterior; avisoFixo: mantém o aviso do que faltou enquanto ouve
+  const comecar = (continuar, avisoFixo) => {
     clearTimeout(ocioso.current);
     base.current = continuar === true && textoRef.current ? textoRef.current : "";
     if (!base.current) { setTexto(""); setRes(null); }
-    setAviso(""); setAtivo(true);
+    if (continuar !== true) autoCont.current = false;
+    setAviso(typeof avisoFixo === "string" ? avisoFixo : ""); setResposta(""); setAtivo(true);
     const rede = vozPeloServidor();
     if (!rede && (!SRec() || vozTravada())) { abrirTeclado(); return; }
     pararTudo(); pelaRede.current = rede;
@@ -2435,17 +2734,21 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     if (tecRef.current) tecRef.current.blur();
     if (!(rede ? srv : nat).iniciar()) abrirTeclado();
   };
-  const fechar = () => { pararTudo(); clearTimeout(ocioso.current); base.current = ""; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); };
+  const fechar = () => { pararTudo(); fecharMic(); clearTimeout(ocioso.current); base.current = ""; autoCont.current = false; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); setResposta(""); };
   const salvar = () => { const r = res; fechar(); if (!r) return; if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens); };
   const tocar = () => {
     if (!ativo) return comecar();
     if (fase === "contando") return salvar();
+    if (fase === "pensando") return; // a IA está pensando: um segundo toque não atrapalha
+    if (fase === "resposta") return comecar();
     if (fase === "teclado") { const t = tecRef.current ? tecRef.current.value : ""; return t.trim() ? concluir(t) : fechar(); }
     if (fala.estado === "processando") return; // já está transcrevendo: um segundo toque não atrapalha
     if (fala.estado === "ouvindo" || fala.estado === "falando") return fala.parar();
     comecar(fase === "faltando");
   };
-  api.current = { tocar, comecar, fechar };
+  // texto que chegou de fora (compartilhado de outro app): entende como se tivesse sido digitado
+  const deTexto = t => { pararTudo(); base.current = ""; setAtivo(true); setFase("teclado"); if (tecRef.current) tecRef.current.value = t; concluir(t); };
+  api.current = { tocar, comecar, fechar, texto: deTexto };
   // conta para a barra (e para o mascote) o que está acontecendo
   const est0 = fala.estado;
   useEffect(() => { onAtivo(!ativo ? "" : fase === "ouvindo" ? (est0 === "falando" ? "falando" : est0 === "erro" ? "erro" : "ouvindo") : fase); }, [ativo, fase, est0]);
@@ -2479,14 +2782,16 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const valorVisto = useContagem(itens.length ? soma(itens, i => i.valor) : 0);
   const c = res && res.tipo === "consult" ? res.c : null;
   const est = fala.estado;
-  const classe = fase === "contando" ? "pronto" : fase === "faltando" || est === "erro" ? "erro" : est;
+  const classe = fase === "contando" || fase === "resposta" ? "pronto" : fase === "pensando" ? "processando" : fase === "faltando" || est === "erro" ? "erro" : est;
   const status = fase === "contando" ? `Entendi · salvando em ${conta}`
+    : fase === "pensando" ? "Pensando…"
+    : fase === "resposta" ? "Resposta"
     : fase === "teclado" ? "Toque no microfone do teclado e fale"
     : fase === "faltando" ? "Faltou algo" : est === "erro" ? "Não deu para ouvir"
     : est === "processando" ? "Entendendo…"
     : base.current ? (est === "falando" ? "Ouvindo… completando a frase" : "Complete a frase")
     : est === "falando" ? "Ouvindo… toque na Bolinha quando terminar" : "Pode falar";
-  const dica = `Ex.: “gastei 30 no uber”${db.patients.some(p => p.active) ? ` ou “${primeiro(db.patients.find(p => p.active).name)} veio”` : ""}`;
+  const dica = `Ex.: “gastei 30 no uber”${db.patients.some(p => p.active) ? ` ou “${primeiro(db.patients.find(p => p.active).name)} veio”` : ""}${servidorAvisos() ? `. Ou pergunte: “${usaPessoal ? "quanto gastei de iFood?" : "quem está devendo?"}”` : ""}`;
   return (
     <>
       <input ref={tecRef} className={"voz-tec" + (ativo && fase === "teclado" ? " on" : "")} tabIndex={ativo && fase === "teclado" ? 0 : -1} type="text" enterKeyHint="done" autoComplete="off" autoCorrect="on"
@@ -2497,6 +2802,8 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
         <div className="vozb-doca">
           <div className="vozb-status">{fase !== "contando" && fase !== "faltando" && est !== "erro" && <i className="vozb-ponto" />}{status}</div>
           <p className={"vozb-fala" + (texto ? "" : " vazio")}>{texto || (est === "erro" ? fala.erro : est === "processando" ? "Transcrevendo o que você disse…" : fase === "teclado" ? "" : dica)}</p>
+
+          {fase === "resposta" && resposta && <div className="vozb-card vozb-resp"><p>{resposta}</p></div>}
 
           {itens.length > 0 && (
             <div className="vozb-card">
@@ -2525,10 +2832,12 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
           <div className="vozb-acoes">
             {fase === "contando" && <button className="pill-btn forte" onClick={salvar} style={{ "--k": conta / 3 }}><I.check /> Salvar</button>}
             {fase === "contando" && um && <button className="pill-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
+            {fase === "resposta" && <button className="pill-btn forte" onClick={() => comecar()}><I.mic /> Perguntar outra</button>}
+            {fase === "resposta" && "speechSynthesis" in window && <button className="pill-btn" onClick={ouvir}><I.sound /> Ouvir</button>}
             {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn forte" onClick={() => comecar(fase === "faltando")}><I.mic /> {fase === "faltando" ? "Completar falando" : "Falar de novo"}</button>}
             {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn" onClick={abrirTeclado}>Teclado</button>}
             {fase === "teclado" && (SRec() || vozPeloServidor()) && <button className="pill-btn" onClick={() => { vozOk(); comecar(); }}><I.mic /> Tentar a voz</button>}
-            <button className="pill-btn" onClick={fechar}>Cancelar</button>
+            <button className="pill-btn" onClick={fechar}>{fase === "resposta" ? "Fechar" : "Cancelar"}</button>
           </div>
         </div>
       </div>}
@@ -2540,6 +2849,9 @@ const LancSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default:
 
 const ContaSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.ContaSheet })));
 const CaixinhaSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.CaixinhaSheet })));
+const TetoSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.TetoSheet })));
+const BoletoSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.BoletoSheet })));
+const ImportarSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.ImportarSheet })));
 const ParceladoSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ParceladoSheet })));
 const ViagemSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ViagemSheet })));
 
@@ -2910,6 +3222,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     else if (h === "agora") setFoco(true);
     else if (h === "fechar") setSheet({ type: "fechar" });
     else if (h === "livres") setSheet({ type: "livres" });
+    else if (h === "compartilhado") setTimeout(() => act.receberCompartilhado(), 300);
   }, []);
 
   // Avisos saem só como notificação do celular (o som e a vibração são os do próprio aparelho)
@@ -3035,7 +3348,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     if (!push) return;
     const t = setTimeout(() => sincRef.current(false), 2500);
     return () => clearTimeout(t);
-  }, [db, push, av.ativo, av.antecedencia, av.nomes, av.resumo, av.fechar, usaPessoal, Math.floor(now.getTime() / 9e5)]);
+  }, [db, push, av.ativo, av.antecedencia, av.nomes, av.resumo, av.fechar, av.semana, usaPessoal, Math.floor(now.getTime() / 9e5)]);
   // Ao sair da tela: manda o que mudou na hora
   useEffect(() => {
     const f = () => sincRef.current(document.visibilityState === "hidden");
@@ -3060,6 +3373,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         const sc = situacaoConta(c, t.slice(0, 7)), k = `c:${c.id}:${t}`;
         if (!dispara && !vistos[k] && (sc.st === "hoje" || sc.st === "atrasada" || sc.txt === "Vence amanhã")) { vistos[k] = t; dispara = [`${c.nome}: ${sc.txt.toLowerCase()}`, `${brlReal(c.valor)} · toque para ver suas contas`, () => { act.setModo("pessoal"); act.setTab("p-contas"); }]; }
       });
+      if (!dispara && av.semana !== false && fromISO(t).getDay() === 0 && nm >= 20 * 60 && !vistos[`w:${t}`]) { vistos[`w:${t}`] = t; const s = resumoSemana(db, t, usaPessoal); dispara = [s.titulo, s.corpo, () => {}]; }
       if (!dispara && nm >= 19 * 60 && !(db.fechados || {})[t] && itensDoDia(db, t).length && !vistos[`f:${t}`]) { vistos[`f:${t}`] = t; dispara = ["Vamos fechar o dia?", "Leva uns 2 minutos e você desliga tranquilo.", () => setSheet({ type: "fechar" })]; }
       if (!dispara && nm >= 8 * 60) db.patients.filter(p => p.active && p.nextDate < t).forEach(p => {
         const k = `p:${p.id}:${p.nextDate}`;
@@ -3072,6 +3386,23 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   }, [now, av.ativo, av.antecedencia, push]);
 
   const notify = (msg, undo) => { setToast({ msg, undo }); clearTimeout(tRef.current); tRef.current = setTimeout(() => setToast(null), undo ? 6000 : 2800); };
+  // Teto por categoria: avisa uma vez ao passar de 80% e outra se estourar (por mês, neste aparelho)
+  const nivelTetos = usaPessoal ? tetosAlerta(db, todayISO().slice(0, 7)).map(x => `${x.cat}:${x.pct >= 1 ? 100 : 80}`).join(",") : "";
+  useEffect(() => {
+    if (!nivelTetos) return;
+    const ch = todayISO().slice(0, 7), k = `agenda-tetos:${conta.email}`, vistos = lerJSON(k, {});
+    Object.keys(vistos).forEach(id => { if (!id.startsWith(ch)) delete vistos[id]; });
+    let novo = null;
+    tetosAlerta(db, ch).forEach(x => { const nivel = x.pct >= 1 ? 100 : 80, id = `${ch}:${x.cat}`; if ((vistos[id] || 0) < nivel) { vistos[id] = nivel; novo = novo || x; } });
+    gravar(k, vistos);
+    if (!novo) return;
+    const nome = catDe(novo.cat).nome;
+    const txt = novo.pct >= 1 ? `${nome}: passou do teto (${brlReal(novo.gasto)} de ${brlReal(novo.teto)})` : `${nome}: já foi ${Math.round(novo.pct * 100)}% do teto (${brlReal(novo.gasto)} de ${brlReal(novo.teto)})`;
+    avisar(novo.pct >= 1 ? "Teto estourado" : "Perto do teto", txt);
+    // depois do "Anotado · Desfazer", para não tapar o desfazer
+    const t = setTimeout(() => notify(txt), 6200);
+    return () => clearTimeout(t);
+  }, [nivelTetos]);
   // Fecha o painel aberto com a animação de saída. Enquanto ele desce, o conteúdo fica "congelado"
   // como estava (assim um paciente excluído não some do painel antes da hora).
   const sheetRef = useRef(sheet); sheetRef.current = sheet;
@@ -3253,6 +3584,51 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     },
     despagarConta: id => { const ch = chaveAtual(); setP(P => ({ ...P, contas: P.contas.map(x => { if (x.id !== id) return x; const pg = { ...(x.pagas || {}) }; delete pg[ch]; return { ...x, pagas: pg }; }) })); notify("Voltou para a pagar"); },
     toggleIncluir: () => setP(P => ({ ...P, incluirConsultorio: !P.incluirConsultorio })),
+    // Teto do mês por categoria
+    abrirTeto: cat => setSheet({ type: "teto", cat: typeof cat === "string" ? cat : null }),
+    salvarTeto: (cat, valor) => {
+      setP(P => { const l = { ...(P.limites || {}) }; if (valor > 0) l[cat] = valor; else delete l[cat]; return { ...P, limites: l }; });
+      close(); vibrar("ok"); notify(valor > 0 ? `Teto de ${catDe(cat).nome}: ${brlReal(valor)} por mês` : `Teto de ${catDe(cat).nome} removido`);
+    },
+    // Boleto: vira conta fixa ou gasto já pago
+    lerBoleto: texto => setSheet({ type: "boleto", texto: typeof texto === "string" ? texto : "", n: Date.now() }),
+    contaDoBoleto: b => {
+      const marca = acharMarca(b.emissor || "");
+      setSheet({ type: "conta", n: Date.now(), pre: { nome: b.tipo === "banco" ? "" : b.emissor, valor: b.valor, dia: b.vencimento ? Number(b.vencimento.slice(8)) : null, cat: marca && CATEGORIAS.some(c => c.id === marca.cat) ? marca.cat : b.cat, codigo: b.linha, incerto: b.vencimentoIncerto } });
+    },
+    gastoDoBoleto: b => setSheet({ type: "lanc", tipo: "saida", n: Date.now(), pre: { tipo: "saida", valor: b.valor, cat: b.cat, desc: b.tipo === "banco" ? "Boleto" : b.emissor, data: todayISO() } }),
+    // Extrato do banco
+    importar: () => setSheet({ type: "importar" }),
+    importarLanc: lista => {
+      const ids = new Set(lista.map(l => l.id));
+      setP(P => ({ ...P, lanc: [...P.lanc, ...lista] }));
+      close(); vibrar("ok");
+      notify(`${lista.length} ${lista.length === 1 ? "lançamento importado" : "lançamentos importados"}`, () => setP(P => ({ ...P, lanc: P.lanc.filter(x => !ids.has(x.id)) })));
+    },
+    // Foto de comprovante ou nota -> lançamento para conferir
+    lerComprovante: async file => {
+      if (!iaDisponivel()) { notify(navigator.onLine === false ? "Sem internet: para ler a foto eu preciso de conexão." : "Para ler fotos, ligue o servidor de avisos."); return; }
+      clearTimeout(tRef.current); setToast({ msg: "Lendo o comprovante…" });
+      try {
+        const pre = await lerComprovante(file);
+        setToast(null); vibrar("ok");
+        if (usaPessoal && modo !== "pessoal") act.setModo("pessoal");
+        setSheet({ type: "lanc", tipo: pre.tipo, pre: { ...pre, daFoto: true }, n: Date.now() });
+      } catch (e) { vibrar("aviso"); notify(msgIA(e)); }
+    },
+    // Chegou algo pelo "Compartilhar" do Android (foto de comprovante, código de boleto ou texto)
+    receberCompartilhado: async () => {
+      try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+      try {
+        const c = await caches.open("compartilhado"), u = n => new URL(`__compartilhado/${n}`, location.origin + BASE).href;
+        const rf = await c.match(u("arquivo")), rt = await c.match(u("texto"));
+        await c.delete(u("arquivo")); await c.delete(u("texto"));
+        const texto = rt ? (await rt.text()).trim() : "";
+        if (rf) { const b = await rf.blob(); return act.lerComprovante(new File([b], "comprovante", { type: b.type || "image/jpeg" })); }
+        if (texto && lerBoleto(texto)) { if (usaPessoal && modo !== "pessoal") act.setModo("pessoal"); return act.lerBoleto(texto); }
+        if (texto && vozApi.current.texto) vozApi.current.texto(texto);
+      } catch (e) { notify("Não consegui abrir o que foi compartilhado."); }
+    },
     // Conta
     salvarAjustes: (patch, pix) => { setDb(d => ({ ...d, settings: { ...d.settings, pix } })); onAtualizar(patch); if (patch.perfil && patch.perfil.pessoal === false && modo === "pessoal") act.setModo("consultorio"); close(); notify("Tudo salvo"); },
     refazer: () => { close(); onAtualizar({ perfil: { ...perfil, refazer: true } }); },
@@ -3297,11 +3673,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "livres" && <Suspense fallback={null}><LivresSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
-      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "boleto" && <Suspense fallback={null}><BoletoSheet key={sheet.n || "boleto"} texto={sheet.texto} act={act} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "importar" && <Suspense fallback={null}><ImportarSheet db={db} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "caixinha" && <Suspense fallback={null}><CaixinhaSheet key={sheet.id || "nova"} cx={(db.pessoal.caixinhas || []).find(x => x.id === sheet.id) || null} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "parcelado" && <Suspense fallback={null}><ParceladoSheet onClose={close} /></Suspense>}
       {sheet && sheet.type === "viagem" && <Suspense fallback={null}><ViagemSheet viagem={db.pessoal.viagem} lanc={db.pessoal.lanc} act={act} onClose={close} /></Suspense>}
-      {sheet && sheet.type === "conta" && <Suspense fallback={null}><ContaSheet key={sheet.id || "nova"} inicial={contaSel} onLogo={act.salvarLogo} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "conta" && <Suspense fallback={null}><ContaSheet key={sheet.id || "nova" + (sheet.n || "")} inicial={contaSel} pre={sheet.pre} onLogo={act.salvarLogo} onBoleto={act.lerBoleto} onCopiar={t => copiarTexto(t.replace(/\D/g, ""), act, "Código copiado. É só colar no app do banco.")} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} /></Suspense>}
     </>
   );
   if (!saindo) paineisCong.current = paineis;
@@ -3376,7 +3755,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
             </button>
           ))}
           <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Terminar" : "Falar"}>
-            <Bolinha estado={vozAtiva} /><span className="lb">{vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Parar" : "Falar"}</span>
+            <Bolinha estado={vozAtiva} /><span className="lb">{vozAtiva === "contando" ? "Salvar" : vozAtiva === "resposta" || !vozAtiva ? "Falar" : "Parar"}</span>
           </button>
         </div>
       </nav>
@@ -3417,14 +3796,17 @@ function App() {
     setSessao({ conta: conta.demo ? { ...CONTA_DEMO, ...(salvo || {}) } : conta, novo });
     window.scrollTo(0, 0);
   };
-  // limpar = a conta da nuvem que saiu com tudo já salvo lá: a cópia dela neste aparelho pode ir embora
+  // limpar = a conta da nuvem que saiu com tudo já salvo lá: a cópia dela neste aparelho pode ir embora.
+  // Só limpa a tela e o aparelho: quem desconecta da nuvem é o desconectar(), uma vez só (chamar o signOut
+  // daqui, enquanto o Supabase avisa "saiu", fazia um avisar o outro sem fim e travava o app ao sair)
   const sair = limpar => {
     if (limpar && limpar.uid && limpar.email) {
       const contas = lerJSON(K.contas, {}); delete contas[limpar.email];
       gravar(K.contas, contas); apagar(K.db(limpar.email)); apagar(K.modo(limpar.email)); apagar(K.avisos(limpar.email));
     }
     const s = sessaoRef.current;
-    if (NUVEM && s && s.conta && s.conta.uid) cliente().then(sb => sb.auth.signOut({ scope: "local" })).catch(() => {});
+    sessaoRef.current = null;
+    if (s && s.conta && s.conta.uid) desconectar();
     apagar(K.sessao); setSessao(null);
   };
   // Veio da página de apresentação: #demo entra direto na demonstração; depois limpa o endereço
@@ -3443,7 +3825,9 @@ function App() {
       if (!vivo) return;
       inscricao = sb.auth.onAuthStateChange((ev, s) => {
         if (ev === "PASSWORD_RECOVERY") { setRecuperar(true); return; }
-        if (ev === "SIGNED_OUT" && sessaoRef.current && sessaoRef.current.conta && sessaoRef.current.conta.uid) { sair(); return; }
+        // saiu por outro caminho (login revogado, outra aba): só fecha a tela, sem pedir para sair de novo.
+        // Fica para depois do aviso do Supabase terminar, para nada rodar dentro dele
+        if (ev === "SIGNED_OUT") { setTimeout(() => { const s = sessaoRef.current; if (s && s.conta && s.conta.uid) { sessaoRef.current = null; apagar(K.sessao); setSessao(null); } }, 0); return; }
         // confirmou o e-mail pelo link: já entra
         if (ev === "SIGNED_IN" && s && !(sessaoRef.current && sessaoRef.current.conta)) {
           setTimeout(() => contaDaNuvem(s.user, lerJSON(K.contas, {})[s.user.email]).then(c => { if (!(sessaoRef.current && sessaoRef.current.conta)) entrar(c, true); }).catch(() => {}), 0);
@@ -3480,6 +3864,6 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar };
+export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat };
 
 export default App;
