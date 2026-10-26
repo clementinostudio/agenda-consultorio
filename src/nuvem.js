@@ -22,12 +22,21 @@ export const ENDERECO_APP = location.origin + import.meta.env.BASE_URL;
 
 const ler = (k, f) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch (e) { return f; } };
 const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
-const K = { fila: u => `alvena-fila:${u}`, cursor: u => `alvena-cursor:${u}`, perfil: u => `alvena-perfil-pendente:${u}` };
+const K = { fila: u => `alvena-fila:${u}`, cursor: u => `alvena-cursor:${u}`, perfil: u => `alvena-perfil-pendente:${u}`, recusados: u => `alvena-recusados:${u}` };
+
+const espera = ms => new Promise(r => setTimeout(r, ms));
+// Nenhum pedido à nuvem fica esperando para sempre (internet ruim, celular saindo do Wi-Fi...):
+// depois de 25 s desiste, e o que era para subir continua na fila e tenta de novo
+const fetchComLimite = (url, op = {}) => {
+  if (op.signal || typeof AbortController === "undefined") return fetch(url, op);
+  const c = new AbortController(), t = setTimeout(() => c.abort(), 25000);
+  return fetch(url, { ...op, signal: c.signal }).finally(() => clearTimeout(t));
+};
 
 // O Supabase só carrega quando precisa: o app abre sem esperar por ele
 let _cliente = null;
 export const cliente = () => _cliente || (_cliente = import("@supabase/supabase-js").then(({ createClient }) =>
-  createClient(URL_NUVEM, CHAVE_NUVEM, { auth: { storageKey: "alvena-login", persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } })));
+  createClient(URL_NUVEM, CHAVE_NUVEM, { auth: { storageKey: "alvena-login", persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }, global: { fetch: fetchComLimite } })));
 
 /* ---------- db <-> itens ---------- */
 // Listas em que cada elemento (com id) vira uma linha. O resto do db (ajustes, dias fechados, modo viagem...)
@@ -136,11 +145,7 @@ class Motor {
     this.enviando = true; this.status();
     try {
       while (this.fila.size && this.vivo) {
-        const lote = [...this.fila.entries()].slice(0, 300);
-        const linhas = lote.map(([k, v]) => { const [colecao, id] = partir(k); return { user_id: this.uid, colecao, id, dados: v.x ? null : v.d, apagado: !!v.x }; });
-        const { error } = await this.sb.from("itens").upsert(linhas, { onConflict: "user_id,colecao,id" });
-        if (error) throw error;
-        lote.forEach(([k, v]) => { if (this.fila.get(k) === v) this.fila.delete(k); }); // só tira o que não mudou de novo enquanto subia
+        await this.enviarLote([...this.fila.entries()].slice(0, 300));
         gravar(K.fila(this.uid), Object.fromEntries(this.fila));
       }
       this.tentativas = 0; this.status();
@@ -151,6 +156,22 @@ class Motor {
       clearTimeout(this.timerRetry);
       this.timerRetry = setTimeout(() => this.enviar(), Math.min(120000, 2000 * 2 ** this.tentativas++));
     } finally { this.enviando = false; }
+  }
+
+  // Manda um lote. Se a nuvem recusar de vez (item grande demais, inválido), divide ao meio até achar o item
+  // com problema: os outros sobem, e ele fica guardado à parte neste aparelho, sem travar a fila para sempre
+  async enviarLote(lote) {
+    const linhas = lote.map(([k, v]) => { const [colecao, id] = partir(k); return { user_id: this.uid, colecao, id, dados: v.x ? null : v.d, apagado: !!v.x }; });
+    const { error, status } = await this.sb.from("itens").upsert(linhas, { onConflict: "user_id,colecao,id" });
+    if (error) {
+      const deVez = [400, 403, 409, 413, 422].includes(status) && !/jwt/i.test(error.message || "");
+      if (!deVez) throw error; // sem internet, login renovando, servidor ocupado: tenta de novo depois
+      if (lote.length > 1) { const meio = Math.ceil(lote.length / 2); await this.enviarLote(lote.slice(0, meio)); await this.enviarLote(lote.slice(meio)); return; }
+      const [k, v] = lote[0];
+      console.warn("Nuvem: este item foi recusado e ficou guardado à parte", k, error);
+      gravar(K.recusados(this.uid), { ...ler(K.recusados(this.uid), {}), [k]: { ...v, erro: error.message || String(status) } });
+    }
+    lote.forEach(([k, v]) => { if (this.fila.get(k) === v) this.fila.delete(k); }); // só tira o que não mudou de novo enquanto subia
   }
 
   async puxar() {
@@ -230,11 +251,17 @@ class Motor {
     if (p.dados && p.dados.perfil && this.aoPerfil) this.aoPerfil({ ...p.dados, nome: p.nome || p.dados.nome });
   }
 
-  // Antes de sair: manda o que faltou (espera no máximo alguns segundos)
+  // Antes de sair: manda o que faltou (espera no máximo 5 segundos). Sempre pausa entre as voltas:
+  // sem a pausa, enquanto um envio estava no meio, o laço girava sem parar e congelava a tela
   async esvaziar() {
+    clearTimeout(this.timer); clearTimeout(this.timerRetry);
     this.mudou(this.dbAtual, true);
-    const fim = Date.now() + 4000;
-    while ((this.fila.size || this.enviando) && Date.now() < fim && navigator.onLine !== false) { await this.enviar(); if (this.fila.size) await new Promise(r => setTimeout(r, 300)); }
+    clearTimeout(this.timer);
+    const fim = Date.now() + 5000;
+    while ((this.fila.size || this.enviando) && Date.now() < fim && navigator.onLine !== false) {
+      if (!this.enviando) { this.tentativas = 0; await Promise.race([this.enviar(), espera(fim - Date.now())]); }
+      if (this.fila.size || this.enviando) await espera(250);
+    }
   }
 }
 
@@ -304,13 +331,28 @@ export async function sairDaNuvem() {
   if (!NUVEM) return false;
   let limpo = false;
   try {
-    if (atual) {
-      await atual.esvaziar();
-      if (!atual.fila.size) { limpo = true; const u = atual.uid; atual.parar(); atual = null; [K.fila(u), K.cursor(u)].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} }); }
+    const m = atual;
+    if (m) {
+      await m.esvaziar();
+      limpo = !m.fila.size && !m.enviando;
+      m.parar(); if (atual === m) atual = null;
+      if (limpo) [K.fila(m.uid), K.cursor(m.uid)].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
     }
   } catch (e) {}
-  try { const sb = await cliente(); await sb.auth.signOut({ scope: "local" }); } catch (e) {}
+  await desconectar();
   return limpo;
+}
+
+// Desconecta o login deste aparelho. Uma vez só, mesmo se pedirem várias vezes ao mesmo tempo,
+// e nunca espera mais que 4 s (sem internet, o login sai só do aparelho, que é o que importa)
+let desconectando = null;
+export function desconectar() {
+  if (!NUVEM) return Promise.resolve();
+  if (!desconectando) desconectando = cliente()
+    .then(sb => Promise.race([sb.auth.signOut({ scope: "local" }), espera(4000)]))
+    .catch(() => {})
+    .then(() => { setTimeout(() => { desconectando = null; }, 1000); });
+  return desconectando;
 }
 
 // Apaga a conta e tudo dela na nuvem (o banco apaga perfil e itens em cascata)
@@ -319,6 +361,6 @@ export async function excluirContaNuvem(uid) {
   const { error } = await sb.rpc("excluir_minha_conta");
   if (error) throw error;
   if (atual) { atual.parar(); atual = null; }
-  [K.fila(uid), K.cursor(uid), K.perfil(uid)].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
-  try { await sb.auth.signOut({ scope: "local" }); } catch (e) {}
+  [K.fila(uid), K.cursor(uid), K.perfil(uid), K.recusados(uid)].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+  await desconectar();
 }
