@@ -14,6 +14,7 @@ import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cot
 import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro } from "./nuvem.js";
 import { lerBoleto } from "./boleto.js";
 import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
+import { AVATARES, ehAvatarPronto } from "./avatares.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -1595,11 +1596,19 @@ function PhotoPicker({ nome, foto, onChange }) {
     <div className="photo">
       <Avatar conta={{ nome: nome || "?", foto }} />
       <div className="photo-btns">
-        <label htmlFor="foto-in">{foto ? "Trocar foto" : "Adicionar foto"}</label>
+        <label htmlFor="foto-in">{foto && !ehAvatarPronto(foto) ? "Trocar foto" : "Usar uma foto minha"}</label>
         <input id="foto-in" className="sr" type="file" accept="image/*" onChange={escolher} />
-        {foto && <button type="button" onClick={() => setRecortar(foto)}>Ajustar enquadramento</button>}
+        {foto && !ehAvatarPronto(foto) && <button type="button" onClick={() => setRecortar(foto)}>Ajustar enquadramento</button>}
         {foto && <button type="button" className="rm" onClick={() => onChange(null)}>Remover foto</button>}
         {erro && <span className="error" style={{ padding: 0 }}>{erro}</span>}
+      </div>
+      <div className="avatares" role="radiogroup" aria-label="Ou escolha uma bolinha">
+        <span>Ou escolha uma bolinha:</span>
+        {AVATARES.map(a => (
+          <button key={a.id} type="button" role="radio" aria-checked={foto === a.url} aria-label={`Bolinha ${a.nome.toLowerCase()}`} className={"avatar-op" + (foto === a.url ? " on" : "")} onClick={() => { vibrar("toque"); onChange(a.url); }}>
+            <img src={a.url} alt="" />
+          </button>
+        ))}
       </div>
       {recortar && <Suspense fallback={null}><Cropper src={recortar} forma="circulo" titulo="Foto de perfil" onCancel={() => setRecortar(null)} onDone={url => { onChange(url); setRecortar(null); }} /></Suspense>}
     </div>
@@ -2070,6 +2079,7 @@ function HomeTab({ db, conta, now, act, tema }) {
           <Talk falas={falas} />
           <ProximaConquista act={act} trilhas={["rotina", "consultorio", "metas", "app", "seguranca"]} />
           <div className="small-acts">
+            {servidorAvisos() && <button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
             <button className="chip-btn" onClick={act.agora}><I.target />Só o agora</button>
             <button className="chip-btn" onClick={act.fecharDia}><I.moon />{(db.fechados || {})[t] ? "Dia fechado ✓" : "Fechar o dia"}</button>
             <button className="chip-btn" onClick={act.revisao}><I.chart />Revisão da semana</button>
@@ -2921,6 +2931,10 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   // Conversa com a Bolinha: as falas ficam na tela como num chat, e ela lembra do que já foi dito
   const [conversa, setConversa] = useState([]);
   const conversaRef = useRef([]); conversaRef.current = conversa;
+  const [chat, setChat] = useState(false); // tela de conversa aberta
+  const chatAberto = useRef(false); chatAberto.current = chat;
+  const [rascunho, setRascunho] = useState("");
+  const chatInput = useRef(null);
   const [falandoResp, setFalandoResp] = useState(false);
   const [comSom, setComSom] = useState(() => falaLigada());
   const pararFala = useRef(() => {});
@@ -2935,9 +2949,11 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     pararFala.current = falarResposta(texto, () => { setFalandoResp(false); if (depois) depois(); });
   };
   const pronto = () => { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); };
-  const perguntar = async (t, minha, deVoz) => {
-    const hist = conversaRef.current.slice(-8).map(m => ({ quem: m.quem, texto: m.texto }));
-    addFala("eu", t); setTexto(""); setRes(null);
+  const perguntar = async (t, minha, deVoz, jaMostrou) => {
+    let antes = conversaRef.current; const ult = antes[antes.length - 1];
+    if (ult && ult.quem === "eu" && ult.texto === t) antes = antes.slice(0, -1); // a pergunta de agora vai à parte
+    const hist = antes.slice(-8).map(m => ({ quem: m.quem, texto: m.texto }));
+    setChat(true); if (!jaMostrou) addFala("eu", t); setTexto(""); setRes(null);
     setFase("pensando"); setAviso("");
     try {
       const j = await chamarIA("/perguntar", { pergunta: t, contexto: contextoPergunta(db, usaPessoal), historico: hist }, 25000);
@@ -2954,9 +2970,12 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     const t = alts ? melhor(t0, alts) : t0;
     aplicar(t); setAviso(""); setResposta("");
     if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la)\b/.test(semAcento(t))) { fechar(); return; }
+    // no chat, tudo o que você diz ou escreve vira o seu balão
+    const noChat = chatAberto.current;
+    if (noChat) { addFala("eu", t); setTexto(""); }
     // "obrigado", "tchau": encerra a conversa com educação
     if (conversaRef.current.length && FIM_CONVERSA.test(semAcento(t))) {
-      addFala("eu", t); setTexto(""); setRes(null);
+      if (!noChat) addFala("eu", t); setTexto(""); setRes(null);
       const tchau = "Por nada! Se precisar, é só me chamar.";
       addFala("ela", tchau); setFase("resposta");
       responderFalando(tchau, () => { if (vez.current === minha) setTimeout(() => { if (vez.current === minha) fechar(); }, 600); });
@@ -2974,7 +2993,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     // pergunta ("quanto gastei de uber?"), ou qualquer coisa no meio de uma conversa ("e em setembro?"):
     // quem responde é a IA, com os seus números
     if (ehPergunta(t) || (conversaRef.current.length && t.trim().split(/\s+/).length >= 2)) {
-      if (iaDisponivel()) return perguntar(t, minha, deVoz);
+      if (iaDisponivel()) return perguntar(t, minha, deVoz, noChat);
       setAviso("Para responder perguntas eu preciso de internet."); setFase("faltando"); vibrar("aviso"); return;
     }
     // o app não entendeu sozinho: pede ajuda à IA antes de desistir ("torrei 45 conto no boteco")
@@ -2983,7 +3002,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
       try {
         const r2 = await entenderIA(t, db);
         if (vez.current !== minha) return;
-        if (r2 && r2.tipo === "pergunta") return perguntar(t, minha, deVoz);
+        if (r2 && r2.tipo === "pergunta") return perguntar(t, minha, deVoz, noChat);
         if (r2 && (r2.tipo === "consult" || usaPessoal)) { setRes(r2); return pronto(); }
       } catch (e) { if (vez.current !== minha) return; }
     }
@@ -3019,7 +3038,11 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const pelaRede = useRef(false);
   const fala = pelaRede.current ? srv : nat;
   const pararTudo = () => { nat.cancelar(); srv.cancelar(); vez.current++; calar(); };
-  const abrirTeclado = () => { pararTudo(); setAviso(""); setResposta(""); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
+  const abrirTeclado = () => {
+    pararTudo(); setAviso(""); setResposta("");
+    if (chatAberto.current) { setFase("resposta"); setTimeout(() => chatInput.current && chatInput.current.focus(), 60); return; }
+    setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); }
+  };
   // chamado direto no toque (o iPhone só libera microfone, teclado e voz dentro do toque)
   // continuar: completa a frase anterior; avisoFixo: mantém o aviso do que faltou enquanto ouve;
   // automatico: reaberto sozinho depois de uma resposta (não é um toque)
@@ -3037,8 +3060,27 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     if (tecRef.current) tecRef.current.blur();
     if (!(rede ? srv : nat).iniciar()) abrirTeclado();
   };
-  const fechar = () => { pararTudo(); fecharMic(); clearTimeout(ocioso.current); base.current = ""; autoCont.current = false; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); setResposta(""); setConversa([]); };
-  const salvar = () => { const r = res; fechar(); if (!r) return; if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens); };
+  const fechar = () => { pararTudo(); fecharMic(); clearTimeout(ocioso.current); base.current = ""; autoCont.current = false; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); setResposta(""); setConversa([]); setChat(false); setRascunho(""); };
+  const salvar = () => {
+    const r = res; if (!r) return fechar();
+    // dentro da conversa: anota e continua conversando
+    if (chatAberto.current) {
+      if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens);
+      const its = r.tipo === "gastos" ? r.itens.filter(i => i.valor > 0) : [];
+      addFala("ela", r.tipo === "consult" ? `Pronto: ${primeiro(r.c.p.name)}, ${textoAcao(r.c, TERMO).toLowerCase()}.` : `Anotei ${its.length > 1 ? `${its.length} lançamentos, ${brlReal(soma(its, i => i.valor))} no total` : `${its[0].desc || catDe(its[0].cat).nome}: ${brlReal(its[0].valor)}`}.`);
+      setRes(null); setTexto(""); setFase("resposta");
+      return;
+    }
+    fechar(); if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens);
+  };
+  // a conversa digitada: manda o que está escrito
+  const enviar = t => { t = String(t || "").trim(); if (!t) return; setRascunho(""); calar(); nat.cancelar(); srv.cancelar(); concluir(t); };
+  const tocarMic = () => {
+    if (falandoResp) { calar(); return comecar(); }
+    if (fase === "pensando" || fala.estado === "processando") return;
+    if (fase === "ouvindo" && (fala.estado === "ouvindo" || fala.estado === "falando")) return fala.parar();
+    comecar(fase === "faltando");
+  };
   const tocar = () => {
     if (!ativo) return comecar();
     if (fase === "contando") return salvar();
@@ -3052,7 +3094,9 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   };
   // texto que chegou de fora (compartilhado de outro app): entende como se tivesse sido digitado
   const deTexto = t => { pararTudo(); base.current = ""; setAtivo(true); setFase("teclado"); if (tecRef.current) tecRef.current.value = t; concluir(t); };
-  api.current = { tocar, comecar, fechar, texto: deTexto };
+  // abrir direto a conversa (atalho "Perguntar à Bolinha")
+  const abrirChat = () => { destravarFala(); clearTimeout(ocioso.current); setAtivo(true); setChat(true); setFase("resposta"); setTexto(""); setRes(null); setAviso(""); };
+  api.current = { tocar, comecar, fechar, texto: deTexto, chat: abrirChat };
   ativoRef.current = ativo;
   // a conversa sempre rola para a última fala
   useEffect(() => { const el = chatRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: semMovimento() ? "auto" : "smooth" }); }, [conversa.length, fase, texto]);
@@ -3089,7 +3133,35 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const valorVisto = useContagem(itens.length ? soma(itens, i => i.valor) : 0);
   const c = res && res.tipo === "consult" ? res.c : null;
   const est = fala.estado;
-  const emConversa = conversa.length > 0;
+  const emConversa = chat || conversa.length > 0;
+  const ouvindoAgora = fase === "ouvindo" && (est === "ouvindo" || est === "falando");
+  const estadoBola = falandoResp ? "falando" : fase === "pensando" ? "pensando" : ouvindoAgora ? (est === "falando" ? "falando" : "ouvindo") : fase === "contando" ? "contando" : "";
+  const subtitulo = falandoResp ? "falando…" : fase === "pensando" ? "pensando…" : ouvindoAgora ? (est === "falando" ? "ouvindo você…" : "pode falar") : est === "processando" ? "entendendo…" : fase === "contando" ? `anotando em ${conta}…` : "online";
+  const sugestoes = ["Quem eu atendo amanhã?", "Quem está me devendo?", "Quanto recebi este mês?", ...(usaPessoal ? ["Quanto gastei este mês?", "Quais contas vencem esta semana?"] : [])];
+  const cartao = (<>
+      {itens.length > 0 && (
+        <div className="vozb-card">
+          {itens.slice(0, 3).map((it, i) => (
+            <div key={i} className="vozb-linha">
+              <MarcaLogo key={it.marca || it.cat} marca={it.marca} cat={catDe(it.cat)} className="vozb-ic" />
+              <span className="vozb-txt"><b>{it.desc || catDe(it.cat).nome}</b><small>{catDe(it.cat).nome} · {quandoTxt(it.off)}{it.tipo === "entrada" ? " · entrada" : ""}</small></span>
+              <b className={"vozb-v" + (it.tipo === "entrada" ? " in" : "")}>{it.tipo === "entrada" ? "+" : ""}{um ? `R$ ${reais(valorVisto)}` : brlReal(it.valor)}</b>{it.moeda && <small className="vozb-moeda">{fmtMoeda(it.valorOrig, it.moeda)}{it.iof ? " + IOF" : ""}</small>}
+            </div>
+          ))}
+          {itens.length > 3 && <div className="vozb-mais">+ {itens.length - 3} · total {brlReal(soma(itens, i => i.valor))}</div>}
+          {itens.length > 1 && itens.length <= 3 && <div className="vozb-mais">Total {brlReal(soma(itens, i => i.valor))}</div>}
+        </div>
+      )}
+      {c && (
+        <div className="vozb-card">
+          <div className="vozb-linha">
+            <span className="vozb-ic pac" style={corVars(c.p)}>{c.p.foto ? <img src={c.p.foto} alt="" /> : iniciais(c.p.name)}</span>
+            <span className="vozb-txt"><b>{c.p.name}</b><small>{textoAcao(c, T)}</small></span>
+            {c.ok && c.acao !== "remarcar" && <span className={"chip " + (c.acao === "falta" ? "rose" : "mint")}>{c.acao === "falta" ? "Falta" : c.acao === "pagou" ? "Pago" : "Sessão"}</span>}
+          </div>
+        </div>
+      )}
+  </>);
   const classe = (fase === "contando" || fase === "resposta" ? "pronto" : fase === "pensando" ? "processando" : fase === "faltando" || est === "erro" ? "erro" : est) + (emConversa ? " conversa" : "") + (falandoResp ? " falando-resp" : "");
   const status = fase === "contando" ? `Entendi · salvando em ${conta}`
     : falandoResp ? "Falando… toque na Bolinha para interromper"
@@ -3108,50 +3180,55 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
         placeholder={dica.replace("Ex.: ", "").replace(/[“”]/g, "")} aria-label="Fale ou escreva" onChange={digitou}
         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(ocioso.current); if (e.target.value.trim()) concluir(e.target.value); } }} />
       {ativo && <Camada onFechar={fechar} escurece={false} />}
-      {ativo && <div className={"vozb " + classe + (fase === "teclado" ? " teclado" : "")} style={{ "--n": fala.nivel.toFixed(3) }} aria-live="polite">
+      {ativo && emConversa && (
+        <div className={"chat-ia" + (falandoResp ? " falando" : "") + (ouvindoAgora ? " ouvindo" : "")} role="dialog" aria-modal="true" aria-label="Conversa com a Bolinha" style={{ "--n": fala.nivel.toFixed(3) }}>
+          <header className="chat-topo">
+            <button className="icon-btn" onClick={fechar} aria-label="Fechar a conversa"><I.chevD /></button>
+            <span className="chat-quem"><span className="chat-bola"><Bolinha estado={estadoBola} /></span><span><b>Bolinha</b><small aria-live="polite">{subtitulo}</small></span></span>
+            {"speechSynthesis" in window && <button className={"icon-btn chat-som" + (comSom ? "" : " mudo")} onClick={trocarSom} aria-pressed={comSom} aria-label={comSom ? "Não responder falando" : "Responder falando"}><I.sound /></button>}
+          </header>
+          <div className="chat-lista" ref={chatRef} aria-live="polite">
+            <div className="chat-msg ela"><span className="chat-av" aria-hidden="true"><i /><i /></span><p>Oi! Pode perguntar sobre a sua agenda, as cobranças{usaPessoal ? " ou os gastos" : ""}, ou anotar alguma coisa. Fale ou escreva.</p></div>
+            {conversa.length === 0 && <div className="chat-sugestoes">{sugestoes.map(s => <button key={s} type="button" onClick={() => enviar(s)}>{s}</button>)}</div>}
+            {conversa.map((m, i) => (
+              <div key={m.id} className={"chat-msg " + m.quem + (m.quem === "ela" && falandoResp && i === conversa.length - 1 ? " falando" : "")}>
+                {m.quem === "ela" && <span className="chat-av" aria-hidden="true"><i /><i /></span>}
+                {m.quem === "ela" && "speechSynthesis" in window
+                  ? <p role="button" tabIndex={0} title="Tocar para ouvir" onClick={() => ouvirEsta(m.texto)} onKeyDown={e => e.key === "Enter" && ouvirEsta(m.texto)}>{m.texto}</p>
+                  : <p>{m.texto}</p>}
+              </div>
+            ))}
+            {texto && fase === "ouvindo" && <div className="chat-msg eu rascunho"><p>{texto}</p></div>}
+            {est === "processando" && fase === "ouvindo" && !texto && <div className="chat-msg eu rascunho"><p className="digitando" aria-label="Transcrevendo"><i /><i /><i /></p></div>}
+            {fase === "pensando" && <div className="chat-msg ela"><span className="chat-av" aria-hidden="true"><i /><i /></span><p className="digitando" aria-label="Pensando"><i /><i /><i /></p></div>}
+            {aviso && fase === "faltando" && <div className="chat-msg ela"><span className="chat-av" aria-hidden="true"><i /><i /></span><p>{aviso}</p></div>}
+            {est === "erro" && fase === "ouvindo" && <div className="chat-msg ela"><span className="chat-av" aria-hidden="true"><i /><i /></span><p>{fala.erro}</p></div>}
+            {fase === "contando" && (itens.length > 0 || c) && (
+              <div className="chat-cartao">
+                {cartao}
+                <div className="chat-cartao-acoes">
+                  <button type="button" className="pill-btn forte" onClick={salvar}><I.check /> Salvar ({conta})</button>
+                  {um && <button type="button" className="pill-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
+                  <button type="button" className="pill-btn" onClick={() => { setRes(null); setFase("resposta"); }}>Descartar</button>
+                </div>
+              </div>
+            )}
+          </div>
+          <form className="chat-compor" onSubmit={e => { e.preventDefault(); enviar(rascunho); }}>
+            <input ref={chatInput} value={rascunho} onChange={e => setRascunho(e.target.value)} placeholder={ouvindoAgora ? "Ouvindo…" : "Pergunte ou anote alguma coisa"} enterKeyHint="send" autoComplete="off" aria-label="Escreva para a Bolinha" />
+            {rascunho.trim()
+              ? <button type="submit" className="chat-botao" aria-label="Enviar"><I.send /></button>
+              : <button type="button" className={"chat-botao mic" + (ouvindoAgora ? " on" : "")} onClick={tocarMic} aria-label={ouvindoAgora ? "Terminar de falar" : falandoResp ? "Interromper e falar" : "Falar"}>{ouvindoAgora ? <i className="chat-parar" aria-hidden="true" /> : <I.mic />}</button>}
+          </form>
+        </div>
+      )}
+      {ativo && !emConversa && <div className={"vozb " + classe + (fase === "teclado" ? " teclado" : "")} style={{ "--n": fala.nivel.toFixed(3) }} aria-live="polite">
         <div className="vozb-sombra" aria-hidden="true"><i /><i /><i /></div>
         <div className="vozb-doca">
           <div className="vozb-status">{fase !== "contando" && fase !== "faltando" && est !== "erro" && <i className="vozb-ponto" />}{status}</div>
-          {emConversa ? (
-            <div className="vozb-chat" ref={chatRef} aria-live="polite">
-              {conversa.map((m, i) => (
-                <div key={m.id} className={"vozb-msg " + m.quem + (m.quem === "ela" && falandoResp && i === conversa.length - 1 ? " falando" : "")}>
-                  {m.quem === "ela" && <span className="vozb-av" aria-hidden="true"><i /><i /></span>}
-                  {m.quem === "ela" && "speechSynthesis" in window
-                    ? <p role="button" tabIndex={0} title="Tocar para ouvir" onClick={() => ouvirEsta(m.texto)} onKeyDown={e => e.key === "Enter" && ouvirEsta(m.texto)}>{m.texto}</p>
-                    : <p>{m.texto}</p>}
-                </div>
-              ))}
-              {texto && fase !== "pensando" && fase !== "resposta" && <div className="vozb-msg eu rascunho"><p>{texto}</p></div>}
-              {fase === "pensando" && <div className="vozb-msg ela"><span className="vozb-av" aria-hidden="true"><i /><i /></span><p className="digitando" aria-label="Pensando"><i /><i /><i /></p></div>}
-              {est === "erro" && fase === "ouvindo" && <div className="vozb-msg ela"><span className="vozb-av" aria-hidden="true"><i /><i /></span><p>{fala.erro}</p></div>}
-            </div>
-          ) : (
-            <p className={"vozb-fala" + (texto ? "" : " vazio")}>{texto || (est === "erro" ? fala.erro : est === "processando" ? "Transcrevendo o que você disse…" : fase === "teclado" ? "" : dica)}</p>
-          )}
+          <p className={"vozb-fala" + (texto ? "" : " vazio")}>{texto || (est === "erro" ? fala.erro : est === "processando" ? "Transcrevendo o que você disse…" : fase === "teclado" ? "" : dica)}</p>
 
-          {itens.length > 0 && (
-            <div className="vozb-card">
-              {itens.slice(0, 3).map((it, i) => (
-                <div key={i} className="vozb-linha">
-                  <MarcaLogo key={it.marca || it.cat} marca={it.marca} cat={catDe(it.cat)} className="vozb-ic" />
-                  <span className="vozb-txt"><b>{it.desc || catDe(it.cat).nome}</b><small>{catDe(it.cat).nome} · {quandoTxt(it.off)}{it.tipo === "entrada" ? " · entrada" : ""}</small></span>
-                  <b className={"vozb-v" + (it.tipo === "entrada" ? " in" : "")}>{it.tipo === "entrada" ? "+" : ""}{um ? `R$ ${reais(valorVisto)}` : brlReal(it.valor)}</b>{it.moeda && <small className="vozb-moeda">{fmtMoeda(it.valorOrig, it.moeda)}{it.iof ? " + IOF" : ""}</small>}
-                </div>
-              ))}
-              {itens.length > 3 && <div className="vozb-mais">+ {itens.length - 3} · total {brlReal(soma(itens, i => i.valor))}</div>}
-              {itens.length > 1 && itens.length <= 3 && <div className="vozb-mais">Total {brlReal(soma(itens, i => i.valor))}</div>}
-            </div>
-          )}
-          {c && (
-            <div className="vozb-card">
-              <div className="vozb-linha">
-                <span className="vozb-ic pac" style={corVars(c.p)}>{c.p.foto ? <img src={c.p.foto} alt="" /> : iniciais(c.p.name)}</span>
-                <span className="vozb-txt"><b>{c.p.name}</b><small>{textoAcao(c, T)}</small></span>
-                {c.ok && c.acao !== "remarcar" && <span className={"chip " + (c.acao === "falta" ? "rose" : "mint")}>{c.acao === "falta" ? "Falta" : c.acao === "pagou" ? "Pago" : "Sessão"}</span>}
-              </div>
-            </div>
-          )}
+          {cartao}
           {aviso && <div className="vozb-aviso"><I.alert /><span>{aviso}</span></div>}
 
           <div className="vozb-acoes">
@@ -3788,6 +3865,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     toast: m => notify(m),
     conquistas,
     abrirClima: () => setSheet({ type: "clima" }),
+    abrirChat: () => { if (sheet) close(); vozApi.current.chat && vozApi.current.chat(); },
     recarregarClima: () => carregarClima(true),
     setTab: t => { if (t === tab) return rolarTopo(); comTransicao(() => { setTab(t); rolarTopo(); }, ORDEM_ABAS.indexOf(t) < ORDEM_ABAS.indexOf(tab) ? "tras" : "frente"); },
     setModo: m => comTransicao(() => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(m === "pessoal" ? "p-home" : "home"); rolarTopo(); }, "modo"),
@@ -4062,10 +4140,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         <div className="side-nav">
           {modoEf === "pessoal" ? <>
             <button className="si" onClick={act.falarGasto}><I.mic />Anotar falando</button>
+            {servidorAvisos() && <button className="si" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
             <button className="si" onClick={() => act.novoLanc("saida")}><I.minus />Anotar gasto</button>
             <button className="si" onClick={() => act.novoLanc("entrada")}><I.plus />Anotar entrada</button>
             <button className="si" onClick={() => act.novaConta()}><I.bill />Nova conta fixa</button>
           </> : <>
+            {servidorAvisos() && <button className="si" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
             <button className="si" onClick={act.agora}><I.target />Só o agora</button>
             <button className="si" onClick={act.fecharDia}><I.moon />Fechar o dia</button>
             <button className="si" onClick={act.novoPaciente}><I.plus />Novo {TERMO.s}</button>
@@ -4228,6 +4308,6 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada };
+export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos };
 
 export default App;

@@ -6,7 +6,7 @@ import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } 
 import { DinheiroHome } from "./dinheiro.jsx";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
 import { logoPropria, lerArquivo } from "../App.jsx";
-import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista } from "../App.jsx";
+import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos } from "../App.jsx";
 
 /* ---------- Logo enquanto digita: sugere as empresas parecidas (mesmo com erro de digitação),
    tenta achar o site de quem não está na lista e deixa usar uma foto como logo ---------- */
@@ -175,6 +175,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
         <div className="col">
           <Talk falas={falas} />
           <ProximaConquista act={act} trilhas={["dinheiro", "app"]} />
+          {servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
           <section className="bal">
             <div className="bal-top">
               <span className="lab">{rotulo} <button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></span>
