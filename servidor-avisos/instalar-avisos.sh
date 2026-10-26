@@ -46,15 +46,18 @@ verde "4/5 Criando as chaves dos avisos..."
 [ -s .chaves.json ] || node gerar-chaves.mjs > .chaves.json
 node -e 'const c = require("./.chaves.json"); process.stdout.write(JSON.stringify({ VAPID_PUBLIC: c.publica, VAPID_PRIVATE_JWK: c.privada }))' > .segredos.json
 
+ORIGEM_GIT=$(git -C .. remote get-url origin 2>/dev/null || true)
 DONO=$(gh api user -q .login 2>/dev/null || true)
-REPO=$(basename -s .git "$(git -C .. remote get-url origin 2>/dev/null)" 2>/dev/null || echo agenda-consultorio)
+# Sem o gh (comum no Windows): o usuário sai do endereço do repositório (github.com/USUARIO/repo)
+[ -n "$DONO" ] || DONO=$(echo "$ORIGEM_GIT" | sed -n 's#.*github\.com[:/]\([^/]*\)/.*#\1#p')
+REPO=$(basename -s .git "$ORIGEM_GIT" 2>/dev/null || echo agenda-consultorio)
 [ -n "$DONO" ] || read -rp "Qual é o seu usuário do GitHub? " DONO
 SITE="https://$(echo "$DONO" | tr 'A-Z' 'a-z').github.io"
 
 verde "5/5 Publicando o servidor..."
 LOG=$(mktemp)
 CMD="npx wrangler deploy --secrets-file .segredos.json --var VAPID_SUB:$SITE/$REPO/ --var ORIGEM:$SITE"
-if command -v script >/dev/null 2>&1; then script -qec "$CMD" "$LOG"; else $CMD; fi
+if command -v script >/dev/null 2>&1; then script -qec "$CMD" "$LOG"; else $CMD 2>&1 | tee "$LOG"; fi
 rm -f .segredos.json
 URL=$(sed 's/\x1b\[[0-9;]*m//g' "$LOG" | grep -o 'https://[a-zA-Z0-9.-]*workers\.dev' | head -1)
 rm -f "$LOG"
@@ -73,5 +76,9 @@ if gh variable set AVISOS_URL --body "$URL" 2>/dev/null; then
   echo "No iPhone: feche e abra o app pelo ícone, vá em Ajustes > Avisos e toque em 'Ligar avisos com o app fechado'."
 else
   verde "Servidor pronto em: $URL"
-  echo "Não consegui avisar o GitHub sozinho. No app, vá em Ajustes > Avisos > Servidor e cole esse endereço."
+  echo "Falta só contar ao GitHub onde está o servidor (o gh não está instalado):"
+  echo "  1. Abra https://github.com/$DONO/$REPO/settings/variables/actions/new"
+  echo "  2. Name: AVISOS_URL   Value: $URL   e clique em Add variable"
+  echo "  3. Publique o app de novo (git push, ou Actions > Deploy > Run workflow)"
+  echo "Ou, só neste aparelho: no app, Ajustes > Avisos > Servidor, cole esse endereço."
 fi

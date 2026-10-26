@@ -925,7 +925,8 @@ const AVISOS_PADRAO = { ativo: true, antecedencia: 15, som: true, nomes: false, 
    Quem avisa é o servidor-avisos (pasta servidor-avisos/, grátis na Cloudflare): o app manda para lá só a lista
    dos próximos 7 dias (horário + texto do aviso) e o servidor dispara cada um no minuto certo.
    Por padrão o texto não leva o nome do paciente (aparece na tela bloqueada). */
-const AVISOS_URL_PADRAO = String(import.meta.env.VITE_AVISOS_URL || "").trim().replace(/\/+$/, "");
+// O endereço é público (não é segredo). A variável AVISOS_URL do GitHub, se existir, tem prioridade.
+const AVISOS_URL_PADRAO = String(import.meta.env.VITE_AVISOS_URL || "https://agenda-avisos.alvena.workers.dev").trim().replace(/\/+$/, "");
 const K_PUSH = "agenda-push";         // { ligado, id do aparelho, chave do servidor, último envio }
 const K_PUSH_URL = "agenda-push-url"; // endereço do servidor colado à mão (se o GitHub não preencheu)
 const servidorAvisos = () => String(lerJSON(K_PUSH_URL, "") || AVISOS_URL_PADRAO).trim().replace(/\/+$/, "");

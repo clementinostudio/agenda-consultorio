@@ -5,5 +5,6 @@
   "compatibility_date": "2026-09-01",
   // Workers AI: transcreve a fala do app (Whisper), dentro da cota grátis da Cloudflare
   "ai": { "binding": "AI" },
-  "triggers": { "crons": ["* * * * *"] }
+  "triggers": { "crons": ["* * * * *"] },
+  "kv_namespaces": [{ "binding": "AVISOS", "id": "9f010db2187d4adf8a567f0c41cf2a9f" }]
 }
