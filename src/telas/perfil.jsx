@@ -63,7 +63,7 @@ function AvisosFechado({ act }) {
   );
 }
 
-function PerfilPage({ db, conta, tema, inicio, onClose, act }) {
+function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   const pf = conta.perfil || {};
   const [aba, setAba] = useState(inicio || null);
   const [nome, setNome] = useState(conta.nome);
@@ -180,6 +180,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act }) {
             <h2>{nome || conta.nome}</h2>
             <p>{[profissao, idade ? `${idade} anos` : null].filter(Boolean).join(" · ")}</p>
             <span className="perfil-email">{conta.email}{conta.demo ? " · demonstração" : ""}</span>
+            {nuvem && <span className={"perfil-nuvem " + nuvem.estado} role="status"><I.cloud />{{ ok: "Tudo salvo na nuvem", enviando: "Sincronizando…", offline: nuvem.pendentes ? `Sem internet · ${nuvem.pendentes} ${nuvem.pendentes === 1 ? "mudança guardada" : "mudanças guardadas"} aqui` : "Sem internet · tudo guardado aqui", erro: "A nuvem não respondeu · tento de novo sozinho" }[nuvem.estado]}</span>}
             <div className="perfil-nums">
               <div><b>{ativos}</b><span>{ativos === 1 ? `${T.s} ativo` : `${T.p} ativos`}</span></div>
               <div><b>{sessMes}</b><span>{sessMes === 1 ? "sessão no mês" : "sessões no mês"}</span></div>
@@ -205,10 +206,11 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act }) {
             <h3>Conta</h3>
             <div className="perfil-lista">
               <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
-              <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>Seus dados ficam guardados neste aparelho</small></span><I.chev /></button>
+              <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>{conta.uid ? "Seus dados continuam guardados na nuvem" : "Seus dados ficam guardados neste aparelho"}</small></span><I.chev /></button>
             </div>
           </div>
-          <ConfirmButton label="Apagar meus dados" titulo="Apagar todos os seus dados?" texto="Pacientes, sessões, cobranças e gastos deste aparelho somem de vez. Isso não dá para desfazer." acao="Apagar tudo" onConfirm={act.zerar} />
+          <ConfirmButton label="Apagar meus dados" titulo="Apagar todos os seus dados?" texto={conta.uid ? "Pacientes, sessões, cobranças e gastos somem de vez, da nuvem e de todos os seus aparelhos. A conta continua. Isso não dá para desfazer." : "Pacientes, sessões, cobranças e gastos deste aparelho somem de vez. Isso não dá para desfazer."} acao="Apagar tudo" onConfirm={act.zerar} />
+          {conta.uid && <ConfirmButton label="Excluir minha conta" titulo="Excluir sua conta?" texto="O login, o perfil e todos os dados saem da nuvem e deste aparelho, de vez. Isso não dá para desfazer." acao="Excluir conta" onConfirm={act.excluirConta} />}
           {db.patients.length === 0 && <button className="btn text" onClick={act.carregarExemplo}>Carregar dados de exemplo</button>}
         </>}
 

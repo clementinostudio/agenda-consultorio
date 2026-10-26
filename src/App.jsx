@@ -11,6 +11,7 @@ import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "rea
 import PORQUINHO from "./assets/porquinho.webp";
 import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monograma, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
+import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, excluirContaNuvem, traduzirErro } from "./nuvem.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -1421,17 +1422,51 @@ function AreaChart({ serie, cor }) {
 }
 
 /* =========================================================
-   8. LOGIN E CADASTRO (demonstração)
+   8. LOGIN E CADASTRO
+   Com a nuvem ligada (src/nuvem.js), o login é de verdade (Supabase Auth). Sem ela, fica só no aparelho.
    ========================================================= */
-function Auth({ onLogin }) {
-  const [modo, setModo] = useState(() => location.hash === "#criar" ? "criar" : "entrar");
+function Auth({ onLogin, emailInicial, aviso }) {
+  const [modo, setModo] = useState(() => location.hash === "#criar" ? "criar" : "entrar"); // entrar | criar | esqueci
   const [nome, setNome] = useState("");
-  const [email, setEmail] = useState(() => { try { const e = sessionStorage.getItem("agenda-email") || ""; sessionStorage.removeItem("agenda-email"); return e; } catch (x) { return ""; } });
+  const [email, setEmail] = useState(() => { if (emailInicial) return emailInicial; try { const e = sessionStorage.getItem("agenda-email") || ""; sessionStorage.removeItem("agenda-email"); return e; } catch (x) { return ""; } });
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState(null);
-  const criar = modo === "criar";
+  const [ok, setOk] = useState(null);
+  const [indo, setIndo] = useState(false);
+  const criar = modo === "criar", esqueci = modo === "esqueci";
+  const trocar = m => { setModo(m); setErro(null); setOk(null); };
+  const enviarNuvem = async () => {
+    const em = email.trim().toLowerCase();
+    if (criar && !nome.trim()) return setErro({ t: "Como você quer ser chamado aqui? Pode ser só o primeiro nome." });
+    if (!em.includes("@")) return setErro({ t: "Esse e-mail parece incompleto." });
+    if (!esqueci && !senha) return setErro({ t: "Falta a senha." });
+    if (criar && senha.length < 6) return setErro({ t: "Use uma senha com pelo menos 6 caracteres." });
+    setErro(null); setOk(null); setIndo(true);
+    try {
+      const sb = await cliente();
+      if (esqueci) {
+        const { error } = await sb.auth.resetPasswordForEmail(em, { redirectTo: ENDERECO_APP });
+        if (error) throw error;
+        return setOk(`Se ${em} tiver conta, chegou um link para criar uma senha nova. Abra o e-mail neste aparelho.`);
+      }
+      const local = lerJSON(K.contas, {})[em];
+      const novaConta = n => sb.auth.signUp({ email: em, password: senha, options: { data: { nome: n }, emailRedirectTo: ENDERECO_APP } });
+      let r = criar ? await novaConta(nome.trim()) : await sb.auth.signInWithPassword({ email: em, password: senha });
+      // Conta de antes da nuvem (só neste aparelho): com a senha certa, cria a conta na nuvem e leva os dados junto
+      if (!criar && r.error && /invalid login credentials/i.test(r.error.message) && local && !local.uid && local.hash === hash(senha)) r = await novaConta(local.nome);
+      if (r.error) {
+        if (criar && /already registered|already exists/i.test(r.error.message)) return setErro({ t: "Esse e-mail já tem conta.", b: "Entrar com ele", fn: () => trocar("entrar") });
+        if (/email not confirmed/i.test(r.error.message)) return setErro({ t: traduzirErro(r.error), b: "Mandar o link de novo", fn: () => sb.auth.resend({ type: "signup", email: em, options: { emailRedirectTo: ENDERECO_APP } }).then(() => { setErro(null); setOk(`Link novo enviado para ${em}.`); }) });
+        if (/invalid login credentials/i.test(r.error.message)) return setErro({ t: traduzirErro(r.error), b: "Esqueci a senha", fn: () => trocar("esqueci") });
+        throw r.error;
+      }
+      if (!r.data.session) return setOk(`Mandei um link para ${em}. Toque nele para confirmar a conta e depois entre aqui.`);
+      onLogin(await contaDaNuvem(r.data.user, local), criar);
+    } catch (x) { setErro({ t: traduzirErro(x) }); } finally { setIndo(false); }
+  };
   const enviar = e => {
     e.preventDefault();
+    if (NUVEM) return enviarNuvem();
     const em = email.trim().toLowerCase();
     const contas = lerJSON(K.contas, {});
     if (criar) {
@@ -1453,24 +1488,55 @@ function Auth({ onLogin }) {
     <main className="auth">
       <div className="brand"><i><Marca /></i>Alvena</div>
       <div className="auth-h">
-        <div className="hi">{criar ? "Vamos começar!" : "Que bom te ver!"}</div>
-        <h1>{criar ? "Criar conta" : "Entrar"}</h1>
-        <p>{criar ? "Leva menos de um minuto." : "Sua agenda, seus pagamentos e suas contas num lugar só."}</p>
+        <div className="hi">{criar ? "Vamos começar!" : esqueci ? "Acontece!" : "Que bom te ver!"}</div>
+        <h1>{criar ? "Criar conta" : esqueci ? "Nova senha" : "Entrar"}</h1>
+        <p>{criar ? "Leva menos de um minuto." : esqueci ? "Coloque seu e-mail e eu mando um link para criar outra senha." : aviso || "Sua agenda, seus pagamentos e suas contas num lugar só."}</p>
       </div>
       <form className="stack" onSubmit={enviar} noValidate>
         <div className="fields">
           {criar && <Field label="Como quer ser chamado(a)" icon={<I.user />} htmlFor="a-nome"><input id="a-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Camila" autoComplete="given-name" /></Field>}
-          <Field label="E-mail" icon={<I.mail />} htmlFor="a-email"><input id="a-email" type="email" inputMode="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="voce@email.com" autoComplete="email" /></Field>
-          <Field label="Senha" icon={<I.lock />} htmlFor="a-senha"><input id="a-senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" autoComplete={criar ? "new-password" : "current-password"} /></Field>
+          <Field label="E-mail" icon={<I.mail />} htmlFor="a-email"><input id="a-email" type="email" inputMode="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="voce@email.com" autoComplete={criar ? "email" : "username"} /></Field>
+          {!esqueci && <Field label="Senha" icon={<I.lock />} htmlFor="a-senha"><input id="a-senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" autoComplete={criar ? "new-password" : "current-password"} /></Field>}
         </div>
         {erro && <div className="error" role="alert">{erro.t} {erro.b && <button type="button" onClick={erro.fn} style={{ color: "var(--accent-ink)", fontWeight: 800, textDecoration: "underline" }}>{erro.b}</button>}</div>}
-        <button className="btn" type="submit">{criar ? "Criar minha conta" : "Entrar"}</button>
-        <button className="btn ghost" type="button" onClick={() => onLogin(CONTA_DEMO, false)}>Só quero ver como funciona</button>
+        {ok && <div className="auth-ok" role="status"><I.mail /> {ok}</div>}
+        <button className="btn" type="submit" disabled={indo}>{indo ? "Um instante…" : criar ? "Criar minha conta" : esqueci ? "Mandar o link" : "Entrar"}</button>
+        {esqueci ? <button className="btn ghost" type="button" onClick={() => trocar("entrar")}>Voltar para entrar</button>
+          : <button className="btn ghost" type="button" onClick={() => onLogin(CONTA_DEMO, false)}>Só quero ver como funciona</button>}
       </form>
       <div className="auth-foot">
-        {criar ? <>Já tem conta? <button onClick={() => { setModo("entrar"); setErro(null); }}>Entrar</button></> : <>Primeira vez aqui? <button onClick={() => { setModo("criar"); setErro(null); }}>Criar conta</button></>}
+        {criar ? <>Já tem conta? <button onClick={() => trocar("entrar")}>Entrar</button></> : !esqueci && <>Primeira vez aqui? <button onClick={() => trocar("criar")}>Criar conta</button>{NUVEM && <> · <button onClick={() => trocar("esqueci")}>Esqueci a senha</button></>}</>}
       </div>
-      <div className="demo-note">Versão de demonstração: tudo fica salvo só neste aparelho.</div>
+      <div className="demo-note">{NUVEM ? "Seus dados ficam protegidos na nuvem, só a sua conta vê, e o app funciona até sem internet." : "Versão de demonstração: tudo fica salvo só neste aparelho."}</div>
+    </main>
+  );
+}
+
+// Veio do link "criar senha nova" do e-mail
+function NovaSenha({ onPronto }) {
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState(null);
+  const [indo, setIndo] = useState(false);
+  const enviar = async e => {
+    e.preventDefault();
+    if (senha.length < 6) return setErro("Use uma senha com pelo menos 6 caracteres.");
+    setErro(null); setIndo(true);
+    try {
+      const sb = await cliente();
+      const { data, error } = await sb.auth.updateUser({ password: senha });
+      if (error) throw error;
+      await onPronto(data.user);
+    } catch (x) { setErro(traduzirErro(x)); setIndo(false); }
+  };
+  return (
+    <main className="auth">
+      <div className="brand"><i><Marca /></i>Alvena</div>
+      <div className="auth-h"><div className="hi">Quase lá!</div><h1>Senha nova</h1><p>Escolha a senha que você vai usar daqui para frente.</p></div>
+      <form className="stack" onSubmit={enviar} noValidate>
+        <div className="fields"><Field label="Senha nova" icon={<I.lock />} htmlFor="n-senha"><input id="n-senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" autoComplete="new-password" autoFocus /></Field></div>
+        {erro && <div className="error" role="alert">{erro}</div>}
+        <button className="btn" type="submit" disabled={indo}>{indo ? "Um instante…" : "Salvar e entrar"}</button>
+      </form>
     </main>
   );
 }
@@ -2785,7 +2851,7 @@ function carregarDb(conta) {
   return salvo;
 }
 
-function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
+function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem }) {
   const perfil = conta.perfil || PERFIL_DEMO;
   DURACAO_SESSAO = perfil.duracao || 50;
   TERMO = termoDe(perfil.termo || "Paciente");
@@ -2794,6 +2860,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
   const usaPessoal = perfil.pessoal !== false;
   const av = { ...AVISOS_PADRAO, ...(perfil.avisos || {}) };
   const [db, setDb] = useState(() => carregarDb(conta));
+  const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem (demonstração)
   VIAGEM = (db.pessoal && db.pessoal.viagem) || null;
   LOGOS = (db.pessoal && db.pessoal.logos) || {};
   const [modo, setModoSt] = useState(() => lerJSON(K.modo(conta.email), "consultorio"));
@@ -3190,11 +3257,16 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
     refazer: () => { close(); onAtualizar({ perfil: { ...perfil, refazer: true } }); },
     zerar: () => { setDb(vazio()); close(); notify("Dados apagados"); },
     carregarExemplo: () => { setDb(exemplo()); close(); notify("Exemplos carregados"); },
-    sair: () => {
+    sair: async () => {
       // a conta saiu deste aparelho: para de mandar os avisos dela
       const st = lerJSON(K_PUSH, {});
       if (st.ligado && st.id) { chamarServidor("/cancelar", { id: st.id }, true).catch(() => {}); gravar(K_PUSH, { ...st, hash: "" }); }
-      onSair();
+      if (conta.uid) { notify("Guardando tudo na nuvem…"); onSair((await sairDaNuvem()) && conta); }
+      else onSair();
+    },
+    excluirConta: async () => {
+      try { await excluirContaNuvem(conta.uid); onSair(conta); }
+      catch (e) { notify(traduzirErro(e)); }
     },
     trocarTema: () => tema.setModo(tema.escuro ? "light" : "dark"),
   };
@@ -3217,7 +3289,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar }) {
       {sheet && sheet.type === "patient" && <PatientSheet db={db} pid={sheet.pid} onClose={close} act={act} />}
       {sheet && sheet.type === "form" && <PatientForm total={db.patients.length} perfil={perfil} pre={sheet.pre} initial={sheet.pid ? db.patients.find(p => p.id === sheet.pid) : null} onSave={act.salvarPaciente} onClose={close} />}
       {sheet && sheet.type === "charge" && <ChargeSheet key={sheet.cid} db={db} cid={sheet.cid} fresh={sheet.fresh} nomeProf={conta.nome} onClose={close} act={act} />}
-      {sheet && sheet.type === "settings" && <Suspense fallback={null}><PerfilPage db={db} conta={conta} tema={tema} inicio={sheet.aba} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "settings" && <Suspense fallback={null}><PerfilPage db={db} conta={conta} tema={tema} inicio={sheet.aba} onClose={close} act={act} nuvem={nuvem} /></Suspense>}
       {sheet && sheet.type === "fechar" && <Suspense fallback={null}><FecharDia db={db} conta={conta} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "revisao" && <Suspense fallback={null}><RevisaoSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "confirmar" && <Suspense fallback={null}><ConfirmSheet db={db} iso={sheet.iso} onClose={close} act={act} /></Suspense>}
@@ -3328,31 +3400,81 @@ function App() {
     if (!email) return null;
     if (email === CONTA_DEMO.email) return { conta: { ...CONTA_DEMO, ...(lerJSON(K.contas, {})[email] || {}) }, novo: false };
     const c = lerJSON(K.contas, {})[email];
-    return c ? { conta: c, novo: false } : null;
+    if (!c) return null;
+    // Conta de antes da nuvem: pede a senha uma vez para levar tudo para a nuvem
+    if (NUVEM && !c.uid) return { legado: c.email };
+    return { conta: c, novo: false };
   });
+  const [recuperar, setRecuperar] = useState(false);
+  const sessaoRef = useRef(sessao); sessaoRef.current = sessao;
   const entrar = (conta, novo) => {
-    const salvo = lerJSON(K.contas, {})[conta.email];
+    const contas = lerJSON(K.contas, {});
+    const salvo = contas[conta.email];
     gravar(K.sessao, conta.email);
+    // conta da nuvem: guarda uma cópia aqui para o app abrir na hora, até sem internet
+    if (conta.uid) { const { hash: _h, ...limpa } = conta; gravar(K.contas, { ...contas, [conta.email]: limpa }); conta = limpa; }
     setSessao({ conta: conta.demo ? { ...CONTA_DEMO, ...(salvo || {}) } : conta, novo });
     window.scrollTo(0, 0);
   };
-  const sair = () => { apagar(K.sessao); setSessao(null); };
+  // limpar = a conta da nuvem que saiu com tudo já salvo lá: a cópia dela neste aparelho pode ir embora
+  const sair = limpar => {
+    if (limpar && limpar.uid && limpar.email) {
+      const contas = lerJSON(K.contas, {}); delete contas[limpar.email];
+      gravar(K.contas, contas); apagar(K.db(limpar.email)); apagar(K.modo(limpar.email)); apagar(K.avisos(limpar.email));
+    }
+    const s = sessaoRef.current;
+    if (NUVEM && s && s.conta && s.conta.uid) cliente().then(sb => sb.auth.signOut({ scope: "local" })).catch(() => {});
+    apagar(K.sessao); setSessao(null);
+  };
   // Veio da página de apresentação: #demo entra direto na demonstração; depois limpa o endereço
   useEffect(() => {
     const h = location.hash;
     if (h === "#demo" && !sessao) entrar(CONTA_DEMO, false);
     if (h === "#demo" || h === "#entrar" || h === "#criar") history.replaceState(null, "", location.pathname + location.search);
   }, []);
-  // Atualiza nome, foto ou perfil e guarda na lista de contas
+  // Nuvem: confere se o login ainda vale e escuta os links dos e-mails (confirmar conta, senha nova)
+  const daNuvem = !!(sessao && sessao.conta && sessao.conta.uid);
+  useEffect(() => {
+    const doEmail = /access_token=|error_description=|type=recovery/.test(location.hash);
+    if (!NUVEM || (!daNuvem && !doEmail)) return;
+    let vivo = true, inscricao = null;
+    cliente().then(sb => {
+      if (!vivo) return;
+      inscricao = sb.auth.onAuthStateChange((ev, s) => {
+        if (ev === "PASSWORD_RECOVERY") { setRecuperar(true); return; }
+        if (ev === "SIGNED_OUT" && sessaoRef.current && sessaoRef.current.conta && sessaoRef.current.conta.uid) { sair(); return; }
+        // confirmou o e-mail pelo link: já entra
+        if (ev === "SIGNED_IN" && s && !(sessaoRef.current && sessaoRef.current.conta)) {
+          setTimeout(() => contaDaNuvem(s.user, lerJSON(K.contas, {})[s.user.email]).then(c => { if (!(sessaoRef.current && sessaoRef.current.conta)) entrar(c, true); }).catch(() => {}), 0);
+        }
+      }).data.subscription;
+      if (daNuvem) sb.auth.getSession().then(({ data, error }) => { if (vivo && !error && !data.session) sair(); }); // login vencido ou revogado (sem internet, segue normal)
+    });
+    return () => { vivo = false; if (inscricao) inscricao.unsubscribe(); };
+  }, [daNuvem]);
+  // Atualiza nome, foto ou perfil e guarda na lista de contas (e na nuvem)
   const atualizar = (patch, extra = {}) => {
     const contas = lerJSON(K.contas, {});
     const c = { ...sessao.conta, ...(contas[sessao.conta.email] || {}), ...patch };
     gravar(K.contas, { ...contas, [c.email]: c });
     setSessao(s => ({ ...s, ...extra, conta: { ...s.conta, ...patch } }));
+    if (c.uid) enviarPerfil(c);
   };
-  if (!sessao) return <Auth onLogin={entrar} />;
+  // O perfil mudou em outro aparelho
+  const perfilNuvem = p => setSessao(s => {
+    if (!s || !s.conta) return s;
+    const conta = { ...s.conta, ...p };
+    if (JSON.stringify(conta) === JSON.stringify(s.conta)) return s;
+    const contas = lerJSON(K.contas, {}); gravar(K.contas, { ...contas, [conta.email]: conta });
+    return { ...s, conta };
+  });
+  if (recuperar) return <NovaSenha onPronto={async user => {
+    setRecuperar(false);
+    if (!(sessao && sessao.conta)) entrar(await contaDaNuvem(user, lerJSON(K.contas, {})[user.email]), false);
+  }} />;
+  if (!sessao || sessao.legado) return <Auth onLogin={entrar} emailInicial={sessao && sessao.legado} aviso={sessao && sessao.legado ? "Agora seus dados ficam guardados na nuvem. Entre com a sua senha de sempre e eu levo tudo para lá." : null} />;
   if (!sessao.conta.perfil || sessao.conta.perfil.refazer) return <Suspense fallback={null}><Onboarding conta={sessao.conta} onSair={sair} onDone={d => { atualizar(d, { pronto: true }); window.scrollTo(0, 0); }} /></Suspense>;
-  return <Painel key={sessao.conta.email} conta={sessao.conta} novo={sessao.novo} pronto={sessao.pronto} tema={tema} onSair={sair} onAtualizar={atualizar} />;
+  return <Painel key={sessao.conta.email} conta={sessao.conta} novo={sessao.novo} pronto={sessao.pronto} tema={tema} onSair={sair} onAtualizar={atualizar} onPerfilNuvem={perfilNuvem} />;
 }
 
 

@@ -12,6 +12,7 @@ Não precisa de VS Code nem de outro editor. Abra o terminal dentro desta pasta 
 bash instalar.sh     # instala o Node (se faltar), as dependências e abre o app
 bash publicar.sh     # sobe para o seu GitHub e publica no GitHub Pages
 bash servidor-avisos/instalar-avisos.sh   # liga os avisos com o app fechado (uma vez só)
+bash conectar-nuvem.sh   # liga o banco de dados na nuvem (Supabase), uma vez só
 ```
 
 - O `instalar.sh` deixa o app rodando em `http://localhost:5173`. Para parar, aperte `Ctrl + C`.
@@ -85,9 +86,11 @@ agenda-consultorio/
 │   ├── icons/               ← ícones do app (troque pelos seus, mesmos nomes e tamanhos)
 │   └── fundos/              ← imagens de fundo (cada uma tem a versão "-mini" para a miniatura)
 ├── servidor-avisos/         ← servidor que manda os avisos com o app fechado (Cloudflare, grátis)
+├── supabase/migrations/     ← o banco de dados na nuvem (tabelas e regras de segurança)
 └── src/
     ├── main.jsx             ← liga o app, as fontes e o service worker
     ├── styles.css           ← todas as cores, tamanhos e o visual (claro, escuro e vidro)
+    ├── nuvem.js             ← login de verdade e sincronização com o Supabase
     └── App.jsx              ← o app inteiro, separado em seções numeradas
 ```
 
@@ -122,8 +125,7 @@ Para adicionar um fundo novo: coloque `meu-fundo.jpg` e `meu-fundo-mini.jpg` em 
 - Vibração nos toques (só Android: o iPhone não deixa sites vibrarem).
 - Planilha .csv do mês para o contador.
 
-**Ainda é demonstração:**
-- **Login e dados ficam só no aparelho** (no `localStorage` do navegador). Trocar de celular ou limpar os dados do navegador apaga tudo, e a senha não tem proteção de verdade.
+**Banco de dados na nuvem (Supabase):** depois de rodar `bash conectar-nuvem.sh`, o login é de verdade e os dados ficam sincronizados entre celular e computador (veja abaixo). Sem isso, tudo fica só no aparelho, como antes.
 
 ### Avisos com o app fechado (servidor-avisos)
 O iPhone congela o app quando ele sai da tela, então quem avisa na hora certa é um servidorzinho grátis na Cloudflare. Ele recebe só a lista dos próximos avisos (horário + texto, sem nome de paciente por padrão) e dispara cada um no minuto certo, pelo padrão Web Push.
@@ -162,11 +164,26 @@ Fica em `sobre/index.html` e é publicada junto com o app: `https://SEU-USUARIO.
 - No Android, o Chrome instala como app de verdade (aparece na lista de apps e a opção é "Desinstalar"), com fotos do app na janela de instalação.
 - No iPhone, segurar o ícone sempre mostra "Remover Favorito": é o texto que o iOS usa para todo app instalado pelo Safari, e nenhum site consegue mudar.
 
-### Próximo passo recomendado: Supabase (plano gratuito)
-1. **Login de verdade** com e-mail e senha (Supabase Auth).
-2. **Dados na nuvem**, sincronizados entre celular e computador, com cada conta vendo só os próprios dados (Row Level Security).
+### Banco de dados na nuvem (Supabase, plano grátis)
+```bash
+bash conectar-nuvem.sh
+```
+O script pede o endereço e a chave **publishable** do projeto (Project Settings → API Keys), cria as tabelas, confere a conexão e guarda tudo em `.env.local` (que não vai para o GitHub). O endereço e a chave pública também vão para `.env.production`, que sobe para o GitHub: é com ele que o app publicado usa a nuvem (rode `bash publicar.sh`). Só a chave publishable pode ficar ali, nunca a secret.
 
-Nomes de pacientes, frequência de terapia e pagamentos são **dados pessoais sensíveis** pela LGPD. Antes de outras pessoas usarem o app, vale ter o login de verdade, os dados protegidos e uma política de privacidade simples.
+Como funciona:
+- **Login de verdade** (Supabase Auth), com "Esqueci a senha". Quem já tinha conta só no aparelho entra com a senha de sempre e os dados vão junto para a nuvem.
+- **Funciona primeiro no aparelho:** abre na hora e salva sem internet. Cada mudança (um paciente, uma sessão, um gasto) sobe sozinha; sem internet, fica numa fila e sobe quando a conexão volta.
+- **Tempo real:** o que muda no celular aparece no computador na hora.
+- **Segurança:** Row Level Security em todas as tabelas, e cada conta só enxerga as próprias linhas. A chave que vai no app é a pública; a secreta nunca entra no app.
+- Em Perfil aparece a situação ("Tudo salvo na nuvem", "Sem internet · 3 mudanças guardadas aqui") e o botão **Excluir minha conta**, que apaga login e dados de vez (LGPD).
+- Ao sair da conta, a cópia do aparelho é apagada se tudo já estiver na nuvem.
+- Os fundos de tela que você sobe ficam só no aparelho; o resto (inclusive foto de perfil) vai para a nuvem.
+
+O banco fica em `supabase/migrations/` (tabelas `perfis` e `itens`), e a sincronização em `src/nuvem.js`.
+
+**E-mails:** a conta é criada sem precisar confirmar e-mail (Confirm email desligado, junto com os endereços do app, em `supabase/config.toml`; para mandar de novo ao projeto: `npx supabase config push`). O envio de e-mail grátis do Supabase só chega para quem é da equipe do projeto, então o "Esqueci a senha" precisa de um SMTP próprio (Resend tem plano grátis) em Authentication → Emails → SMTP.
+
+Nomes de pacientes, frequência de terapia e pagamentos são **dados pessoais sensíveis** pela LGPD. Antes de outras pessoas usarem o app, vale ter uma política de privacidade simples.
 
 ---
 

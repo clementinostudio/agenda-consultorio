@@ -402,6 +402,8 @@ button:disabled{cursor:default}
 .field.row2>div{min-width:0;display:flex;flex-direction:column;gap:2px}
 .hint{color:var(--muted);font-size:13px;font-weight:600;padding:0 6px}
 .error{color:var(--rose);font-size:14px;font-weight:700;padding:0 6px}
+.auth-ok{display:flex;gap:10px;align-items:flex-start;color:var(--mint);background:var(--mint-soft);border-radius:16px;padding:12px 14px;font-size:14px;font-weight:700;line-height:1.4}
+.auth-ok svg{width:18px;height:18px;flex:none;margin-top:1px}
 .swatches{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
 .swatch{width:38px;height:38px;border-radius:13px;background:var(--sw);color:var(--sw-ink);display:grid;place-items:center;transition:transform .12s}
 .swatch.on{box-shadow:0 0 0 3px var(--surface-2),0 0 0 5px var(--fg);transform:scale(1.04)}
@@ -715,6 +717,12 @@ html { box-sizing: border-box; min-height: calc(100% + env(safe-area-inset-top, 
 .perfil-hero h2 { margin: 0; font-family: var(--f-display); font-weight: 600; font-size: 26px; letter-spacing: -.02em; }
 .perfil-hero p { margin: 0; color: var(--muted); font-weight: 700; }
 .perfil-email { color: var(--faint, var(--muted)); font-size: 13px; font-weight: 600; }
+/* Situação da nuvem (sincronizado, sem internet...) */
+.perfil-nuvem { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 700; color: var(--mint); background: var(--mint-soft); }
+.perfil-nuvem svg { width: 14px; height: 14px; }
+.perfil-nuvem.enviando { color: var(--accent-ink); background: var(--accent-soft); }
+.perfil-nuvem.offline { color: var(--amber); background: var(--amber-soft); }
+.perfil-nuvem.erro { color: var(--rose); background: var(--rose-soft); }
 .perfil-nums { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
 .perfil-nums div { background: var(--surface-2); border-radius: 18px; padding: 12px 6px; display: flex; flex-direction: column; gap: 2px; }
 .perfil-nums b { font-family: var(--f-display); font-weight: 600; font-size: clamp(16px, 5vw, 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
