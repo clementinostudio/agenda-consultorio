@@ -1,7 +1,7 @@
 // Dinheiro rendendo (modo Pessoal): caixinhas com meta, "à vista ou parcelado?" e modo viagem.
 // Usa as cotações de src/cotacoes.js (CDI, IPCA e câmbio, gratuitos e guardados para funcionar offline).
 import React, { useState } from "react";
-import { I, Sheet, Field, Toggle, ConfirmButton, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, soma, MES_LONGO, diffDias, ESCONDER, Money, relativo } from "../App.jsx";
+import { I, Sheet, Field, Toggle, ConfirmButton, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, soma, MES_LONGO, diffDias, ESCONDER, Money, relativo, Ilustra } from "../App.jsx";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, fmtPct, quandoTxt, IOF_CARTAO } from "../cotacoes.js";
 
 /* ---------- contas financeiras ---------- */
@@ -60,7 +60,8 @@ export function DinheiroHome({ db, act }) {
           <button className="din-act" onClick={() => act.abrirCaixinha()}><i><I.piggy /></i><span>Nova<br />caixinha</span></button>
         </div>
         {caixinhas.length === 0 ? (
-          <button className="cx-vazia" onClick={() => act.abrirCaixinha()}>
+          <button className="cx-vazia com-ilustra" onClick={() => act.abrirCaixinha()}>
+            <Ilustra n="dinheiro" className="cx-vazia-img" />
             <b>Guarde para um objetivo</b>
             <span>Crie uma caixinha (viagem, reserva, carro…). Eu mostro quanto guardar por mês e quanto o dinheiro rende a 100% do CDI.</span>
           </button>

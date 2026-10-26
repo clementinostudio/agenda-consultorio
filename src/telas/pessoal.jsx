@@ -6,7 +6,7 @@ import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } 
 import { DinheiroHome } from "./dinheiro.jsx";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
 import { logoPropria, lerArquivo } from "../App.jsx";
-import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta } from "../App.jsx";
+import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista } from "../App.jsx";
 
 /* ---------- Logo enquanto digita: sugere as empresas parecidas (mesmo com erro de digitação),
    tenta achar o site de quem não está na lista e deixa usar uma foto como logo ---------- */
@@ -174,6 +174,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
       <div className="cols">
         <div className="col">
           <Talk falas={falas} />
+          <ProximaConquista act={act} trilhas={["dinheiro", "app"]} />
           <section className="bal">
             <div className="bal-top">
               <span className="lab">{rotulo} <button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></span>
@@ -201,7 +202,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
         <div className="col">
           <div className="panel">
             <div className="panel-head"><h3>Próximas contas</h3><button className="link" onClick={() => act.setTab("p-contas")}>Ver todas</button></div>
-            {proximas.length === 0 ? <div className="empty"><b>Nada para pagar</b>Todas as contas do mês estão pagas.</div> : proximas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
+            {proximas.length === 0 ? <div className="empty com-ilustra"><Ilustra n="cafe" /><b>Nada para pagar</b>Todas as contas do mês estão pagas.</div> : proximas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
           </div>
           <div className="panel">
             <div className="panel-head"><h3>Últimos lançamentos</h3><button className="link" onClick={() => act.setTab("p-gastos")}>Ver tudo</button></div>
@@ -269,7 +270,7 @@ function GastosTab({ db, act, tema }) {
                 <span className="amt pos">+<Money v={r.consult} /></span>
               </div>
             )}
-            {grupos.length === 0 && !(r.consult > 0 && filtro !== "saida") && <div className="empty">Nada por aqui neste mês.</div>}
+            {grupos.length === 0 && !(r.consult > 0 && filtro !== "saida") && <div className="empty com-ilustra"><Ilustra n="arquivo" /><b>Nada por aqui neste mês</b>Anote falando ou traga tudo do banco de uma vez.<button className="ghost-chip" onClick={act.importar}><I.upload /> Importar extrato</button></div>}
             {grupos.map(g => (
               <React.Fragment key={g.d}>
                 <div className="day-sep">{relativo(g.d)}</div>
@@ -300,7 +301,7 @@ function ContasTab({ db, act, tema }) {
         </section>
         <div className="panel">
           <div className="panel-head"><h3>A pagar</h3></div>
-          {abertas.length === 0 ? <div className="empty"><b>Tudo pago</b>Nenhuma conta pendente neste mês.</div> : abertas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
+          {abertas.length === 0 ? <div className="empty com-ilustra"><Ilustra n="cafe" /><b>Tudo pago</b>Nenhuma conta pendente neste mês.</div> : abertas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
         </div>
         {pagas.length > 0 && <div className="panel"><div className="panel-head"><h3>Pagas</h3></div>{pagas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}</div>}
         {contas.some(c => c.assinatura) && (

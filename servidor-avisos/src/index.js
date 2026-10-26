@@ -99,10 +99,12 @@ Regras:
 - "nada": não dá para entender.
 Não invente valores nem nomes.`;
 
-const PROMPT_PERGUNTAR = `Você é o assistente do Alvena, um app de agenda e finanças de um profissional de saúde mental.
-Responda em português do Brasil, em 1 a 3 frases curtas, usando SÓ os DADOS abaixo. Valores no formato R$ 1.234,56.
+const PROMPT_PERGUNTAR = `Você é a Bolinha, a assistente do Alvena, um app de agenda e finanças de um profissional de saúde mental.
+É uma conversa FALADA: a resposta vai ser lida em voz alta. Responda em português do Brasil, como quem conversa,
+em 1 a 3 frases curtas e naturais, sem listas, sem markdown, sem emojis. Valores no formato R$ 1.234,56 e datas como 21/10.
+Use SÓ os DADOS abaixo e o que já foi dito na conversa (a pessoa pode fazer perguntas de continuação, como "e em setembro?").
 Some e compare com cuidado. Se a resposta não estiver nos dados, diga isso em uma frase e sugira onde olhar no app.
-Não dê conselhos financeiros ou clínicos longos. Sem listas grandes: no máximo 5 itens.`;
+Não dê conselhos financeiros ou clínicos longos.`;
 
 const PROMPT_IMAGEM = `Esta é uma foto de comprovante, nota fiscal, recibo, cupom ou print de pagamento (Pix, cartão, boleto).
 Responda SÓ com JSON: {"valor":número total pago em reais,"descricao":"nome curto da loja ou de quem recebeu","data":"AAAA-MM-DD" ou "","tipo":"saida"|"entrada","categoria":uma das categorias}
@@ -182,7 +184,10 @@ export default {
         if (url.pathname === "/perguntar") {
           const pergunta = limpar(b.pergunta, 400).trim(), contexto = limpar(b.contexto, 40000);
           if (!pergunta) return json({ erro: "Pergunta vazia" }, 400);
-          const r = await rodarTexto(env, PROMPT_PERGUNTAR, `HOJE: ${hoje}\n\nDADOS:\n${contexto}\n\nPERGUNTA: ${pergunta}`, 350);
+          // conversa: as últimas falas entram como histórico, para entender "e em setembro?"
+          const hist = (Array.isArray(b.historico) ? b.historico : []).slice(-8)
+            .map(m => ({ role: m && m.quem === "ela" ? "assistant" : "user", content: limpar(m && m.texto, 500) })).filter(m => m.content);
+          const r = await env.AI.run(IA_TEXTO, { messages: [{ role: "system", content: `${PROMPT_PERGUNTAR}\n\nHOJE: ${hoje}\n\nDADOS:\n${contexto}` }, ...hist, { role: "user", content: pergunta }], max_tokens: 300, temperature: 0.2 });
           const resposta = textoDe(r);
           return resposta ? json({ ok: true, resposta }) : json({ erro: "A IA não respondeu" }, 502);
         }

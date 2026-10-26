@@ -133,6 +133,11 @@ Para adicionar um fundo novo: coloque `meu-fundo.jpg` e `meu-fundo-mini.jpg` em 
 - **Foto do comprovante** (ícone de câmera no novo gasto): a IA lê valor, loja e data. No Android, o Alvena também aparece no **Compartilhar** de outros apps (foto de comprovante ou código de boleto).
 - **Perguntar ao Alvena** pela Bolinha ou pelo teclado: "quanto gastei de Uber em outubro?", "quem está me devendo?", "quem eu atendo amanhã?". Dá para ouvir a resposta.
 - **Resumo da semana** no domingo às 20h (Ajustes → Avisos).
+- **Conversa com a Bolinha:** perguntas viram um chat; ela responde falando (com a voz mais natural do aparelho: Google no Android, "Natural" no Edge, "Melhorada" no iPhone) e, se você perguntou falando, já escuta a próxima pergunta. Lembra do contexto ("e em setembro?"). Toque num balão para ouvir de novo; o botão de som desliga a fala. "Obrigado" ou "tchau" encerram.
+- **Clima de verdade** (Open-Meteo): temperatura de agora, sensação, umidade, chuva hora a hora, mínima e máxima. Toque no clima do Início para ver tudo e, se quiser, usar a localização do aparelho (mais preciso que a cidade). Sem internet, mostra a última previsão real com o horário; nunca números inventados.
+- **Conquistas** (Perfil → Conquistas): 24 conquistas em 6 trilhas (rotina, consultório, metas, dinheiro da casa, app e segurança), com nível, cartão da próxima conquista no Início e comemoração com confete. Celebram a rotina, não a quantidade de atendimentos. As regras ficam em `src/conquistas.js`.
+- **Painéis como app nativo:** o voltar do Android fecha o painel aberto (e não o app), a tela de trás recua um pouco, a barra de status escurece junto e segue o tema escolhido no app, e dá para arrastar o painel para baixo de qualquer ponto quando ele está no topo.
+- **Ilustrações 3D** (`public/ilustras/`): troféu = conquistas e metas, dinheiro = caixinhas, arquivo = organização, cadeados = privacidade, café = rotina leve e dia livre, iPad = o app em qualquer tela.
 
 **Banco de dados na nuvem (Supabase):** depois de rodar `bash conectar-nuvem.sh`, o login é de verdade e os dados ficam sincronizados entre celular e computador (veja abaixo). Sem isso, tudo fica só no aparelho, como antes.
 

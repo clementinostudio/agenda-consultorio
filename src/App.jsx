@@ -13,6 +13,7 @@ import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monogr
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
 import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro } from "./nuvem.js";
 import { lerBoleto } from "./boleto.js";
+import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -301,7 +302,7 @@ function conversa(db, now, act, perfil) {
     else {
       falas.push({ txt: <>Sua próxima sessão é com <b>{primeiro(prox.patient.name)}</b> às <b>{prox.time}</b>. Faltam {duracao(ini - nm)}.</>, acao: { l: "Só o agora", ic: <I.target />, fn: act.agora } });
       const ch = chuvaPerto(t, prox.time);
-      if (ch) falas.push({ txt: <>Vai chover perto das {ch.h}h ({ch.p}%). Saia uns 10 minutos antes para a sessão das {prox.time}.{CLIMA && CLIMA.demo ? " (previsão de exemplo)" : ""}</> });
+      if (ch) falas.push({ txt: <>Vai chover perto das {ch.h}h ({ch.p}%). Saia uns 10 minutos antes para a sessão das {prox.time}.</> });
     }
   } else if (abertos.length) {
     falas.push({ txt: <>Falta marcar {abertos.length === 1 ? `a sessão de ${primeiro(abertos[0].patient.name)}` : `${abertos.length} sessões`} de hoje. Foi tudo certo?</>, acao: { l: "Abrir agenda", ic: <I.cal />, fn: () => act.setTab("agenda") } });
@@ -412,40 +413,70 @@ async function buscarFeriadosAPI(ano) {
   (await r.json()).forEach(f => { FERIADOS[f.date] = { date: f.date, name: f.name, fac: FERIADOS[f.date] && FERIADOS[f.date].fac }; });
 }
 
-// Clima pela Open-Meteo (gratuita, sem chave). Se a internet estiver bloqueada, usa uma previsão de exemplo marcada como tal.
+/* Clima de verdade pela Open-Meteo (gratuita, sem chave): temperatura de AGORA, sensação, umidade,
+   chuva hora a hora e mínima/máxima. Pela cidade do perfil ou pela localização do aparelho (mais precisa).
+   Sem internet, mostra a última previsão real com o horário em que foi buscada; nunca inventa números. */
 let CLIMA = null;
-async function buscarClima(cidade) {
-  const key = "agenda-clima:" + cidade.toLowerCase();
+const K_CLIMA_LOCAL = "agenda-clima-local"; // { lat, lon, nome } quando você escolhe "usar minha localização"
+const climaLocal = () => lerJSON(K_CLIMA_LOCAL, null);
+async function buscarJSON(url, signal) { const r = await fetch(url, { signal }); if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }
+async function buscarClima(cidade, forcar) {
+  const local = climaLocal();
+  if (!local && !cidade) throw new Error("sem-cidade");
+  const key = "agenda-clima:" + (local ? `${local.lat.toFixed(2)},${local.lon.toFixed(2)}` : cidade.toLowerCase());
   const c = lerJSON(key, null);
-  if (c && Date.now() - c.em < 3600e3) return c;
-  const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 6000);
+  if (!forcar && c && c.atual && Date.now() - c.em < 15 * 60e3) return c;
+  const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const g = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cidade)}&count=1&language=pt&countryCode=BR`, { signal: ctrl.signal })).json();
-    const loc = g.results && g.results[0];
-    if (!loc) throw new Error("cidade");
-    const f = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&hourly=temperature_2m,precipitation_probability,weather_code&timezone=auto&forecast_days=2`, { signal: ctrl.signal })).json();
-    const horas = f.hourly.time.map((t, i) => ({ t, temp: Math.round(f.hourly.temperature_2m[i]), p: f.hourly.precipitation_probability[i] ?? 0, code: f.hourly.weather_code[i] }));
-    const out = { cidade: loc.name, horas, em: Date.now(), demo: false };
+    let lat, lon, nome;
+    if (local) { lat = local.lat; lon = local.lon; nome = local.nome || "Sua localização"; }
+    else {
+      const g = await buscarJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cidade)}&count=1&language=pt&countryCode=BR`, ctrl.signal);
+      const loc = g.results && g.results[0];
+      if (!loc) throw new Error("cidade");
+      lat = loc.latitude; lon = loc.longitude; nome = loc.name + (loc.admin1 ? ` (${loc.admin1})` : "");
+    }
+    const f = await buscarJSON(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,precipitation,is_day,wind_speed_10m&hourly=temperature_2m,precipitation_probability,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=auto&forecast_days=2`, ctrl.signal);
+    const horas = f.hourly.time.map((t, i) => ({ t, temp: Math.round(f.hourly.temperature_2m[i]), p: f.hourly.precipitation_probability[i] ?? 0, code: f.hourly.weather_code[i], dia: f.hourly.is_day[i] !== 0 }));
+    const a = f.current;
+    const out = {
+      cidade: nome.replace(/ \(.*\)$/, ""), lugar: nome, horas, em: Date.now(), local: !!local,
+      atual: { temp: Math.round(a.temperature_2m), sens: Math.round(a.apparent_temperature), umid: a.relative_humidity_2m, code: a.weather_code, chuva: a.precipitation, dia: a.is_day !== 0, vento: Math.round(a.wind_speed_10m), hora: a.time },
+      hoje: { min: Math.round(f.daily.temperature_2m_min[0]), max: Math.round(f.daily.temperature_2m_max[0]), p: f.daily.precipitation_probability_max[0] ?? 0, sol: [f.daily.sunrise[0], f.daily.sunset[0]].map(s => String(s).slice(11, 16)) },
+    };
     gravar(key, out);
     return out;
+  } catch (e) {
+    // sem internet: a última previsão real (até 12 h), avisando de quando é
+    if (c && c.atual && Date.now() - c.em < 12 * 3600e3) return { ...c, velho: true };
+    throw e;
   } finally { clearTimeout(to); }
 }
-function climaExemplo(cidade) {
-  const t = todayISO(), horas = [];
-  [t, addDays(t, 1)].forEach((d, di) => { for (let h = 0; h < 24; h++) {
-    const chuva = di === 0 && h >= 17 && h <= 19;
-    horas.push({ t: `${d}T${pad(h)}:00`, temp: Math.round(18 + 6 * Math.sin((h - 9) / 24 * 2 * Math.PI)), p: chuva ? [60, 75, 55][h - 17] : 10, code: chuva ? 61 : h > 9 && h < 16 ? 2 : 1 });
-  } });
-  return { cidade, horas, em: Date.now(), demo: true };
+// Nome do lugar a partir da localização (BigDataCloud, gratuito e sem chave)
+async function nomeDoLugar(lat, lon) {
+  try { const j = await buscarJSON(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=pt`); return j.city || j.locality || j.principalSubdivision || ""; }
+  catch (e) { return ""; }
 }
-const climaHora = (iso, h) => CLIMA && CLIMA.horas.find(x => x.t === `${iso}T${pad(h)}:00`);
+// Pede a localização ao aparelho (o próprio celular pergunta se pode)
+function pedirLocalizacao() {
+  return new Promise((ok, erro) => {
+    if (!navigator.geolocation) return erro(new Error("sem-gps"));
+    navigator.geolocation.getCurrentPosition(async p => {
+      const lat = +p.coords.latitude.toFixed(3), lon = +p.coords.longitude.toFixed(3);
+      const nome = await nomeDoLugar(lat, lon);
+      gravar(K_CLIMA_LOCAL, { lat, lon, nome }); ok({ lat, lon, nome });
+    }, e => erro(new Error(e && e.code === 1 ? "negado" : "gps")), { enableHighAccuracy: false, timeout: 12000, maximumAge: 30 * 60e3 });
+  });
+}
+const TEMPO_TXT = c => c === 0 ? "Céu limpo" : c === 1 ? "Quase sem nuvens" : c === 2 ? "Parcialmente nublado" : c === 3 ? "Nublado" : c <= 48 ? "Neblina" : c <= 57 ? "Garoa" : c <= 67 ? (c === 61 ? "Chuva fraca" : c === 65 ? "Chuva forte" : "Chuva") : c <= 77 ? "Neve" : c <= 82 ? "Pancadas de chuva" : c <= 86 ? "Neve" : "Trovoadas";
+const climaHora = (iso, h) => CLIMA && CLIMA.horas ? CLIMA.horas.find(x => x.t === `${iso}T${pad(h)}:00`) : undefined;
 // Chance de chuva perto de um horário (na hora anterior e na própria hora)
 function chuvaPerto(iso, hora) {
   const h = Math.floor(mins(hora) / 60);
   const cands = [climaHora(iso, h - 1), climaHora(iso, h)].filter(Boolean).sort((a, b) => b.p - a.p);
   return cands[0] && cands[0].p >= 50 ? { p: cands[0].p, h: Number(cands[0].t.slice(11, 13)) } : null;
 }
-const iconeClima = code => code >= 95 ? "storm" : code >= 51 ? "rain" : code >= 2 ? "cloud" : "sun";
+const iconeClima = (code, dia = true) => code >= 95 ? "storm" : code >= 51 ? "rain" : code >= 2 ? "cloud" : dia ? "sun" : "moon";
 
 // Entender frases como "gastei 32 reais na padaria ontem"
 const PALAVRAS_CAT = {
@@ -665,12 +696,12 @@ function pegarReconhecedor() {
 }
 const descartarReconhecedor = () => { const r = MOTOR.rec; if (r) { r._s = null; try { r.abort(); } catch (e) {} } MOTOR.rec = null; MOTOR.rodando = false; };
 
-function useFalaNativa({ onParcial, onFinal, onFalhou, completo }) {
+function useFalaNativa({ onParcial, onFinal, onFalhou, completo, onSilencio }) {
   const [estado, setEstado] = useState("parado"); // parado | ouvindo | falando | erro
   const [erro, setErro] = useState("");
   const [nivel, setNivel] = useState(0);
   const sess = useRef(null);
-  const cb = useRef({}); cb.current = { onParcial, onFinal, onFalhou, completo };
+  const cb = useRef({}); cb.current = { onParcial, onFinal, onFalhou, completo, onSilencio };
   const limparTimers = x => { clearInterval(x.decai); ["vigiaInicio", "vigiaSilencio", "fimFala", "teto", "forca"].forEach(k => clearTimeout(x[k])); };
   const encerrar = x => { if (!x || x.acabou) return false; x.acabou = true; limparTimers(x); if (sess.current === x) sess.current = null; setNivel(0); return true; };
   const falhar = (x, msg, teclado) => {
@@ -685,6 +716,7 @@ function useFalaNativa({ onParcial, onFinal, onFalhou, completo }) {
     if (x.rec && x.rec._s === x) { x.rec._s = null; try { x.rec.abort(); } catch (e) {} }
     const t = x.texto.trim();
     if (t) { setEstado("parado"); cb.current.onFinal(t, x.alts || []); }
+    else if (!msgVazio && cb.current.onSilencio && cb.current.onSilencio()) setEstado("parado");
     else { setErro(msgVazio || "Não ouvi nada. Toque na Bolinha e fale de novo."); setEstado("erro"); vibrar("aviso"); }
   };
   // pede para o aparelho fechar a frase; se ele demorar, fica com o que já chegou
@@ -837,12 +869,12 @@ async function montarWav(x, manual) {
   return new Uint8Array(buf);
 }
 
-function useFalaServidor({ onFinal, onFalhou, prompt }) {
+function useFalaServidor({ onFinal, onFalhou, prompt, onSilencio }) {
   const [estado, setEstado] = useState("parado"); // parado | ouvindo | falando | processando | erro
   const [erro, setErro] = useState("");
   const [nivel, setNivel] = useState(0);
   const atual = useRef(null);
-  const cb = useRef({}); cb.current = { onFinal, onFalhou, prompt };
+  const cb = useRef({}); cb.current = { onFinal, onFalhou, prompt, onSilencio };
   // fecharMic: true quando a fala acabou de vez (Cancelar, saiu do app); senão o microfone fica aberto mais um pouco
   const soltar = (x, fecharMicAgora) => {
     if (x && !x.solto) {
@@ -857,7 +889,8 @@ function useFalaServidor({ onFinal, onFalhou, prompt }) {
   const terminar = async (x, manual) => {
     if (!x || x.encerrado) return; x.encerrado = true;
     soltar(x); setNivel(0);
-    if (!x.falou && !manual) return falhar(x, "Não ouvi nada. Toque na Bolinha e fale de novo.");
+    // ninguém falou: numa conversa, a Bolinha só fica esperando (sem mensagem de erro)
+    if (!x.falou && !manual) { if (cb.current.onSilencio && cb.current.onSilencio()) { setEstado("parado"); return; } return falhar(x, "Não ouvi nada. Toque na Bolinha e fale de novo."); }
     setEstado("processando");
     const wav = x.chunks.length ? await montarWav(x, manual) : null;
     if (x.cancelado) return;
@@ -1108,6 +1141,52 @@ async function lerComprovante(file) {
   const data = /^\d{4}-\d{2}-\d{2}$/.test(d.data || "") && d.data <= todayISO() && d.data >= addDays(todayISO(), -400) ? d.data : todayISO();
   return { tipo, valor, cat, desc: marca ? marca.nome : tituloCurto(desc0), data };
 }
+
+/* ---------- A Bolinha responde falando ----------
+   Voz do próprio aparelho (grátis e sem internet), escolhendo a mais natural que existir:
+   "Natural/Online" no Edge, Google no Android e no Chrome, "Melhorada/Premium" no iPhone.
+   O texto é preparado para soar falado: "R$ 286,40" vira "286 reais e 40 centavos", "21/10" vira "21 de outubro". */
+const K_FALA_RESP = "agenda-fala-resposta"; // false: as respostas só aparecem escritas
+const falaLigada = () => lerJSON(K_FALA_RESP, true) !== false && "speechSynthesis" in window;
+const VOZ_RESP = { voz: null };
+function escolherVoz() {
+  const s = window.speechSynthesis; if (!s) return null;
+  const vs = s.getVoices(); if (!vs.length) return null;
+  const br = vs.filter(v => /^pt[-_]BR/i.test(v.lang)), lista = br.length ? br : vs.filter(v => /^pt/i.test(v.lang));
+  const nota = v => (/natural|neural|online|premium|enhanced|melhorad|aprimorad/i.test(v.name) ? 20 : 0) + (/google/i.test(v.name) ? 12 : 0)
+    + (/francisca|thalita|luciana|vit[oó]ria|camila|fernanda/i.test(v.name) ? 3 : 0) + (v.localService ? 0 : 2) + (v.default ? 1 : 0);
+  return lista.sort((a, b) => nota(b) - nota(a))[0] || null;
+}
+try { if (window.speechSynthesis) { const f = () => { VOZ_RESP.voz = escolherVoz(); }; f(); window.speechSynthesis.addEventListener("voiceschanged", f); } } catch (e) {}
+function paraFala(t) {
+  return String(t || "")
+    .replace(/R\$\s?([\d.]+),(\d{2})/g, (m, r, c) => `${r.replace(/\./g, "")} reais${c === "00" ? "" : ` e ${Number(c)} centavos`}`)
+    .replace(/R\$\s?([\d.]+)/g, (m, r) => `${r.replace(/\./g, "")} reais`)
+    .replace(/\b(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?\b/g, (m, d, mm) => (Number(mm) >= 1 && Number(mm) <= 12 ? `${Number(d)} de ${MES_LONGO[Number(mm) - 1]}` : m))
+    .replace(/(\d+)\s?%/g, "$1 por cento").replace(/\bhs?\b/g, "horas")
+    .replace(/[*_#`>]/g, "").replace(/\s+/g, " ").trim();
+}
+// Fala em frases curtas (o Chrome corta falas longas no meio). Devolve uma função que para na hora.
+function falarResposta(texto, aoFim) {
+  const s = window.speechSynthesis;
+  if (!s) { if (aoFim) aoFim(); return () => {}; }
+  try { s.cancel(); } catch (e) {}
+  const frases = paraFala(texto).match(/[^.!?;]+[.!?;]*/g) || [];
+  let parou = false, i = 0;
+  const prox = () => {
+    if (parou) return;
+    if (i >= frases.length) { if (aoFim) aoFim(); return; }
+    const u = new SpeechSynthesisUtterance(frases[i++].trim());
+    u.lang = "pt-BR"; if (VOZ_RESP.voz) u.voice = VOZ_RESP.voz; u.rate = 1.03; u.pitch = 1;
+    u.onend = prox; u.onerror = () => prox();
+    s.speak(u);
+  };
+  prox();
+  return () => { parou = true; try { s.cancel(); } catch (e) {} };
+}
+// o iPhone só deixa falar depois de um toque: uma fala vazia, no toque, libera as próximas
+const destravarFala = () => { try { const s = window.speechSynthesis; if (s && !destravarFala.ok) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; s.speak(u); destravarFala.ok = true; } } catch (e) {} };
+const FIM_CONVERSA = /^\s*(obrigad[oa]|valeu|tchau|so isso|era so isso|nada nao|nao obrigad[oa]|beleza|ta bom|tudo bem|ok|certo|entendi)\b[\s\S]{0,20}$/;
 
 // Avisos: banner dentro do app + som + vibração; notificação do sistema quando o aparelho permitir
 let audioCtx = null;
@@ -1413,21 +1492,64 @@ function Money({ v, cls = "" }) {
   return <span className={"mny " + cls}><span className="cur">R$</span>{neg ? "−" : ""}{Number(i).toLocaleString("pt-BR")}<span className="cents">,{c}</span></span>;
 }
 // Clima de agora + chuva perto da próxima sessão
+const horaDe = ms => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 function WeatherChip({ cidade, act, sessao }) {
-  if (!cidade) return <button className="wx btn-like" onClick={() => act.openSettings("dados")}><I.cloud /><span>Defina sua cidade para ver a chuva</span></button>;
-  if (!CLIMA) return <span className="wx"><I.cloud /><span className="r" style={{ color: "var(--muted)" }}>Buscando o clima…</span></span>;
-  const now = new Date(), agora = climaHora(todayISO(), now.getHours());
-  if (!agora) return null;
-  const Ic = I[iconeClima(agora.code)];
+  if (!cidade && !climaLocal()) return <button className="wx btn-like" onClick={() => act.openSettings("dados")}><I.cloud /><span>Defina sua cidade para ver a chuva</span></button>;
+  if (CLIMA === "erro") return <button className="wx btn-like" onClick={act.abrirClima}><I.cloud /><span className="r" style={{ color: "var(--muted)" }}>Clima indisponível agora · toque para tentar</span></button>;
+  if (!CLIMA || !CLIMA.atual) return <span className="wx"><I.cloud /><span className="r" style={{ color: "var(--muted)" }}>Buscando o clima…</span></span>;
+  const now = new Date(), a = CLIMA.atual;
+  const Ic = I[iconeClima(a.code, a.dia)];
   const ch = sessao ? chuvaPerto(todayISO(), sessao.time) : null;
   let prox = null;
   if (!ch) for (let h = now.getHours() + 1; h < 24; h++) { const x = climaHora(todayISO(), h); if (x && x.p >= 50) { prox = { p: x.p, h }; break; } }
   return (
-    <span className="wx" title={CLIMA.cidade}>
-      <Ic /><span className="t num">{agora.temp}°</span>
-      <span className="r">{ch ? `chuva ${ch.p}% perto das ${ch.h}h` : prox ? `chuva ${prox.p}% às ${prox.h}h` : `sem chuva hoje · ${CLIMA.cidade}`}</span>
-      {CLIMA.demo && <span className="ex">exemplo</span>}
-    </span>
+    <button className="wx btn-like ok" onClick={act.abrirClima} aria-label={`Clima: ${a.temp} graus, ${TEMPO_TXT(a.code)}. Ver a previsão`}>
+      <Ic /><span className="t num">{a.temp}°</span>
+      <span className="r">{a.code >= 51 && a.code < 95 ? `chovendo agora · ${CLIMA.cidade}` : ch ? `chuva ${ch.p}% perto das ${ch.h}h` : prox ? `chuva ${prox.p}% às ${prox.h}h` : `sem chuva hoje · ${CLIMA.cidade}`}</span>
+      {CLIMA.velho && <span className="ex">{horaDe(CLIMA.em)}</span>}
+    </button>
+  );
+}
+
+// Previsão em detalhe: agora, o dia e as próximas 12 horas. Dá para trocar para a localização do aparelho.
+function ClimaSheet({ clima, cidade, act, onClose }) {
+  const [busy, setBusy] = useState(false), [erro, setErro] = useState("");
+  const usarLocal = async () => {
+    setBusy(true); setErro("");
+    try { await pedirLocalizacao(); await act.recarregarClima(); }
+    catch (e) { setErro(e.message === "negado" ? "A localização não foi liberada. Libere nas configurações do aparelho, ou continue com a cidade do perfil." : "Não consegui pegar a localização agora. Tente de novo em instantes."); }
+    setBusy(false);
+  };
+  const usarCidade = async () => { try { localStorage.removeItem(K_CLIMA_LOCAL); } catch (e) {} setBusy(true); await act.recarregarClima(); setBusy(false); };
+  const ok = clima && clima !== "erro" && clima.atual;
+  const a = ok ? clima.atual : null, Ic = a ? I[iconeClima(a.code, a.dia)] : I.cloud;
+  const h0 = `${todayISO()}T${pad(new Date().getHours())}:00`;
+  const prox = ok ? clima.horas.filter(h => h.t >= h0).slice(0, 12) : [];
+  return (
+    <Sheet title={ok ? clima.lugar || clima.cidade : "Clima"} sub={ok ? `Open-Meteo · atualizado às ${horaDe(clima.em)}${clima.velho ? " · sem internet agora" : ""}` : "Previsão indisponível agora"} onClose={onClose}>
+      {ok ? <>
+        <div className="clima-agora">
+          <span className="clima-ic"><Ic /></span>
+          <b className="num">{a.temp}°</b>
+          <span className="clima-tx"><b>{TEMPO_TXT(a.code)}</b><small>Sensação de {a.sens}° · umidade {a.umid}% · vento {a.vento} km/h</small></span>
+        </div>
+        <div className="clima-dia">
+          <span><small>Hoje</small><b>{clima.hoje.min}° a {clima.hoje.max}°</b></span>
+          <span><small>Chuva</small><b>até {clima.hoje.p}%</b></span>
+          <span><small>Sol</small><b>{clima.hoje.sol[0]} – {clima.hoje.sol[1]}</b></span>
+        </div>
+        <div className="clima-horas" role="list" aria-label="Próximas horas">
+          {prox.map((h, i) => { const HI = I[iconeClima(h.code, h.dia)]; return (
+            <div key={h.t} role="listitem" className={h.p >= 50 ? "chuva" : ""}><small>{i === 0 ? "Agora" : `${h.t.slice(11, 13)}h`}</small><HI /><b className="num">{h.temp}°</b><small>{h.p}%</small></div>
+          ); })}
+        </div>
+      </> : <div className="empty">Não consegui buscar a previsão. Confira a internet e tente de novo.</div>}
+      {erro && <div className="error">{erro}</div>}
+      {ok && clima.local
+        ? <button className="btn ghost" disabled={busy} onClick={usarCidade}>{cidade ? `Usar a cidade do perfil (${cidade})` : "Usar a cidade do perfil"}</button>
+        : <button className="btn ghost" disabled={busy} onClick={usarLocal}><I.target /> {busy ? "Buscando…" : "Usar minha localização (mais preciso)"}</button>}
+      {!ok && <button className="btn mode" disabled={busy} onClick={async () => { setBusy(true); await act.recarregarClima(); setBusy(false); }}>Tentar de novo</button>}
+    </Sheet>
   );
 }
 
@@ -1492,6 +1614,57 @@ function CalBadge({ iso }) {
 const semMovimento = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 const SAIDA_MS = 200;
 
+/* ---------- Painéis com jeito de app nativo ----------
+   - O botão (ou gesto) de voltar do Android fecha o painel de cima, e não o app.
+   - Com um painel aberto, a tela de trás recua um pouco (como no iPhone) e a barra de status escurece junto.
+   - A cor da barra de status acompanha o tema escolhido no app (claro ou escuro). */
+// Uma só entrada "de guarda" no histórico enquanto houver algo aberto: o voltar fecha a camada de cima
+// e a guarda volta se ainda sobrar alguma. (Uma entrada por camada dá errado quando uma fecha e outra abre juntas.)
+const CAMADAS = [];
+let ignorarVolta = 0, guarda = false, tVolta = 0;
+const vivas = () => CAMADAS.filter(c => !c.voltou).length;
+const porGuarda = () => { if (guarda) return; try { history.pushState({ alvenaGuarda: 1 }, ""); guarda = true; } catch (e) {} };
+function corDaBarra() {
+  try {
+    // a cor de fundo do tema em uso (variável --bg), em "#rrggbb"
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+    const m = /^#([\da-f]{6})$/i.test(v) ? [0, 2, 4].map(i => parseInt(v.slice(1 + i, 3 + i), 16)) : (v.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    if (m.length < 3) return;
+    const k = CAMADAS.some(c => c.escurece) ? .42 : 1;
+    const hex = "#" + m.map(x => Math.round(x * k).toString(16).padStart(2, "0")).join("");
+    document.querySelectorAll('meta[name="theme-color"]').forEach(el => { el.setAttribute("content", hex); el.removeAttribute("media"); });
+  } catch (e) {}
+}
+function mudouCamadas() {
+  const raiz = document.documentElement, recua = CAMADAS.some(c => c.recua);
+  if (recua && !raiz.classList.contains("com-camada")) raiz.style.setProperty("--recuo-y", `${Math.round(window.scrollY + window.innerHeight / 2)}px`);
+  raiz.classList.toggle("com-camada", recua);
+  corDaBarra();
+  clearTimeout(tVolta);
+  if (vivas()) porGuarda();
+  // tudo fechou pelo app (X, arrastar, salvar): tira a guarda, mas só se nada abrir logo em seguida
+  else if (guarda) tVolta = setTimeout(() => { if (!vivas() && guarda) { guarda = false; ignorarVolta++; try { history.back(); } catch (e) { ignorarVolta--; } } }, 80);
+}
+window.addEventListener("popstate", () => {
+  if (ignorarVolta > 0) { ignorarVolta--; return; }
+  if (!guarda) return; // não é nosso: é o voltar normal (sair do app)
+  guarda = false;
+  const c = [...CAMADAS].reverse().find(x => !x.voltou); if (!c) return;
+  c.voltou = true;
+  // fechar() devolve false quando só voltou um passo (ex.: de uma seção do Perfil para o Perfil): a camada continua
+  if (c.fechar() === false) c.voltou = false;
+  setTimeout(() => { if (vivas()) porGuarda(); }, 0);
+});
+function useCamada(fechar, { recua = false, escurece = true } = {}) {
+  const ref = useRef(fechar); ref.current = fechar;
+  useEffect(() => {
+    const c = { fechar: () => ref.current(), voltou: false, recua, escurece };
+    CAMADAS.push(c); mudouCamadas();
+    return () => { const i = CAMADAS.indexOf(c); if (i >= 0) CAMADAS.splice(i, 1); mudouCamadas(); };
+  }, []);
+}
+function Camada({ onFechar, recua, escurece }) { useCamada(onFechar, { recua, escurece }); return null; }
+
 function Sheet({ title, sub, onClose, children }) {
   // Arrastar para baixo pela alça (ou pelo título) fecha, igual aos apps do celular.
   // Fechar pelo X, tocando fora ou com Esc também anima a saída (desce e o fundo some).
@@ -1521,9 +1694,31 @@ function Sheet({ title, sub, onClose, children }) {
       scrim.current && scrim.current.style.removeProperty("--scrim-o");
     }
   };
-  const arrasto = { onTouchStart: ini, onTouchMove: mov, onTouchEnd: fim, onTouchCancel: fim };
+  // Arrastar para baixo fecha: pela alça e pelo título sempre; pelo resto do painel, quando ele já está no topo
+  // (como nos apps do celular). Arrastar para os lados, campos e listas que rolam de lado não contam.
+  const toque = useRef(null);
+  const tIni = e => {
+    const s = ref.current; if (!s) return;
+    const naAlca = !!e.target.closest(".grab, .sheet-head");
+    if (!naAlca && (s.scrollTop > 0 || e.target.closest("input, textarea, select, [contenteditable], .clima-horas, .chips, .cats, .abas, .vozb-chat"))) { toque.current = null; return; }
+    toque.current = { y: e.touches[0].clientY, x: e.touches[0].clientX, vivo: naAlca };
+    if (naAlca) ini(e);
+  };
+  const tMov = e => {
+    const a = toque.current; if (!a) return;
+    if (!a.vivo) {
+      const dy = e.touches[0].clientY - a.y, dx = e.touches[0].clientX - a.x;
+      if (dy < -4 || Math.abs(dx) > Math.max(10, dy)) { toque.current = null; return; }
+      if (dy < 8 || ref.current.scrollTop > 0) return;
+      a.vivo = true; ini({ touches: [{ clientY: e.touches[0].clientY }] });
+    }
+    mov(e);
+  };
+  const tFim = () => { const a = toque.current; toque.current = null; if (a && a.vivo) fim(); };
   const sairRef = useRef(sair); sairRef.current = sair;
+  useCamada(() => sairRef.current(), { recua: true });
   useEffect(() => {
+    vibrar("toque");
     const k = e => e.key === "Escape" && sairRef.current();
     window.addEventListener("keydown", k);
     const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
@@ -1531,10 +1726,10 @@ function Sheet({ title, sub, onClose, children }) {
   }, []);
   return (
     <div className="scrim" ref={scrim} onClick={sair}>
-      <div className="sheet" ref={ref} role="dialog" aria-modal="true" aria-label={title || "Painel"} onClick={e => e.stopPropagation()}>
-        <div className="grab" {...arrasto} />
+      <div className="sheet" ref={ref} role="dialog" aria-modal="true" aria-label={title || "Painel"} onClick={e => e.stopPropagation()} onTouchStart={tIni} onTouchMove={tMov} onTouchEnd={tFim} onTouchCancel={tFim}>
+        <div className="grab" />
         {title && (
-          <div className="sheet-head" {...arrasto}>
+          <div className="sheet-head">
             <div><h2>{title}</h2>{sub && <div className="sub">{sub}</div>}</div>
             <button className="sheet-x" onClick={sair} aria-label="Fechar"><I.x /></button>
           </div>
@@ -1553,6 +1748,7 @@ function Confirmar({ titulo, texto, acao = "Confirmar", icon, perigo = true, onS
   const sair = () => { if (saiu.current) return; saiu.current = true; setSaindo(true); setTimeout(onFim, semMovimento() ? 0 : 160); };
   const sim = () => { if (saiu.current) return; vibrar("aviso"); onSim(); sair(); };
   const sairRef = useRef(sair); sairRef.current = sair;
+  useCamada(() => sairRef.current());
   useEffect(() => {
     try { nao.current && nao.current.focus({ preventScroll: true }); } catch (e) {}
     // Esc fecha só a janela, não o painel que está por baixo
@@ -1872,6 +2068,7 @@ function HomeTab({ db, conta, now, act, tema }) {
       <div className="cols">
         <div className="col">
           <Talk falas={falas} />
+          <ProximaConquista act={act} trilhas={["rotina", "consultorio", "metas", "app", "seguranca"]} />
           <div className="small-acts">
             <button className="chip-btn" onClick={act.agora}><I.target />Só o agora</button>
             <button className="chip-btn" onClick={act.fecharDia}><I.moon />{(db.fechados || {})[t] ? "Dia fechado ✓" : "Fechar o dia"}</button>
@@ -2011,7 +2208,7 @@ function Timeline({ db, iso, now, act }) {
       <div className="tl-row"><span /><span className="tl-cap"><I.sun /></span><span /></div>
       {feriado(iso) && <div className="tl-row"><span /><span /><div className="hol-note"><I.flag />Feriado: {feriado(iso).name}{feriado(iso).fac ? " (ponto facultativo)" : ""}</div></div>}
       {itens.length === 0 && (
-        <div className="tl-row"><span /><span /><div className="tl-empty"><b>Dia livre</b>Nada marcado para {diaCurto(iso)}.<br /><button className="ghost-chip" onClick={act.novoPaciente}><I.plus /> Novo {TERMO.s}</button></div></div>
+        <div className="tl-row"><span /><span /><div className="tl-empty com-ilustra"><Ilustra n="cafe" /><b>Dia livre</b>Nada marcado para {diaCurto(iso)}.<br /><button className="ghost-chip" onClick={act.novoPaciente}><I.plus /> Novo {TERMO.s}</button></div></div>
       )}
       {linhas.map((l, k) => {
         if (l.tipo === "gap") return <div className="tl-row" key={k}><span /><span /><div className="tl-gap">Intervalo livre · {duracao(l.dur)}</div></div>;
@@ -2211,7 +2408,7 @@ function PatientsTab({ db, act, tema, vista = "ativos", setVista }) {
         </>}
         {vista === "ativos" && db.patients.length > 3 && <label className="search"><I.search /><input id="busca" value={busca} onChange={e => setBusca(e.target.value)} placeholder={`Procurar ${TERMO.s}`} aria-label={`Procurar ${TERMO.s}`} /></label>}
         {vista === "ativos" && <div className="panel">
-          {ativos.length === 0 && <div className="empty"><b>{busca ? "Ninguém com esse nome" : `Nenhum ${TERMO.s} ainda`}</b>{busca ? "Confira a grafia." : "Toque no + para cadastrar o primeiro."}</div>}
+          {ativos.length === 0 && <div className={"empty" + (busca ? "" : " com-ilustra")}>{!busca && <Ilustra n="arquivo" />}<b>{busca ? "Ninguém com esse nome" : `Nenhum ${TERMO.s} ainda`}</b>{busca ? "Confira a grafia." : "Toque no + para cadastrar o primeiro."}</div>}
           {ativos.map(p => {
             const ab = sessoesAbertas(db, p.id).length;
             return (
@@ -2453,7 +2650,7 @@ function FinanceTab({ db, act, tema, meta }) {
                 <button key={v} role="tab" aria-selected={filtro === v} className={"fchip" + (filtro === v ? " on" : "")} onClick={() => setFiltro(v)}>{l}</button>
               ))}
             </div>
-            {filtro === "abertas" && (abertas.length === 0 ? <div className="empty"><b>Tudo em dia</b>Ninguém devendo agora.</div> : abertas.map(c => (
+            {filtro === "abertas" && (abertas.length === 0 ? <div className="empty com-ilustra"><Ilustra n="trofeu" /><b>Tudo em dia</b>Ninguém devendo agora.</div> : abertas.map(c => (
               <button key={c.id} className="txn" onClick={() => act.openCharge(c.id)}>
                 <span className="txn-av">{iniciais(pac(c.patientId).name)}<i className="cdot" style={{ background: corDe(pac(c.patientId)).cor }} /></span>
                 <span className="mid"><span className="nm">{pac(c.patientId).name}</span><span className="sb">{c.sessionIds.length > 1 ? `Pacote de ${c.sessionIds.length}` : "1 sessão"} · desde {dm(c.createdAt)}</span></span>
@@ -2616,6 +2813,80 @@ function Monograma({ nome, className }) {
   return <span className={className + " mono"} style={{ background: cor }} title={nome} aria-hidden="true"><b>{ini}</b></span>;
 }
 
+/* ---------- Ilustrações 3D e conquistas ----------
+   Cada ilustração tem um sentido fixo no app: troféu = conquistas e metas, dinheiro = caixinhas e tetos,
+   arquivo = consultório organizado, cadeados = privacidade, café = rotina leve e dia livre, iPad = o app em qualquer tela. */
+const Ilustra = ({ n, className = "", alt = "" }) => <img className={"ilustra " + className} src={`${BASE}ilustras/${n}.webp`} alt={alt} loading="lazy" decoding="async" draggable="false" />;
+const ajudaConquistas = () => ({ todayISO, fromISO, pad, soma, liquidoMes });
+
+// Cartão do Início: a conquista que está mais perto
+function ProximaConquista({ act, trilhas }) {
+  const c = proximaConquista(act.conquistas || [], trilhas);
+  if (!c) return null;
+  return (
+    <button className="conq-prox" onClick={() => act.openSettings("conquistas")}>
+      <Ilustra n={c.ilustra} className="conq-prox-img" />
+      <span className="conq-prox-tx">
+        <small>Próxima conquista · {c.meta > 1 ? `${c.atual} de ${c.meta}` : "quase lá"}</small>
+        <b>{c.titulo}</b>
+        <span className="conq-bar" aria-hidden="true"><i style={{ width: `${Math.round(c.pct * 100)}%` }} /></span>
+        <small>{c.texto}</small>
+      </span>
+    </button>
+  );
+}
+
+// Comemoração: a ilustração entra com brilho, confete cai e o celular vibra (sem movimento se o aparelho pedir)
+function Celebra({ c, total, onFim, onVer }) {
+  const tela = useRef(null);
+  const nv = nivelDe(total);
+  const fimRef = useRef(onFim); fimRef.current = onFim;
+  useCamada(() => fimRef.current());
+  useEffect(() => {
+    vibrar("ok");
+    const k = e => { if (e.key === "Escape") fimRef.current(); };
+    window.addEventListener("keydown", k);
+    const cv = tela.current;
+    if (semMovimento() || !cv) return () => window.removeEventListener("keydown", k);
+    const g = cv.getContext("2d"), dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = cv.width = window.innerWidth * dpr, H = cv.height = window.innerHeight * dpr;
+    const cores = ["#4A62FF", "#8B6CFF", "#3DD68C", "#FFB648", "#FF6B8B", "#38C6E8"];
+    const ps = Array.from({ length: 150 }, () => ({ x: W / 2 + (Math.random() - .5) * W * .25, y: H * .4, vx: (Math.random() - .5) * 20 * dpr, vy: (-Math.random() * 17 - 5) * dpr, r: (4 + Math.random() * 5) * dpr, rot: Math.random() * 6, vr: (Math.random() - .5) * .3, c: cores[(Math.random() * cores.length) | 0], fita: Math.random() < .6 }));
+    let raf, ult = 0; const t0 = performance.now();
+    const passo = t => {
+      const dt = ult ? Math.min(2, (t - ult) / 16.7) : 1; ult = t;
+      const vida = (t - t0) / 2800;
+      g.clearRect(0, 0, W, H);
+      g.globalAlpha = Math.max(0, 1 - vida * vida);
+      ps.forEach(p => {
+        p.vy += .42 * dpr * dt; p.vx *= .985; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.fillStyle = p.c;
+        if (p.fita) g.fillRect(-p.r, -p.r * .35, p.r * 2, p.r * .7); else { g.beginPath(); g.arc(0, 0, p.r * .55, 0, 7); g.fill(); }
+        g.restore();
+      });
+      if (vida < 1) raf = requestAnimationFrame(passo);
+    };
+    raf = requestAnimationFrame(passo);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("keydown", k); };
+  }, []);
+  return createPortal(
+    <div className="festa" onClick={onFim} role="presentation">
+      <canvas ref={tela} className="festa-confete" aria-hidden="true" />
+      <div className="festa-box" role="alertdialog" aria-modal="true" aria-labelledby="festa-t" aria-describedby="festa-d" onClick={e => e.stopPropagation()}>
+        <div className="festa-arte"><i className="festa-luz" aria-hidden="true" /><Ilustra n={c.ilustra} className="festa-img" /></div>
+        <span className="festa-rot">Conquista desbloqueada</span>
+        <h3 id="festa-t">{c.titulo}</h3>
+        <p id="festa-d">{TRILHAS[c.trilha].nome} · {total} {total === 1 ? "conquista" : "conquistas"} · nível {nv.nome}</p>
+        <div className="alerta-acoes">
+          <button className="alerta-btn" onClick={onVer}>Ver todas</button>
+          <button className="alerta-btn forte" onClick={onFim} autoFocus>Continuar</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo }) {
   const [ativo, setAtivo] = useState(false);
   const [fase, setFase] = useState("ouvindo"); // ouvindo | teclado | contando | faltando
@@ -2647,14 +2918,35 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const [resposta, setResposta] = useState("");
   const vez = useRef(0); // cada frase nova invalida uma resposta atrasada da IA
   const autoCont = useRef(false); // já reabriu o microfone sozinho para completar esta frase
+  // Conversa com a Bolinha: as falas ficam na tela como num chat, e ela lembra do que já foi dito
+  const [conversa, setConversa] = useState([]);
+  const conversaRef = useRef([]); conversaRef.current = conversa;
+  const [falandoResp, setFalandoResp] = useState(false);
+  const [comSom, setComSom] = useState(() => falaLigada());
+  const pararFala = useRef(() => {});
+  const ativoRef = useRef(false);
+  const chatRef = useRef(null);
+  const addFala = (quem, texto) => setConversa(c => [...c, { id: uid(), quem, texto }].slice(-12));
+  const calar = () => { pararFala.current(); pararFala.current = () => {}; setFalandoResp(false); };
+  const responderFalando = (texto, depois) => {
+    if (!comSom || !falaLigada()) { if (depois) depois(); return; }
+    if (ehIOS()) fecharMic(); // com o microfone aberto, o iPhone toca a voz baixinho, no alto-falante de ligação
+    setFalandoResp(true);
+    pararFala.current = falarResposta(texto, () => { setFalandoResp(false); if (depois) depois(); });
+  };
   const pronto = () => { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); };
-  const perguntar = async (t, minha) => {
+  const perguntar = async (t, minha, deVoz) => {
+    const hist = conversaRef.current.slice(-8).map(m => ({ quem: m.quem, texto: m.texto }));
+    addFala("eu", t); setTexto(""); setRes(null);
     setFase("pensando"); setAviso("");
     try {
-      const j = await chamarIA("/perguntar", { pergunta: t, contexto: contextoPergunta(db, usaPessoal) }, 25000);
+      const j = await chamarIA("/perguntar", { pergunta: t, contexto: contextoPergunta(db, usaPessoal), historico: hist }, 25000);
       if (vez.current !== minha) return;
-      setResposta(String(j.resposta || "").trim()); setFase("resposta"); vibrar("ok");
+      const resp = String(j.resposta || "").trim();
+      addFala("ela", resp); setResposta(resp); setFase("resposta"); vibrar("ok");
       if (tecRef.current) tecRef.current.blur();
+      // perguntou falando: depois da resposta, o microfone reabre para a próxima pergunta, como numa conversa
+      responderFalando(resp, () => { if (deVoz && vez.current === minha && ativoRef.current) comecar(false, null, true); });
     } catch (e) { if (vez.current !== minha) return; setAviso(msgIA(e)); setFase("faltando"); vibrar("aviso"); }
   };
   const concluir = async (t0, alts, deVoz) => {
@@ -2662,6 +2954,14 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     const t = alts ? melhor(t0, alts) : t0;
     aplicar(t); setAviso(""); setResposta("");
     if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la)\b/.test(semAcento(t))) { fechar(); return; }
+    // "obrigado", "tchau": encerra a conversa com educação
+    if (conversaRef.current.length && FIM_CONVERSA.test(semAcento(t))) {
+      addFala("eu", t); setTexto(""); setRes(null);
+      const tchau = "Por nada! Se precisar, é só me chamar.";
+      addFala("ela", tchau); setFase("resposta");
+      responderFalando(tchau, () => { if (vez.current === minha) setTimeout(() => { if (vez.current === minha) fechar(); }, 600); });
+      return;
+    }
     const r = entender(t);
     if (okDe(r)) {
       // entendeu, mas ficou com cara de chute (sem saber onde foi, ou sobrou valor na frase): confere com a IA
@@ -2671,9 +2971,10 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
       catch (e) { if (vez.current !== minha) return; }
       return pronto();
     }
-    // pergunta ("quanto gastei de uber?"): quem responde é a IA, com os seus números
-    if (ehPergunta(t)) {
-      if (iaDisponivel()) return perguntar(t, minha);
+    // pergunta ("quanto gastei de uber?"), ou qualquer coisa no meio de uma conversa ("e em setembro?"):
+    // quem responde é a IA, com os seus números
+    if (ehPergunta(t) || (conversaRef.current.length && t.trim().split(/\s+/).length >= 2)) {
+      if (iaDisponivel()) return perguntar(t, minha, deVoz);
       setAviso("Para responder perguntas eu preciso de internet."); setFase("faltando"); vibrar("aviso"); return;
     }
     // o app não entendeu sozinho: pede ajuda à IA antes de desistir ("torrei 45 conto no boteco")
@@ -2682,7 +2983,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
       try {
         const r2 = await entenderIA(t, db);
         if (vez.current !== minha) return;
-        if (r2 && r2.tipo === "pergunta") return perguntar(t, minha);
+        if (r2 && r2.tipo === "pergunta") return perguntar(t, minha, deVoz);
         if (r2 && (r2.tipo === "consult" || usaPessoal)) { setRes(r2); return pronto(); }
       } catch (e) { if (vez.current !== minha) return; }
     }
@@ -2697,32 +2998,34 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
       setTimeout(() => { if (vez.current === minha) comecar(true, msg); }, 450);
     }
   };
-  // resposta lida em voz alta (voz do próprio aparelho, sem internet)
-  const ouvir = () => {
-    try {
-      const s = window.speechSynthesis; if (!s || !resposta) return;
-      s.cancel(); const u = new SpeechSynthesisUtterance(resposta.replace(/R\$\s?/g, "")); u.lang = "pt-BR"; u.rate = 1.05; s.speak(u);
-    } catch (e) {}
-  };
+  // tocar num balão da Bolinha: ouve de novo (tocar de novo enquanto fala: para)
+  const ouvirEsta = texto => { if (falandoResp) return calar(); pararTudoMenosConversa(); destravarFala(); setFalandoResp(true); pararFala.current = falarResposta(texto, () => setFalandoResp(false)); };
+  const pararTudoMenosConversa = () => { nat.cancelar(); srv.cancelar(); };
+  const trocarSom = () => { const v = !comSom; setComSom(v); gravar(K_FALA_RESP, v); if (!v) calar(); };
+  // silêncio quando o microfone reabriu numa conversa: ela só espera, sem erro
+  const silencio = () => { if (!conversaRef.current.length) return false; setFase("resposta"); return true; };
   const irTeclado = () => { setFase("teclado"); setTimeout(() => tecRef.current && tecRef.current.focus(), 60); };
   const nat = useFalaNativa({
     onParcial: t => aplicar(comBase(t)),
-    onFinal: (t, alts) => concluir(t, alts || []),
+    onFinal: (t, alts) => concluir(t, alts || [], true),
     onFalhou: irTeclado,
     completo: t => okDe(entender(comBase(t))),
+    onSilencio: silencio,
   });
   // dica para o Whisper: como as frases costumam ser, os nomes dos pacientes (só o primeiro nome)
   // e as lojas que você mais usa (assim ele escreve "Drogasil" e não "droga sil")
   const promptVoz = useMemo(() => dicaWhisper(db), [db.patients, db.pessoal && db.pessoal.lanc]);
-  const srv = useFalaServidor({ onFinal: t => concluir(t, [], true), onFalhou: irTeclado, prompt: promptVoz });
+  const srv = useFalaServidor({ onFinal: t => concluir(t, [], true), onFalhou: irTeclado, prompt: promptVoz, onSilencio: silencio });
   const pelaRede = useRef(false);
   const fala = pelaRede.current ? srv : nat;
-  const pararTudo = () => { nat.cancelar(); srv.cancelar(); vez.current++; try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} };
+  const pararTudo = () => { nat.cancelar(); srv.cancelar(); vez.current++; calar(); };
   const abrirTeclado = () => { pararTudo(); setAviso(""); setResposta(""); setFase("teclado"); if (tecRef.current) { tecRef.current.value = ""; tecRef.current.focus(); } };
-  // chamado direto no toque (o iPhone só libera microfone e teclado dentro do toque)
-  // continuar: completa a frase anterior; avisoFixo: mantém o aviso do que faltou enquanto ouve
-  const comecar = (continuar, avisoFixo) => {
+  // chamado direto no toque (o iPhone só libera microfone, teclado e voz dentro do toque)
+  // continuar: completa a frase anterior; avisoFixo: mantém o aviso do que faltou enquanto ouve;
+  // automatico: reaberto sozinho depois de uma resposta (não é um toque)
+  const comecar = (continuar, avisoFixo, automatico) => {
     clearTimeout(ocioso.current);
+    if (!automatico) destravarFala();
     base.current = continuar === true && textoRef.current ? textoRef.current : "";
     if (!base.current) { setTexto(""); setRes(null); }
     if (continuar !== true) autoCont.current = false;
@@ -2734,11 +3037,12 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     if (tecRef.current) tecRef.current.blur();
     if (!(rede ? srv : nat).iniciar()) abrirTeclado();
   };
-  const fechar = () => { pararTudo(); fecharMic(); clearTimeout(ocioso.current); base.current = ""; autoCont.current = false; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); setResposta(""); };
+  const fechar = () => { pararTudo(); fecharMic(); clearTimeout(ocioso.current); base.current = ""; autoCont.current = false; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); setResposta(""); setConversa([]); };
   const salvar = () => { const r = res; fechar(); if (!r) return; if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens); };
   const tocar = () => {
     if (!ativo) return comecar();
     if (fase === "contando") return salvar();
+    if (falandoResp) { calar(); return comecar(); } // interromper a Bolinha e já perguntar
     if (fase === "pensando") return; // a IA está pensando: um segundo toque não atrapalha
     if (fase === "resposta") return comecar();
     if (fase === "teclado") { const t = tecRef.current ? tecRef.current.value : ""; return t.trim() ? concluir(t) : fechar(); }
@@ -2749,6 +3053,9 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   // texto que chegou de fora (compartilhado de outro app): entende como se tivesse sido digitado
   const deTexto = t => { pararTudo(); base.current = ""; setAtivo(true); setFase("teclado"); if (tecRef.current) tecRef.current.value = t; concluir(t); };
   api.current = { tocar, comecar, fechar, texto: deTexto };
+  ativoRef.current = ativo;
+  // a conversa sempre rola para a última fala
+  useEffect(() => { const el = chatRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: semMovimento() ? "auto" : "smooth" }); }, [conversa.length, fase, texto]);
   // conta para a barra (e para o mascote) o que está acontecendo
   const est0 = fala.estado;
   useEffect(() => { onAtivo(!ativo ? "" : fase === "ouvindo" ? (est0 === "falando" ? "falando" : est0 === "erro" ? "erro" : "ouvindo") : fase); }, [ativo, fase, est0]);
@@ -2782,10 +3089,13 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const valorVisto = useContagem(itens.length ? soma(itens, i => i.valor) : 0);
   const c = res && res.tipo === "consult" ? res.c : null;
   const est = fala.estado;
-  const classe = fase === "contando" || fase === "resposta" ? "pronto" : fase === "pensando" ? "processando" : fase === "faltando" || est === "erro" ? "erro" : est;
+  const emConversa = conversa.length > 0;
+  const classe = (fase === "contando" || fase === "resposta" ? "pronto" : fase === "pensando" ? "processando" : fase === "faltando" || est === "erro" ? "erro" : est) + (emConversa ? " conversa" : "") + (falandoResp ? " falando-resp" : "");
   const status = fase === "contando" ? `Entendi · salvando em ${conta}`
+    : falandoResp ? "Falando… toque na Bolinha para interromper"
     : fase === "pensando" ? "Pensando…"
-    : fase === "resposta" ? "Resposta"
+    : fase === "resposta" ? "Toque na Bolinha para perguntar mais"
+    : emConversa && fase === "ouvindo" ? (est === "falando" ? "Ouvindo…" : est === "processando" ? "Entendendo…" : "Pode perguntar")
     : fase === "teclado" ? "Toque no microfone do teclado e fale"
     : fase === "faltando" ? "Faltou algo" : est === "erro" ? "Não deu para ouvir"
     : est === "processando" ? "Entendendo…"
@@ -2797,13 +3107,28 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
       <input ref={tecRef} className={"voz-tec" + (ativo && fase === "teclado" ? " on" : "")} tabIndex={ativo && fase === "teclado" ? 0 : -1} type="text" enterKeyHint="done" autoComplete="off" autoCorrect="on"
         placeholder={dica.replace("Ex.: ", "").replace(/[“”]/g, "")} aria-label="Fale ou escreva" onChange={digitou}
         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(ocioso.current); if (e.target.value.trim()) concluir(e.target.value); } }} />
+      {ativo && <Camada onFechar={fechar} escurece={false} />}
       {ativo && <div className={"vozb " + classe + (fase === "teclado" ? " teclado" : "")} style={{ "--n": fala.nivel.toFixed(3) }} aria-live="polite">
         <div className="vozb-sombra" aria-hidden="true"><i /><i /><i /></div>
         <div className="vozb-doca">
           <div className="vozb-status">{fase !== "contando" && fase !== "faltando" && est !== "erro" && <i className="vozb-ponto" />}{status}</div>
-          <p className={"vozb-fala" + (texto ? "" : " vazio")}>{texto || (est === "erro" ? fala.erro : est === "processando" ? "Transcrevendo o que você disse…" : fase === "teclado" ? "" : dica)}</p>
-
-          {fase === "resposta" && resposta && <div className="vozb-card vozb-resp"><p>{resposta}</p></div>}
+          {emConversa ? (
+            <div className="vozb-chat" ref={chatRef} aria-live="polite">
+              {conversa.map((m, i) => (
+                <div key={m.id} className={"vozb-msg " + m.quem + (m.quem === "ela" && falandoResp && i === conversa.length - 1 ? " falando" : "")}>
+                  {m.quem === "ela" && <span className="vozb-av" aria-hidden="true"><i /><i /></span>}
+                  {m.quem === "ela" && "speechSynthesis" in window
+                    ? <p role="button" tabIndex={0} title="Tocar para ouvir" onClick={() => ouvirEsta(m.texto)} onKeyDown={e => e.key === "Enter" && ouvirEsta(m.texto)}>{m.texto}</p>
+                    : <p>{m.texto}</p>}
+                </div>
+              ))}
+              {texto && fase !== "pensando" && fase !== "resposta" && <div className="vozb-msg eu rascunho"><p>{texto}</p></div>}
+              {fase === "pensando" && <div className="vozb-msg ela"><span className="vozb-av" aria-hidden="true"><i /><i /></span><p className="digitando" aria-label="Pensando"><i /><i /><i /></p></div>}
+              {est === "erro" && fase === "ouvindo" && <div className="vozb-msg ela"><span className="vozb-av" aria-hidden="true"><i /><i /></span><p>{fala.erro}</p></div>}
+            </div>
+          ) : (
+            <p className={"vozb-fala" + (texto ? "" : " vazio")}>{texto || (est === "erro" ? fala.erro : est === "processando" ? "Transcrevendo o que você disse…" : fase === "teclado" ? "" : dica)}</p>
+          )}
 
           {itens.length > 0 && (
             <div className="vozb-card">
@@ -2832,10 +3157,12 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
           <div className="vozb-acoes">
             {fase === "contando" && <button className="pill-btn forte" onClick={salvar} style={{ "--k": conta / 3 }}><I.check /> Salvar</button>}
             {fase === "contando" && um && <button className="pill-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
-            {fase === "resposta" && <button className="pill-btn forte" onClick={() => comecar()}><I.mic /> Perguntar outra</button>}
-            {fase === "resposta" && "speechSynthesis" in window && <button className="pill-btn" onClick={ouvir}><I.sound /> Ouvir</button>}
-            {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn forte" onClick={() => comecar(fase === "faltando")}><I.mic /> {fase === "faltando" ? "Completar falando" : "Falar de novo"}</button>}
-            {(fase === "faltando" || est === "erro") && fase !== "teclado" && <button className="pill-btn" onClick={abrirTeclado}>Teclado</button>}
+            {fase === "resposta" && !falandoResp && <button className="pill-btn forte" onClick={() => comecar()}><I.mic /> Perguntar mais</button>}
+            {falandoResp && <button className="pill-btn forte" onClick={calar}>Parar de falar</button>}
+            {emConversa && !falandoResp && fase !== "teclado" && <button className="pill-btn icone" onClick={abrirTeclado} aria-label="Escrever a pergunta"><I.pencil /></button>}
+            {emConversa && "speechSynthesis" in window && <button className={"pill-btn icone" + (comSom ? "" : " mudo")} onClick={trocarSom} aria-label={comSom ? "Não responder falando" : "Responder falando"} aria-pressed={comSom}><I.sound /></button>}
+            {(fase === "faltando" || (est === "erro" && fase !== "resposta")) && fase !== "teclado" && <button className="pill-btn forte" onClick={() => comecar(fase === "faltando")}><I.mic /> {fase === "faltando" ? "Completar falando" : "Falar de novo"}</button>}
+            {(fase === "faltando" || (est === "erro" && fase !== "resposta")) && fase !== "teclado" && !emConversa && <button className="pill-btn" onClick={abrirTeclado}>Teclado</button>}
             {fase === "teclado" && (SRec() || vozPeloServidor()) && <button className="pill-btn" onClick={() => { vozOk(); comecar(); }}><I.mic /> Tentar a voz</button>}
             <button className="pill-btn" onClick={fechar}>{fase === "resposta" ? "Fechar" : "Cancelar"}</button>
           </div>
@@ -2892,6 +3219,7 @@ function MetaGauge({ db, meta, act }) {
           {pct > 0.005 && <path d={arco(150, 150, 118, A0, ang(pct))} fill="none" style={{ stroke: cor }} strokeWidth="22" strokeLinecap="round" />}
           {!batida && <g><circle cx={px} cy={py} r="14" style={{ fill: "var(--surface)", stroke: "var(--fg)" }} strokeWidth="3" /><circle cx={px} cy={py} r="4" style={{ fill: "var(--fg)" }} /></g>}
         </svg>
+        {batida && <Ilustra n="trofeu" className="goal-trofeu" />}
         <div className="goal-val"><Money v={liq} /></div>
         <div className={"goal-st " + (batida || noRitmo ? "ok" : "bad")}>{batida ? "Meta batida!" : noRitmo ? "No ritmo da meta" : `Abaixo do ritmo por ${brl(esperado - liq)}`}</div>
         <div className="goal-sub">{batida ? `Passou ${brl(liq - meta)} da meta.` : `Com a agenda marcada, o mês fecha em ${brl(liq + previsto)}.`}</div>
@@ -2991,6 +3319,7 @@ function useTelaAcesa() {
 }
 function Agora({ db, conta, now, onClose, act }) {
   useTelaAcesa();
+  useCamada(onClose, { escurece: false });
   const t = todayISO(), nm = agoraMin(now), chave = t.slice(0, 7);
   const [pular, setPular] = useState(0);
   const lista = [];
@@ -3138,6 +3467,8 @@ function useTema() {
     const root = document.documentElement;
     if (modo === "auto") root.removeAttribute("data-app-theme"); else root.setAttribute("data-app-theme", modo);
     try { localStorage.setItem(K.tema, modo); } catch (e) {}
+    // a barra de status do celular acompanha o tema escolhido no app (e não só o do aparelho)
+    requestAnimationFrame(() => requestAnimationFrame(corDaBarra));
   }, [modo]);
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: light)");
@@ -3189,6 +3520,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const [meusFundos, setMeusFundos] = useState([]);
   const [push, setPush] = useState(() => pushLigado());
   const [vozAtiva, setVozAtiva] = useState(false);
+  // Conquistas: calculadas a partir dos dados; as novas ganham comemoração (uma de cada vez)
+  const conquistas = useMemo(() => avaliarConquistas(db, ajudaConquistas(), { perfil, usaPessoal, instalado: appInstalado(), push, nuvem: !!conta.uid, av }), [db, push, perfil, usaPessoal, conta.uid, av.nomes]);
+  const [festa, setFesta] = useState([]);
   // Barra de cima que aparece quando a página rola
   const [rolou, setRolou] = useState(false);
   // A barra de baixo fica sempre parada no lugar; só a de cima reage à rolagem
@@ -3203,11 +3537,20 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const vozApi = useRef({});
   CLIMA = clima;
   const tRef = useRef(null);
+  // Clima real; atualiza a cada 20 min com o app aberto e ao voltar para ele
+  const climaRef = useRef(0);
+  const carregarClima = async forcar => {
+    const cidade = perfil.cidade;
+    if (!cidade && !climaLocal()) { setClima(null); return; }
+    const vez = ++climaRef.current;
+    try { const c = await buscarClima(cidade, forcar); if (vez === climaRef.current) setClima(c); }
+    catch (e) { if (vez === climaRef.current) setClima(cl => (cl && cl !== "erro" ? cl : "erro")); }
+  };
+  useEffect(() => { carregarClima(false); }, [perfil.cidade, Math.floor(now.getTime() / 12e5)]);
   useEffect(() => {
-    const cidade = perfil.cidade; if (!cidade) { setClima(null); return; }
-    let vivo = true;
-    buscarClima(cidade).then(c => vivo && setClima(c)).catch(() => vivo && setClima(climaExemplo(cidade)));
-    return () => { vivo = false; };
+    const f = () => { if (document.visibilityState === "visible") carregarClima(false); };
+    document.addEventListener("visibilitychange", f);
+    return () => document.removeEventListener("visibilitychange", f);
   }, [perfil.cidade]);
   useEffect(() => { const y = new Date().getFullYear(); Promise.all([buscarFeriadosAPI(y), buscarFeriadosAPI(y + 1)]).then(() => setFerVer(v => v + 1)).catch(() => {}); }, []);
   ESCONDER = oculto;
@@ -3299,7 +3642,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     const cidade = perfil.cidade, y = new Date().getFullYear();
     await Promise.all([
       espera,
-      cidade ? buscarClima(cidade).then(c => setClima(c)).catch(() => {}) : null,
+      carregarClima(true),
       Promise.all([buscarFeriadosAPI(y), buscarFeriadosAPI(y + 1)]).then(() => setFerVer(v => v + 1)).catch(() => {}),
       "serviceWorker" in navigator ? navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {}) : null,
       Promise.resolve(sincRef.current && sincRef.current(false, true)).catch(() => {}),
@@ -3386,6 +3729,19 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   }, [now, av.ativo, av.antecedencia, push]);
 
   const notify = (msg, undo) => { setToast({ msg, undo }); clearTimeout(tRef.current); tRef.current = setTimeout(() => setToast(null), undo ? 6000 : 2800); };
+  // Registra as conquistas novas. Na primeira vez (ou num aparelho novo sem nenhuma), guarda o que
+  // já estava feito sem fazer festa, para não chover comemoração de uma vez.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const ja = db.conquistas, novas = conquistas.filter(c => c.feito && !(ja || {})[c.id]).map(c => c.id);
+      if (ja && !novas.length) return;
+      const hoje = todayISO();
+      setDb(d => ({ ...d, conquistas: { ...(d.conquistas || {}), ...Object.fromEntries(novas.map(id => [id, hoje])) } }));
+      if (!ja) { if (novas.length > 1) setTimeout(() => notify(`Você já tem ${novas.length} conquistas. Veja no Perfil.`), 3500); return; }
+      setFesta(f => [...f, ...novas.filter(id => !f.includes(id))]);
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [conquistas]);
   // Teto por categoria: avisa uma vez ao passar de 80% e outra se estourar (por mês, neste aparelho)
   const nivelTetos = usaPessoal ? tetosAlerta(db, todayISO().slice(0, 7)).map(x => `${x.cat}:${x.pct >= 1 ? 100 : 80}`).join(",") : "";
   useEffect(() => {
@@ -3430,6 +3786,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
 
   const act = {
     toast: m => notify(m),
+    conquistas,
+    abrirClima: () => setSheet({ type: "clima" }),
+    recarregarClima: () => carregarClima(true),
     setTab: t => { if (t === tab) return rolarTopo(); comTransicao(() => { setTab(t); rolarTopo(); }, ORDEM_ABAS.indexOf(t) < ORDEM_ABAS.indexOf(tab) ? "tras" : "frente"); },
     setModo: m => comTransicao(() => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(m === "pessoal" ? "p-home" : "home"); rolarTopo(); }, "modo"),
     toggleOculto: () => setOculto(o => !o),
@@ -3492,7 +3851,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       }
     },
     salvarVoz: itens => {
-      const novos = itens.map(it => ({ id: uid(), tipo: it.tipo, valor: it.valor, cat: it.cat, desc: it.desc || "", marca: it.marca || null, data: addDays(todayISO(), -(it.off || 0)), ...(it.moeda ? { moeda: it.moeda, valorOrig: it.valorOrig, cotacao: it.cotacao, iof: !!it.iof } : {}) }));
+      const novos = itens.map(it => ({ id: uid(), tipo: it.tipo, valor: it.valor, cat: it.cat, desc: it.desc || "", marca: it.marca || null, via: "voz", data: addDays(todayISO(), -(it.off || 0)), ...(it.moeda ? { moeda: it.moeda, valorOrig: it.valorOrig, cotacao: it.cotacao, iof: !!it.iof } : {}) }));
       const ids = new Set(novos.map(n => n.id));
       setP(P => ({ ...P, lanc: [...P.lanc, ...novos] }));
       close(); vibrar("ok");
@@ -3674,6 +4033,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
       {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "boleto" && <Suspense fallback={null}><BoletoSheet key={sheet.n || "boleto"} texto={sheet.texto} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "importar" && <Suspense fallback={null}><ImportarSheet db={db} act={act} onClose={close} /></Suspense>}
@@ -3746,6 +4106,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
             : <button className="icon-btn redondo" onClick={act.trocarTema} aria-label="Trocar tema">{tema.escuro ? <I.sun /> : <I.moon />}</button>}
         </div>
       </div>
+      {festa.length > 0 && !sheet && !vozAtiva && !foco && (() => {
+        const c = conquistas.find(x => x.id === festa[0]);
+        return c && <Celebra key={c.id} c={c} total={conquistas.filter(x => x.feito).length} onFim={() => setFesta(f => f.slice(1))} onVer={() => { setFesta([]); act.openSettings("conquistas"); }} />;
+      })()}
       <VozBarra api={vozApi} db={db} usaPessoal={usaPessoal} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onComando={act.comandoVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />
       <nav className="nav" aria-label="Seções">
         <div className="nav-in">
@@ -3864,6 +4228,6 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat };
+export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada };
 
 export default App;

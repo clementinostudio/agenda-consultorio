@@ -2,7 +2,7 @@
 import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
-import { todayISO, addDays, PERFIL, itensDoDia, registroPendente, contaDinheiro, Sheet, diaCurto, I, iniciais, corDe, relativo, brl, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, Seg, primeiro } from "../App.jsx";
+import { todayISO, addDays, PERFIL, itensDoDia, registroPendente, contaDinheiro, Sheet, diaCurto, I, iniciais, corDe, relativo, brl, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, Seg, primeiro, Ilustra } from "../App.jsx";
 
 const waLink = (phone, txt) => { const d = (phone || "").replace(/\D/g, ""); const f = d.length >= 10 && d.length <= 11 ? "55" + d : d; return `https://wa.me/${f}?text=${encodeURIComponent(txt)}`; };
 
@@ -72,6 +72,7 @@ function FecharDia({ db, conta, onClose, act }) {
         <button className="btn ghost" onClick={() => { onClose(); act.falarGasto(); }}><I.mic /> Anotar falando</button>
       </>}
       {e === "fim" && <>
+        <Ilustra n="cafe" className="fim-cafe" />
         <span className="rc-chip center"><span className="rc-ic"><I.check /></span>Dia fechado</span>
         <div className="rc-amt"><Money v={soma(feitos, x => x.session.price - x.session.sublet)} /></div>
         <div className="rc-cap">{feitos.length} {feitos.length === 1 ? "sessão" : "sessões"} hoje</div>

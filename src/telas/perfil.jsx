@@ -2,7 +2,8 @@
 import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
-import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar } from "../App.jsx";
+import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada } from "../App.jsx";
+import { nivelDe, TRILHAS } from "../conquistas.js";
 
 const TXT_PUSH = {
   servidor: "Falta ligar o servidor de avisos (uma vez só). No computador, dentro da pasta do app, rode: bash servidor-avisos/instalar-avisos.sh",
@@ -66,6 +67,9 @@ function AvisosFechado({ act }) {
 function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   const pf = conta.perfil || {};
   const [aba, setAba] = useState(inicio || null);
+  // voltar do Android: de uma seção volta para o Perfil; do Perfil, fecha
+  const abaRef = useRef(aba); abaRef.current = aba;
+  useCamada(() => { if (abaRef.current && !inicio) { setAba(null); return false; } onClose(); }, { escurece: false });
   const [nome, setNome] = useState(conta.nome);
   const [foto, setFoto] = useState(conta.foto || null);
   const [profissao, setProfissao] = useState(pf.profissao || "Psicologia");
@@ -162,7 +166,8 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
       { id: "app", ic: <I.down />, t: "Instalar e atalhos", v: appInstalado() ? "Instalado" : "Colocar na tela inicial" },
     ] },
   ];
-  const titulo = { dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Modo Pessoal", app: "Instalar e atalhos" }[aba];
+  const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
+  const titulo = { conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Modo Pessoal", app: "Instalar e atalhos" }[aba];
 
   return createPortal(
     <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
@@ -188,6 +193,13 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
               <div><b className="num">{ESCONDER ? "R$ •••" : `R$ ${Math.round(liqMes).toLocaleString("pt-BR")}`}</b><span>líquido no mês</span></div>
             </div>
             {seguidos >= 2 && <div className="perfil-seq"><I.flag /> Você fechou o dia {seguidos} vezes seguidas</div>}
+            {conq.length > 0 && (
+              <button className="perfil-conq" onClick={() => setAba("conquistas")}>
+                <Ilustra n="trofeu" />
+                <span><b>Nível {nivel.nome}</b><small>{nConq} de {conq.length} conquistas{nivel.prox ? ` · faltam ${nivel.faltam} para ${nivel.prox}` : ""}</small></span>
+                <I.chev />
+              </button>
+            )}
           </div>
 
           {secoes.map(g => (
@@ -205,6 +217,11 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
 
           <div className="perfil-grupo">
             <h3>Conta</h3>
+            <div className="perfil-seguro">
+              <Ilustra n="cadeados" />
+              <span><b>{conta.uid ? "Seus dados estão protegidos" : conta.demo ? "Demonstração" : "Seus dados ficam neste aparelho"}</b>
+                <small>{conta.uid ? "Login com senha, cópia na nuvem e cada conta só enxerga os próprios dados." : conta.demo ? "Nada daqui sai do aparelho. Crie uma conta para guardar de verdade." : "Crie uma conta com login para ter uma cópia na nuvem e usar em outros aparelhos."}</small></span>
+            </div>
             <div className="perfil-lista">
               <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
               <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>{conta.uid ? "Seus dados continuam guardados na nuvem" : "Seus dados ficam guardados neste aparelho"}</small></span><I.chev /></button>
@@ -302,7 +319,11 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
           {pessoal && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
         </div>}
 
+        {aba === "conquistas" && <ConquistasPagina lista={conq} />}
+
         {aba === "app" && <div className="stack">
+          <Ilustra n="ipad" className="perfil-ilustra" />
+          <div className="hint" style={{ textAlign: "center" }}>No celular, no tablet e no computador: instale em cada um e entre na mesma conta.</div>
           <InstalarApp />
           <a className="btn ghost" href={`${BASE}sobre/`} target="_blank" rel="noopener"><I.share /> Página do app, para indicar a colegas</a>
           <div className="hint">Atalhos: links do app terminados em <b>#gasto</b>, <b>#agora</b>, <b>#fechar</b> ou <b>#livres</b> abrem direto o gasto por voz, o Só o agora, o Fechar o dia e os horários livres. No Android, segure o ícone do app para ver os atalhos.</div>
@@ -310,6 +331,41 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
       </div>
     </div>,
     document.body
+  );
+}
+
+// Conquistas: nível, trilhas e o progresso de cada uma
+function ConquistasPagina({ lista }) {
+  const feitas = lista.filter(c => c.feito).length, nv = nivelDe(feitas);
+  const grupos = Object.keys(TRILHAS).map(t => [t, lista.filter(c => c.trilha === t)]).filter(([, l]) => l.length);
+  return (
+    <div className="stack">
+      <div className="conq-topo">
+        <Ilustra n="trofeu" className="conq-topo-img" />
+        <div className="conq-topo-tx">
+          <small>Seu nível</small>
+          <b>{nv.nome}</b>
+          <span>{feitas} de {lista.length} conquistas</span>
+          {nv.prox && <><span className="conq-bar" aria-hidden="true"><i style={{ width: `${Math.round(nv.pct * 100)}%` }} /></span><small>Faltam {nv.faltam} para “{nv.prox}”</small></>}
+        </div>
+      </div>
+      <div className="hint">As conquistas celebram a rotina e o cuidado com o dinheiro, não a quantidade de atendimentos. Elas chegam sozinhas, conforme você usa o app.</div>
+      {grupos.map(([t, l]) => (
+        <div key={t} className="perfil-grupo">
+          <h3>{TRILHAS[t].nome} · {l.filter(c => c.feito).length} de {l.length}</h3>
+          <div className="conq-grade">
+            {l.map(c => (
+              <div key={c.id} className={"conq-card" + (c.feito ? " feito" : "")}>
+                <Ilustra n={c.ilustra} />
+                <b>{c.titulo}</b>
+                <small>{c.feito ? (c.quando ? `Conquistada em ${dm(c.quando)}` : "Conquistada") : c.texto}</small>
+                {!c.feito && <span className="conq-bar" aria-label={`${Math.round(c.pct * 100)}% feito`}><i style={{ width: `${Math.max(4, Math.round(c.pct * 100))}%` }} /></span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

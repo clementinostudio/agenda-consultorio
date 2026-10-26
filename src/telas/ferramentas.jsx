@@ -1,6 +1,6 @@
 // Parte do app carregada sob demanda (só quando é aberta): ler boleto e importar extrato do banco.
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { I, Sheet, Field, brlReal, dm, todayISO, diffDias, uid, catDe, CATEGORIAS, CAT_ENTRADA, interpretarFala, MarcaLogo, vibrar, copiarTexto, relativo } from "../App.jsx";
+import { I, Sheet, Field, brlReal, dm, todayISO, diffDias, uid, catDe, CATEGORIAS, CAT_ENTRADA, interpretarFala, MarcaLogo, vibrar, copiarTexto, relativo, Ilustra } from "../App.jsx";
 import { normalizar, marcaPorId } from "../marcas.js";
 import { lerBoleto } from "../boleto.js";
 import { lerExtrato, ehInterno } from "../extrato.js";
@@ -180,6 +180,7 @@ export function ImportarSheet({ db, act, onClose }) {
   const importar = () => act.importarLanc(marcados.map(x => ({ id: uid(), tipo: x.tipo, valor: x.valor, cat: x.cat, desc: x.desc, data: x.data, marca: x.marca, importId: x.importId })));
   if (!itens) return (
     <Sheet title="Importar extrato" sub="Traz os lançamentos do banco de uma vez. O arquivo é lido aqui no aparelho e não vai para lugar nenhum." onClose={onClose}>
+      <Ilustra n="arquivo" className="sheet-ilustra" />
       <button className="btn mode" onClick={() => arq.current && arq.current.click()} disabled={lendo}><I.upload /> {lendo ? "Lendo…" : "Escolher o arquivo do extrato"}</button>
       <input ref={arq} type="file" accept=".ofx,.qfx,.csv,.txt,text/csv,application/x-ofx,application/vnd.intu.qfx" hidden onChange={escolher} />
       {erro && <div className="error">{erro}</div>}
