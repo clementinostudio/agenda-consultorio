@@ -24,7 +24,10 @@ const BASE = import.meta.env.BASE_URL;
 let logado = false;
 try { logado = !!JSON.parse(localStorage.getItem("agenda-sessao") || "null"); } catch (e) {}
 const instalado = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
-const vemDaApresentacao = ["#entrar", "#criar", "#demo"].includes(location.hash);
+// Convite para a casa (#casa=...): guarda o convite; sem login, abre a tela de entrar e ele é usado depois
+const convite = location.hash.startsWith("#casa=") ? location.hash.slice(6) : "";
+if (convite) { try { localStorage.setItem("agenda-convite-casa", JSON.stringify(convite)); } catch (e) {} }
+const vemDaApresentacao = ["#entrar", "#criar", "#demo"].includes(location.hash) || !!convite;
 // Links dos e-mails da conta (confirmar cadastro, criar senha nova) também abrem direto no app
 const vemDoEmail = /access_token=|error_description=|type=recovery/.test(location.hash);
 

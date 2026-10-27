@@ -34,7 +34,9 @@ export function contaCaixinha(cx, cot) {
     const falta = meta - total * Math.pow(1 + i, n);
     porMes = falta <= 0 ? 0 : (falta * i) / (Math.pow(1 + i, n) - 1);
   }
-  return { guardado, rend, total, meta, pct, n, porMes, falta: Math.max(0, meta - total) };
+  // quanto rende num mês, com o que já tem (estimado a 100% do CDI)
+  const rendeMes = total > 0 ? total * mensal(cot.cdi) : 0;
+  return { guardado, rend, total, meta, pct, n, porMes, rendeMes, falta: Math.max(0, meta - total) };
 }
 
 /* ---------- ícones pequenos desta parte ---------- */
@@ -73,7 +75,7 @@ export function DinheiroHome({ db, act }) {
               <span className="cx-mid">
                 <span className="cx-nm">{cx.nome}</span>
                 <span className="cx-bar"><i style={{ width: `${r.meta ? r.pct : 100}%` }} /></span>
-                <span className="cx-sb">{r.meta ? <>{brl(r.total)} de {brl(r.meta)}{r.porMes > 0 ? ` · ${brl(r.porMes)}/mês` : r.porMes === 0 ? " · já chega lá rendendo" : ""}</> : <>{brl(r.total)} guardados</>}</span>
+                <span className="cx-sb">{r.meta ? <>{brl(r.total)} de {brl(r.meta)}{r.porMes > 0 ? ` · ${brl(r.porMes)}/mês` : r.porMes === 0 ? " · já chega lá rendendo" : ""}</> : <>{brl(r.total)} guardados{r.rendeMes >= 1 ? ` · rende ${brl(r.rendeMes)}/mês` : ""}</>}</span>
               </span>
               <span className="cx-pct">{r.meta ? `${Math.floor(r.pct)}%` : ""}</span>
             </button>
@@ -289,6 +291,7 @@ export function CaixinhaSheet({ cx, act, onClose }) {
       <div className="cx-cards">
         <div className="cx-card"><span>Guardado por você</span><b><Money v={r.guardado} /></b></div>
         <div className="cx-card ok"><span>Rendeu (estimado)</span><b>+<Money v={r.rend} /></b></div>
+        {r.rendeMes >= 0.01 && <div className="cx-card ok"><span>Rende por mês</span><b>+<Money v={r.rendeMes} /></b></div>}
         {r.porMes !== null && <div className="cx-card destaque"><span>{r.n <= 0 ? "Prazo" : `Guarde por mês até ${nomeMes(cx.prazo)}`}</span><b>{r.n <= 0 ? "venceu" : r.porMes === 0 ? "nada: já chega lá" : <Money v={r.porMes} />}</b></div>}
       </div>
       <div className="cx-inflacao">
@@ -300,10 +303,14 @@ export function CaixinhaSheet({ cx, act, onClose }) {
         <button className="btn mode" disabled={!(valor > 0)} onClick={() => { act.moverCaixinha(cx.id, valor); setV(""); }}><I.plus /> Guardar</button>
         <button className="btn ghost" disabled={!(valor > 0) || valor > r.guardado + 0.001} onClick={() => { act.moverCaixinha(cx.id, -valor); setV(""); }}><I.minus /> Tirar</button>
       </div>
+      <div className="cx-auto">
+        <span><b>Separar sozinho de cada entrada</b><small>{cx.autoPct ? `Quando entrar dinheiro (salário, extra), ${cx.autoPct}% vem para cá.` : "Quando entrar dinheiro, uma parte já vem para cá."}</small></span>
+        <div className="cx-auto-op" role="radiogroup" aria-label="Porcentagem separada">{[0, 5, 10, 15, 20].map(p => <button key={p} type="button" role="radio" aria-checked={(cx.autoPct || 0) === p} className={(cx.autoPct || 0) === p ? "on" : ""} onClick={() => act.salvarCaixinha({ ...cx, autoPct: p })}>{p ? `${p}%` : "Não"}</button>)}</div>
+      </div>
       {movs.length > 0 && (
         <div className="cx-hist">
           <h4>Histórico</h4>
-          {movs.map(m => <div key={m.id} className="cx-mov"><span>{relativo(m.data)}</span><b className={m.valor > 0 ? "pos" : ""}>{m.valor > 0 ? "+" : "−"}{brl(Math.abs(m.valor))}</b></div>)}
+          {movs.map(m => <div key={m.id} className="cx-mov"><span>{relativo(m.data)}{m.auto ? " · automático" : ""}</span><b className={m.valor > 0 ? "pos" : ""}>{m.valor > 0 ? "+" : "−"}{brl(Math.abs(m.valor))}</b></div>)}
         </div>
       )}
       <p className="vd-nota">O rendimento é uma estimativa a 100% do CDI, antes do imposto de renda. Confira o valor real no app do seu banco.</p>

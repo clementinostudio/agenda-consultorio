@@ -1956,3 +1956,149 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 /* cadastro: opções não marcadas com borda leve (no tema claro o fundo é quase igual) */
 .ob .choice:not(.on), .ob-uso:not(.on), .ob-chip:not(.on) { border-color: var(--line); background: var(--surface); }
 .ob-carro, .ob-toggle { background: var(--surface); border: 1px solid var(--line); }
+
+/* ---------- Dinheiro a dois (casa compartilhada) ---------- */
+.casa-intro { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 20px; background: var(--surface-2); }
+.casa-intro .ilustra { width: 76px; height: 76px; object-fit: contain; flex: none; }
+.casa-intro ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; line-height: 1.4; color: var(--muted); }
+.casa-intro ul b, .casa-intro p b { color: var(--fg); }
+.casa-intro p { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--muted); }
+.casa-pessoas { display: flex; gap: 12px; overflow-x: auto; scrollbar-width: none; padding: 4px 2px 2px; }
+.casa-pessoa { position: relative; flex: none; width: 64px; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--fg); background: none; }
+.casa-pessoa small { font-size: 12px; font-weight: 700; text-align: center; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.casa-pessoa.vaga small { color: var(--muted); font-weight: 600; }
+.casa-av { width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; flex: none; overflow: hidden; background: var(--mode-soft, var(--surface-2)); color: var(--mode-text, var(--fg)); font-weight: 800; font-size: 12px; }
+.casa-av img { width: 100%; height: 100%; object-fit: cover; }
+.casa-av.grande { width: 58px; height: 58px; font-size: 19px; border: 2px solid var(--line); }
+.casa-pessoa.vaga .casa-av { background: transparent; color: var(--muted); border: 1.5px solid color-mix(in srgb, var(--fg) 22%, transparent); }
+.casa-pessoa.vaga .casa-av svg { width: 20px; height: 20px; }
+.casa-estrela { position: absolute; top: 40px; right: 2px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--amber, #f5b400); color: #fff; border: 2px solid var(--surface); }
+.casa-estrela svg { width: 11px; height: 11px; }
+.casa-convite { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px; background: var(--surface-2); color: var(--fg); text-align: left; }
+.casa-convite .ic { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); flex: none; }
+.casa-convite .ic svg { width: 20px; height: 20px; }
+.casa-convite .tx { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.casa-convite small { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.casa-link { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); font-size: 12.5px; }
+.casa-link span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.casa-saldo, .casa-mes { display: grid; gap: 8px; }
+.casa-ok { display: flex; gap: 8px; align-items: center; color: var(--mint); font-weight: 700; font-size: 14px; }
+.casa-ok svg { width: 18px; height: 18px; }
+.casa-divida { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); font-size: 14px; line-height: 1.4; }
+.casa-quem { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.casa-quem span { display: inline-flex; align-items: center; gap: 6px; }
+.casa-quem .casa-av { width: 22px; height: 22px; font-size: 10px; }
+.casa-quem b { color: var(--fg); }
+.casa-gasto { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); color: var(--fg); text-align: left; }
+.casa-gasto .mid { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.casa-gasto small { color: var(--muted); font-size: 12.5px; }
+.casa-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.casa-chips button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px 7px 8px; border-radius: 999px; background: var(--surface-2); border: 2px solid transparent; color: var(--fg); font-weight: 700; font-size: 13.5px; }
+.casa-chips button:not(:has(.casa-av)) { padding-left: 12px; }
+.casa-chips button.on { border-color: var(--mode); background: color-mix(in srgb, var(--mode) 12%, var(--surface-2)); }
+.casa-chips svg { width: 14px; height: 14px; color: var(--mode); }
+.casa-chips .casa-av { width: 22px; height: 22px; font-size: 10px; }
+.casa-fim { display: grid; gap: 4px; margin-top: 6px; }
+/* cartão no Início pessoal */
+.casa-cartao { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--card-shadow); color: var(--fg); text-align: left; }
+.casa-cartao .tx { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.casa-cartao small { color: var(--muted); font-size: 13px; line-height: 1.35; }
+.casa-cartao-ic { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--mode-soft, var(--surface-2)); color: var(--mode-text, var(--fg)); flex: none; }
+.casa-cartao-ic svg { width: 22px; height: 22px; }
+.casa-cartao-av { display: flex; flex: none; }
+.casa-cartao-av i { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; background: var(--mode-soft, var(--surface-2)); color: var(--mode-text, var(--fg)); font-weight: 800; font-size: 13px; font-style: normal; border: 2px solid var(--surface); margin-left: -10px; }
+.casa-cartao-av i:first-child { margin-left: 0; }
+.casa-cartao-av img { width: 100%; height: 100%; object-fit: cover; }
+/* Previsão do mês */
+.previsao { display: grid; gap: 8px; }
+.previsao-t { margin: 0; font-size: 15px; line-height: 1.45; }
+.previsao-t b { color: var(--mint); }
+.previsao.ruim .previsao-t b { color: var(--amber); }
+.previsao-g { width: 100%; height: 60px; overflow: visible; }
+.previsao-g polyline { fill: none; stroke: var(--mode); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.previsao.ruim .previsao-g polyline { stroke: var(--amber); }
+.previsao-g .zero { stroke: color-mix(in srgb, var(--fg) 25%, transparent); stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.previsao-itens { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.previsao-itens .mais::first-letter { color: var(--mint); }
+/* caixinha: separar sozinho de cada entrada */
+.cx-auto { display: grid; gap: 10px; padding: 14px; border-radius: 18px; background: var(--surface-2); }
+.cx-auto span { display: grid; gap: 2px; }
+.cx-auto small { color: var(--muted); font-size: 13px; line-height: 1.35; }
+.cx-auto-op { display: flex; gap: 6px; }
+.cx-auto-op button { flex: 1; padding: 8px 0; border-radius: 12px; background: var(--surface); border: 2px solid transparent; color: var(--fg); font-weight: 800; font-size: 13.5px; }
+.cx-auto-op button.on { border-color: var(--mode); color: var(--mode-text, var(--fg)); }
+/* Carro ou app? e postos */
+.carro-app, .postos { display: grid; gap: 10px; padding: 14px; border-radius: 18px; background: var(--surface-2); }
+.carro-app-in { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 14px; color: var(--muted); font-weight: 600; }
+.carro-app-in label { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.carro-app-in input { width: 64px; border: 0; background: none; color: var(--fg); font: inherit; font-weight: 800; font-size: 15px; outline: none; padding: 0; }
+.carro-app-in small { font-size: 12px; }
+.carro-app-cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.carro-app-cmp div { display: grid; gap: 1px; padding: 10px; border-radius: 14px; background: var(--surface); border: 2px solid transparent; text-align: center; }
+.carro-app-cmp div.ganha { border-color: var(--mint); }
+.carro-app-cmp b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.carro-app-cmp small { color: var(--muted); font-size: 12px; font-weight: 600; }
+.posto { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.posto:first-of-type { border-top: 0; }
+.posto .mid { flex: 1; display: grid; gap: 1px; min-width: 0; }
+.posto small { color: var(--muted); font-size: 12.5px; }
+.posto .preco { display: grid; text-align: right; }
+.posto.barato .mid b, .posto.barato .preco b { color: var(--mint); }
+/* Assinatura */
+.perfil-row > i.assin-ic { background: radial-gradient(circle at 50% 18%, rgba(233, 251, 255, .6), transparent 50%), linear-gradient(#06CFFF, #0AA6FF 33%, #1167F6 68%, #2B2CF0); }
+.perfil-row > i.assin-ic svg { width: 24px; height: 24px; }
+.assin-selo { flex: none; font-style: normal; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 99px; background: var(--amber-soft); color: var(--amber); }
+.assin-card { display: flex; flex-direction: column; gap: 4px; padding: 20px; border-radius: 28px; border: 1px solid var(--line); background: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--mode) 24%, transparent), transparent 65%), var(--card); }
+.assin-card.acabou { background: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--amber) 22%, transparent), transparent 65%), var(--card); }
+.assin-card > small { font-size: 12.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.assin-card b { font-family: var(--f-display); font-weight: 600; font-size: 30px; letter-spacing: -.02em; line-height: 1.15; }
+.assin-card p { margin: 0; color: var(--muted); font-weight: 600; font-size: 14.5px; }
+.assin-card p.num { color: var(--fg); font-weight: 800; font-size: 16px; }
+.assin-card .btn { margin-top: 12px; }
+.assin-card-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.assin-card-topo em { font-style: normal; font-size: 12.5px; font-weight: 800; padding: 4px 10px; border-radius: 99px; background: var(--mint-soft); color: var(--mint); }
+.assin-card-topo em.pausada { background: var(--amber-soft); color: var(--amber); }
+.assin-card-topo em.cancelada { background: var(--rose-soft); color: var(--rose); }
+.assin-barra { height: 6px; margin-top: 10px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.assin-barra i { display: block; height: 100%; border-radius: inherit; background: var(--mode); }
+.assin-inclui { list-style: none; margin: 0; padding: 0 6px; display: grid; gap: 10px; }
+.assin-inclui li { display: flex; gap: 10px; align-items: flex-start; font-weight: 700; font-size: 15px; }
+.assin-inclui svg { width: 18px; height: 18px; flex: none; margin-top: 2px; color: var(--mode); }
+.assin-logo { align-self: center; width: 64px; height: 64px; margin-top: 8px; border-radius: 20px; display: grid; place-items: center; background: radial-gradient(circle at 50% 18%, rgba(233, 251, 255, .6), transparent 50%), linear-gradient(#06CFFF, #0AA6FF 33%, #1167F6 68%, #2B2CF0); box-shadow: 0 12px 30px rgba(17, 103, 246, .35); }
+.assin-logo svg { width: 44px; height: 44px; }
+.assin-pay h2, .assin-pronto h2 { margin: 0; text-align: center; font-family: var(--f-display); font-weight: 600; font-size: 26px; letter-spacing: -.02em; }
+.assin-pay .assin-inclui { padding: 4px 10px 8px; }
+.assin-planos { display: grid; gap: 12px; }
+.assin-plano { position: relative; display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 20px; background: var(--card); border: 2px solid var(--line); color: var(--fg); text-align: left; }
+.assin-plano.on { border-color: var(--mode); background: color-mix(in srgb, var(--mode) 10%, var(--card)); }
+.assin-plano span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.assin-plano b { font-size: 16.5px; font-weight: 800; }
+.assin-plano small { color: var(--muted); font-size: 13.5px; font-weight: 600; }
+.assin-plano em { position: absolute; top: -10px; right: 14px; font-style: normal; font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 99px; background: var(--mode); color: var(--mode-ink); }
+.assin-radio { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--faint); display: grid; place-items: center; }
+.assin-plano.on .assin-radio { border-color: var(--mode); background: var(--mode); color: var(--mode-ink); }
+.assin-radio svg { width: 14px; height: 14px; }
+.assin-centro { text-align: center; }
+.assin-resumo { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); color: var(--fg); text-align: left; }
+.assin-resumo > span { display: flex; flex-direction: column; }
+.assin-resumo > span > small { color: var(--muted); font-size: 13px; font-weight: 700; }
+.assin-resumo b { font-family: var(--f-display); font-weight: 600; font-size: 22px; }
+.assin-resumo b small { font-family: var(--f-body); font-size: 14px; font-weight: 600; color: var(--muted); }
+.assin-resumo em { font-style: normal; font-weight: 800; font-size: 14px; color: var(--mode); }
+.assin-pix { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 18px; border-radius: 24px; background: var(--card); border: 1px solid var(--line); text-align: center; }
+.assin-qr { width: 190px; height: 190px; border-radius: 14px; }
+.assin-pix small { max-width: 300px; color: var(--muted); font-size: 13.5px; font-weight: 600; }
+.assin-duas { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.assin-gira { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid currentColor; border-right-color: transparent; animation: assin-gira .8s linear infinite; }
+@keyframes assin-gira { to { transform: rotate(360deg); } }
+.assin-pronto { align-items: center; text-align: center; padding-top: 24px; }
+.assin-pronto p { margin: 0 0 8px; color: var(--muted); font-weight: 600; line-height: 1.5; }
+.assin-pausar { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 56px; border-radius: 999px; border: 1.5px solid var(--mode); background: color-mix(in srgb, var(--mode) 10%, transparent); color: var(--mode); font-weight: 800; font-size: 16px; }
+.assin-pausar svg { width: 20px; height: 20px; }
+.perfil-row > span.assin-hist-v { flex: none; align-items: flex-end; }
+.assin-hist-v small { color: var(--mint); font-weight: 800; }
+.assin-demo { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding: 14px; border-radius: 20px; border: 1.5px dashed var(--line); }
+.assin-demo b { color: var(--muted); font-size: 12.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.assin-demo small { color: var(--muted); font-size: 13px; font-weight: 600; }
+.assin-demo .btn { height: 44px; font-size: 14.5px; }
+.casa-convite > svg, .casa-cartao > svg { width: 18px; height: 18px; flex: none; color: var(--muted); }

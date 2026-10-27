@@ -300,3 +300,27 @@ export const fipe = {
   anos: (tipo, marca, modelo) => fetch(`${FIPE}/${tipo}/marcas/${marca}/modelos/${modelo}/anos`).then(r => r.json()),
   valor: (tipo, marca, modelo, ano) => fetch(`${FIPE}/${tipo}/marcas/${marca}/modelos/${modelo}/anos/${ano}`).then(r => r.json()),
 };
+
+// Postos onde a pessoa abastece: pelo nome anotado no abastecimento, com o preço médio do litro
+export function postos(db, veiculo) {
+  const ab = lancTransp(db, veiculo).filter(l => subDe(l) === "combustivel" && l.desc && !/^abastecimento\b/i.test(l.desc.trim()));
+  const g = {};
+  ab.forEach(l => {
+    const k = semAcento(l.desc).replace(/\s+/g, " ").trim();
+    const x = g[k] || (g[k] = { nome: l.desc.trim(), n: 0, gasto: 0, litros: 0, ultimo: l.data, precos: [] });
+    x.n++; x.gasto += l.valor; if (l.litros > 0) x.litros += l.litros;
+    const p = l.precoLitro || (l.litros > 0 ? l.valor / l.litros : 0); if (p > 0) x.precos.push(p);
+    if (l.data > x.ultimo) x.ultimo = l.data;
+  });
+  return Object.values(g).map(x => ({ ...x, preco: x.precos.length ? x.precos.reduce((s, p) => s + p, 0) / x.precos.length : null }))
+    .sort((a, b) => b.n - a.n || b.gasto - a.gasto);
+}
+
+// Carro ou app: o custo de verdade do carro por km (gastos + o quanto ele desvalorizou) contra o preço de uma corrida
+export function carroOuApp(custo, appRef) {
+  if (!custo || !custo.porKm || !appRef || !(appRef.valor > 0) || !(appRef.km > 0)) return null;
+  const kmMes = custo.rodados / custo.nMeses;
+  const perdaKm = custo.perdeu && custo.rodados ? custo.perdeu.valor / Math.max(custo.rodados, 1) : 0;
+  const carroKm = custo.porKm + perdaKm, appKm = appRef.valor / appRef.km;
+  return { carroKm, appKm, kmMes, appMes: appKm * kmMes, carroMes: carroKm * kmMes, diferenca: (appKm - carroKm) * kmMes, comDesvalor: perdaKm > 0 };
+}

@@ -16,6 +16,7 @@ import { lerBoleto } from "./boleto.js";
 import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
 import { AVATARES, ehAvatarPronto } from "./avatares.js";
 import { precosGuardados, veiculosDe } from "./transporte.js";
+import { useCasa, K_CONVITE } from "./casa.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -373,6 +374,12 @@ function situacaoConta(conta, chave) {
   return { st: d <= 5 ? "breve" : "ok", txt: `Vence em ${d} dias` };
 }
 // Quanto saiu em cada categoria no mês (lançamentos + contas fixas pagas): é o que conta para os tetos
+// Caixinhas com "separar sozinho": cada entrada nova manda a porcentagem para a caixinha
+function separarAuto(P, entrada) {
+  if (!entrada || !(entrada.valor > 0)) return P;
+  const cx = (P.caixinhas || []).map(c => c.autoPct > 0 ? { ...c, movs: [...(c.movs || []), { id: uid(), data: entrada.data, valor: Math.round(entrada.valor * c.autoPct) / 100, auto: true }] } : c);
+  return cx.some((c, i) => c !== P.caixinhas[i]) ? { ...P, caixinhas: cx } : P;
+}
 function gastoPorCat(db, chave) {
   const P = db.pessoal || pessoalVazio(), out = {};
   P.lanc.forEach(l => { if (l.tipo === "saida" && l.data.startsWith(chave)) out[l.cat] = (out[l.cat] || 0) + l.valor; });
@@ -3284,6 +3291,9 @@ const TetoSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default:
 const TransporteTab = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.TransporteTab })));
 const GastoTransporteSheet = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.GastoTransporteSheet })));
 const VeiculoSheet = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.VeiculoSheet })));
+// Dinheiro a dois (casa compartilhada)
+const CasaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.CasaSheet })));
+const ConviteCasaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.ConviteCasaSheet })));
 // Recibo em PDF, relatório do imposto e anotações trancadas (carregam só quando abrem)
 const ReciboSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.ReciboSheet })));
 const ImpostoSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.ImpostoSheet })));
@@ -3618,6 +3628,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const av = { ...AVISOS_PADRAO, ...(perfil.avisos || {}) };
   const [db, setDb] = useState(() => carregarDb(conta));
   const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem (demonstração)
+  const casa = useCasa(conta, db, setDb); // gastos da casa divididos com quem mora junto
   VIAGEM = (db.pessoal && db.pessoal.viagem) || null;
   LOGOS = (db.pessoal && db.pessoal.logos) || {};
   const [modo, setModoSt] = useState(() => lerJSON(K.modo(conta.email), "consultorio"));
@@ -3680,6 +3691,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     else if (h === "fechar") setSheet({ type: "fechar" });
     else if (h === "livres") setSheet({ type: "livres" });
     else if (h === "compartilhado") setTimeout(() => act.receberCompartilhado(), 300);
+    const tok = h.startsWith("casa=") ? h.slice(5) : lerJSON(K_CONVITE, null);
+    if (tok) { localStorage.removeItem(K_CONVITE); if (h.startsWith("casa=")) history.replaceState(null, "", location.pathname + location.search); setTimeout(() => setSheet({ type: "convite-casa", token: tok }), 600); }
   }, []);
 
   // Avisos saem só como notificação do celular (o som e a vibração são os do próprio aparelho)
@@ -3758,7 +3771,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     const hoje = todayISO(), ch = hoje.slice(0, 7), dia = Math.min(R.dia || 5, diasNoMes(ch));
     if ((R.lancados || {})[ch] || Number(hoje.slice(8, 10)) < dia) return;
     const l = { id: uid(), tipo: "entrada", cat: "trabalho", valor: R.valor, desc: R.nome || "Salário", data: `${ch}-${pad(dia)}`, rendaMes: ch };
-    setP(P => ({ ...P, lanc: [...P.lanc, l], renda: { ...P.renda, lancados: { ...(P.renda.lancados || {}), [ch]: true } } }));
+    setP(P => separarAuto({ ...P, lanc: [...P.lanc, l], renda: { ...P.renda, lancados: { ...(P.renda.lancados || {}), [ch]: true } } }, l));
     notify(`${l.desc} de ${MES_LONGO[Number(ch.slice(5)) - 1]} lançado: ${brlReal(l.valor)}`);
   }, [db.pessoal && db.pessoal.renda, now.getDate()]);
   // Depois que o app abriu, deixa as outras telas prontas em segundo plano (abrem na hora, sem esperar)
@@ -3930,6 +3943,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     // Transporte é uma aba do modo Pessoal; os painéis dela abrem como os outros
     abrirTransporte: () => { if (sheet) close(); if (modo !== "pessoal") { setModoSt("pessoal"); gravar(K.modo(conta.email), "pessoal"); } setTab("p-transp"); rolarTopo(); },
     abrirGastoTransp: ({ sub, inicial, manut, veiculoId } = {}) => setSheet({ type: "transp-gasto", sub, inicial, manut, veiculoId, n: Date.now() }),
+    abrirCasa: () => setSheet({ type: "casa" }),
+    casa,
     abrirVeiculo: id => setSheet({ type: "veiculo", id: typeof id === "string" ? id : null }),
     atualizarVeiculo: (id, patch) => setP(P => { const { veiculo, ...resto } = P; return { ...resto, veiculos: veiculosDe({ pessoal: P }).map(x => x.id === id ? { ...x, ...patch } : x) }; }),
     // Consultório: recibo, imposto e anotações
@@ -4079,10 +4094,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     // Pessoal
     novoLanc: tipo => setSheet({ type: "lanc", tipo }),
     editLanc: id => setSheet({ type: "lanc", id }),
-    salvarLanc: l0 => {
+    salvarLanc: l00 => {
+      const { dividirCasa, ...l0 } = l00;
+      if (dividirCasa && casa.casa) casa.salvar("lanc", { valor: l0.valor, desc: l0.desc, cat: l0.cat, data: l0.data, pagou: casa.eu, participantes: casa.membros.map(m => m.id), criado: Date.now() });
       const mm = acharMarca(l0.desc || ""); const l = { ...l0, marca: l0.marca !== undefined ? l0.marca : mm ? mm.id : null };
       const novoL = !db.pessoal.lanc.some(x => x.id === l.id);
-      setP(P => ({ ...P, lanc: novoL ? [...P.lanc, l] : P.lanc.map(x => x.id === l.id ? l : x) }));
+      setP(P => separarAuto({ ...P, lanc: novoL ? [...P.lanc, l] : P.lanc.map(x => x.id === l.id ? l : x) }, novoL && l.tipo === "entrada" ? l : null));
       vibrar("ok"); close();
       notify(novoL ? `${l.tipo === "entrada" ? "Entrada" : "Gasto"} de ${l.moeda ? `${fmtMoeda(l.valorOrig, l.moeda)} (${brlReal(l.valor)})` : brlReal(l.valor)} anotado` : "Lançamento atualizado", novoL ? () => setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== l.id) })) : undefined);
     },
@@ -4213,11 +4230,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "livres" && <Suspense fallback={null}><LivresSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
-      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} casa={casa.casa && casa.membros.length > 1 ? casa : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "transp-gasto" && <Suspense fallback={null}><GastoTransporteSheet key={sheet.n} veiculos={veiculosDe(db)} veiculoId={sheet.veiculoId || (sheet.inicial && sheet.inicial.veiculoId) || veicAtual} sub0={sheet.sub} manut0={sheet.manut} inicial={sheet.inicial} precos={precosGuardados()} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "recibo" && <Suspense fallback={null}><ReciboSheet key={sheet.pid + (sheet.cid || "")} db={db} conta={conta} pid={sheet.pid} cid={sheet.cid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "imposto" && <Suspense fallback={null}><ImpostoSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "notas" && <Suspense fallback={null}><NotasSheet key={sheet.pid + (sheet.sid || "")} db={db} pid={sheet.pid} sid={sheet.sid} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "casa" && <Suspense fallback={null}><CasaSheet casa={casa} conta={conta} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "convite-casa" && <Suspense fallback={null}><ConviteCasaSheet casa={casa} token={sheet.token} onClose={close} onEntrou={() => { notify("Você entrou na casa!"); setSheet({ type: "casa" }); }} /></Suspense>}
       {sheet && sheet.type === "veiculo" && <Suspense fallback={null}><VeiculoSheet key={sheet.id || "novo"} veiculo={sheet.id && sheet.id !== "novo" ? veiculosDe(db).find(x => x.id === sheet.id) || null : sheet.id === "novo" ? null : veiculosDe(db)[0] || null} db={db} onSave={act.salvarVeiculo} onDelete={act.removerVeiculo} onClose={close} /></Suspense>}
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
@@ -4417,6 +4436,6 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar };
+export { Marca, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar };
 
 export default App;

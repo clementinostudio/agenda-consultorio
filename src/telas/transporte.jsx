@@ -1,7 +1,7 @@
 // Parte do app carregada sob demanda: aba "Transporte" do modo Pessoal (também abre ao tocar em Transporte, em Gastos).
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar, ProximaConquista } from "../App.jsx";
-import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
+import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, postos, carroOuApp, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
 
 /* ---------- ícones ---------- */
 const Svg = ({ children }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
@@ -40,6 +40,55 @@ function FotoVeiculo({ v, grande }) {
   const f = fotoDoVeiculo(v);
   if (f) return <Ilustra n={f[2]} className={cls + " f-" + f[0]} alt={f[1]} />;
   return <span className={cls + " emoji"} aria-hidden="true">{EMOJI[v.tipo] || "🚗"}</span>;
+}
+
+// Carro ou app? O custo de verdade do carro por km contra o preço de uma corrida que a pessoa faz
+function CarroOuApp({ custo, v, act }) {
+  const a0 = (v && v.appRef) || {};
+  const [valor, setValor] = useState(a0.valor ? fmtNum(a0.valor) : "");
+  const [km, setKm] = useState(a0.km ? String(a0.km) : "");
+  useEffect(() => {
+    const t = setTimeout(() => { const n = { valor: num(valor), km: num(km) }; if (n.valor > 0 && n.km > 0 && (n.valor !== a0.valor || n.km !== a0.km)) act.atualizarVeiculo(v.id, { appRef: n }); }, 600);
+    return () => clearTimeout(t);
+  }, [valor, km]);
+  const c = carroOuApp(custo, { valor: num(valor), km: num(km) });
+  return (
+    <div className="carro-app">
+      <b>Carro ou app?</b>
+      <div className="carro-app-in">
+        <span>Uma corrida de</span>
+        <label><input inputMode="decimal" value={km} onChange={e => setKm(soNumero(e.target.value))} placeholder="10" aria-label="Distância da corrida em km" /><small>km</small></label>
+        <span>sai por</span>
+        <label><small>R$</small><input inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="25,00" aria-label="Preço da corrida" /></label>
+      </div>
+      {c ? <>
+        <div className="carro-app-cmp">
+          <div className={c.carroKm <= c.appKm ? "ganha" : ""}><small>Seu carro</small><b>{brlReal(c.carroKm)}</b><small>por km{c.comDesvalor ? ", com a desvalorização" : ""}</small></div>
+          <div className={c.appKm < c.carroKm ? "ganha" : ""}><small>App</small><b>{brlReal(c.appKm)}</b><small>por km</small></div>
+        </div>
+        <p className="hint">{c.diferenca >= 0
+          ? <>Rodando uns {Math.round(c.kmMes).toLocaleString("pt-BR")} km por mês, de app sairia <b>{brl(c.appMes)}</b>: {brl(c.diferenca)} a mais que o carro.</>
+          : <>Rodando uns {Math.round(c.kmMes).toLocaleString("pt-BR")} km por mês, de app sairia <b>{brl(c.appMes)}</b>: <b>{brl(-c.diferenca)} a menos</b> que o carro. Vale pensar!</>}</p>
+      </> : <p className="hint">Coloque uma corrida que você costuma fazer (veja o preço no app de corrida) e eu comparo.</p>}
+    </div>
+  );
+}
+
+// Onde você abastece: preço médio do litro em cada posto anotado (o mais barato em destaque)
+function Postos({ lista, ref0 }) {
+  if (!lista.length) return <p className="hint">Escreva o nome do posto ao abastecer e eu mostro onde sai mais barato.</p>;
+  const comPreco = lista.filter(p => p.preco), barato = comPreco.length > 1 ? comPreco.reduce((m, p) => (p.preco < m.preco ? p : m)) : null;
+  return (
+    <div className="postos">
+      <b>Onde você abastece</b>
+      {lista.slice(0, 4).map(p => (
+        <div key={p.nome} className={"posto" + (barato && p === barato ? " barato" : "")}>
+          <span className="mid"><b>{p.nome}</b><small>{p.n} {p.n === 1 ? "vez" : "vezes"} · {brl(p.gasto)}{barato && p === barato ? " · o mais barato" : ""}</small></span>
+          {p.preco && <span className="preco"><b>{preco(p.preco)}</b><small>{ref0 ? (p.preco <= ref0 ? `${preco(ref0 - p.preco)} abaixo` : `${preco(p.preco - ref0)} acima`) : "o litro"}</small></span>}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // Um cartão por veículo: foto, nome e os números dele; o último cartão adiciona outro veículo
@@ -215,6 +264,7 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
             <div className="transp-custo-leg">{SUBS.filter(s => custo.porSub[s.id]).map(s => <span key={s.id}><i style={{ background: s.cor }} />{s.nome} {Math.round(custo.porSub[s.id] / custo.total * 100)}%</span>)}</div>
             {custo.perdeu && <p className="hint">Pela FIPE, o carro perdeu <b>{brl(custo.perdeu.valor)}</b> de valor desde {MES_LONGO[Number(custo.perdeu.desde.slice(5)) - 1]} de {custo.perdeu.desde.slice(0, 4)}. Isso também é custo, só que invisível.</p>}
             {!custo.porKm && <p className="hint">Anotando a km do painel ao abastecer, eu mostro o custo de cada km rodado (dá para comparar com uma corrida de app).</p>}
+            {custo.porKm && <CarroOuApp custo={custo} v={v} act={act} />}
           </section>
         )}
 
@@ -245,6 +295,7 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
             </div>
             {comb.ultimo && ref && ref.p[comb.ultimo.combustivel || "gasolina"] && (() => { const dif = comb.precoPago - ref.p[comb.ultimo.combustivel || "gasolina"]; return Math.abs(dif) >= .02 && <p className={"hint " + (dif > 0 ? "ruim" : "bom")}>Você pagou {preco(Math.abs(dif))} {dif > 0 ? "acima" : "abaixo"} da média da semana.</p>; })()}
             {!comb.consumoReal && <p className="hint">Ao abastecer, anote os litros e a km do painel: com dois abastecimentos eu calculo o seu consumo real.</p>}
+            <Postos lista={postos(db, v)} ref0={ref && ref.p[(v && v.combustivel !== "flex" && v.combustivel) || "gasolina"]} />
           </section>
         )}
 

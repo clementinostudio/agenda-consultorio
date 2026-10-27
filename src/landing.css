@@ -291,3 +291,21 @@ details p { margin: 0 0 19px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   .trofeu, .brilho-trofeu, .sec-ilustra, .mock-boleto .barras::after { animation: none !important; }
 }
+
+/* ---------- carro (usa o desenho da seção de conquistas) ---------- */
+.carro .trofeu { width: 92%; animation-duration: 8s; }
+.carro .brilho-trofeu { background: radial-gradient(circle, rgba(31, 184, 121, .45), rgba(31, 184, 121, .15) 45%, transparent 70%); }
+.carro .selo-vidro .num { font-size: 15px; }
+@media (min-width: 980px) { .carro .conq-l { grid-template-columns: 1.1fr .9fr; } .carro .conq-arte { order: 2; } }
+/* novidades: previsão e casa */
+.mock-previsao, .mock-casa { display: grid; gap: 6px; padding: 14px 16px; border-radius: 18px; background: #fff; color: #1b2230; box-shadow: 0 20px 40px rgba(0, 0, 0, .35); width: min(100%, 240px); justify-self: center; transform: rotate(-2deg); }
+.mock-previsao small { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: #6B7280; }
+.mock-previsao b { font-family: var(--f-display); font-size: 18px; color: #1a8f5d; }
+.mock-previsao svg { width: 100%; height: 34px; }
+.mock-previsao polyline { fill: none; stroke: #1FB879; stroke-width: 2.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.mock-casa { grid-template-columns: auto auto auto 1fr; align-items: center; transform: rotate(2deg); }
+.mock-casa .av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #E7F7EF; color: #1a8f5d; font-weight: 800; border: 2px solid #fff; margin-left: -8px; }
+.mock-casa .av:first-child { margin-left: 0; }
+.mock-casa .av.b { background: #EEF0FF; color: #4c5bd4; }
+.mock-casa .av.c { background: transparent; color: #9aa1ae; border: 1.5px dashed #c9ced8; }
+.mock-casa p { grid-column: 1 / -1; margin: 4px 0 0; font-size: 14px; }

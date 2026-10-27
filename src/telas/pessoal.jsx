@@ -6,7 +6,8 @@ import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } 
 import { DinheiroHome } from "./dinheiro.jsx";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
 import { logoPropria, lerArquivo } from "../App.jsx";
-import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos, Confirmar, vibrar } from "../App.jsx";
+import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos, Confirmar, vibrar } from "../App.jsx";
+import { saldos as saldosCasa } from "../casa.js";
 
 /* ---------- Logo enquanto digita: sugere as empresas parecidas (mesmo com erro de digitação),
    tenta achar o site de quem não está na lista e deixa usar uma foto como logo ---------- */
@@ -87,6 +88,70 @@ function resumoPessoal(db, chave) {
   return { saidas, entradas, consult, pagas, abertas, entrou, saiu, sobra: entrou - saiu, aPagar: soma(abertas, c => c.valor), porCat };
 }
 
+// Previsão do mês: simula dia a dia até o fim do mês, a partir do saldo de hoje.
+// Entra: o salário (se ainda não caiu) e as sessões marcadas (se o consultório conta como entrada).
+// Sai: as contas fixas que faltam, no dia do vencimento, e o gasto do dia a dia no ritmo de agora.
+function previsaoMes(db) {
+  const P = db.pessoal, hoje = todayISO(), ch = hoje.slice(0, 7), diaHoje = Number(hoje.slice(8, 10));
+  const ultimo = new Date(Number(ch.slice(0, 4)), Number(ch.slice(5)), 0).getDate();
+  const r = resumoPessoal(db, ch);
+  let saldo = r.sobra;
+  // ritmo do dia a dia: o deste mês, puxado pelo do mês passado nos primeiros dias (para não oscilar)
+  const pm = new Date(Number(ch.slice(0, 4)), Number(ch.slice(5)) - 2, 1), ant = `${pm.getFullYear()}-${pad(pm.getMonth() + 1)}`;
+  const varMes = soma(r.saidas, l => l.valor), varAnt = soma(P.lanc.filter(l => l.tipo === "saida" && l.data.startsWith(ant)), l => l.valor);
+  const diasAnt = new Date(pm.getFullYear(), pm.getMonth() + 1, 0).getDate();
+  const peso = varAnt > 0 ? 7 : 0;
+  const ritmo = (varMes + (varAnt / diasAnt) * peso) / (diaHoje + peso);
+  const R = P.renda && P.renda.valor > 0 && !(P.renda.lancados || {})[ch] ? P.renda : null;
+  const pac = id => db.patients.find(p => p.id === id);
+  const liq = p => p.price - (p.subletType === "percent" ? p.price * p.sublet / 100 : p.sublet);
+  const contas = P.contas.filter(c => !(c.pagas && c.pagas[ch]));
+  const atrasadas = contas.filter(c => vencimento(c, ch) < hoje);
+  saldo -= soma(atrasadas, c => c.valor);
+  const serie = [saldo];
+  let diaNeg = saldo < 0 ? diaHoje : null, entraConsult = 0, saiContas = soma(atrasadas, c => c.valor);
+  for (let d = diaHoje + 1; d <= ultimo; d++) {
+    const iso = `${ch}-${pad(d)}`;
+    if (R && Math.min(R.dia || 5, ultimo) === d) saldo += R.valor;
+    if (P.incluirConsultorio && PERFIL.consultorio !== false) { const v = soma(itensDoDia(db, iso).filter(x => x.kind === "next" || x.kind === "proj"), x => liq(x.patient)); saldo += v; entraConsult += v; }
+    contas.forEach(c => { if (vencimento(c, ch) === iso) { saldo -= c.valor; saiContas += c.valor; } });
+    saldo -= ritmo;
+    serie.push(saldo);
+    if (saldo < 0 && diaNeg == null) diaNeg = d;
+  }
+  if (R && Math.min(R.dia || 5, ultimo) <= diaHoje) saldo += R.valor; // o salário de hoje ainda não lançado
+  return { fim: saldo, diaNeg: saldo < 0 || diaNeg ? diaNeg : null, ritmo, renda: R ? R.valor : 0, diaRenda: R ? R.dia : null, contas: saiContas, consult: entraConsult, ultimo, diaHoje, serie };
+}
+
+function CartaoPrevisao({ db }) {
+  const p = previsaoMes(db);
+  if (p.diaHoje >= p.ultimo) return null;
+  const min = Math.min(0, ...p.serie), max = Math.max(1, ...p.serie), W = 300, H = 60;
+  const pts = p.serie.map((v, i) => `${(i / Math.max(1, p.serie.length - 1)) * W},${H - ((v - min) / (max - min || 1)) * H}`).join(" ");
+  const zero = H - ((0 - min) / (max - min || 1)) * H;
+  const ruim = p.fim < 0 || p.diaNeg;
+  return (
+    <section className={"panel previsao" + (ruim ? " ruim" : "")}>
+      <div className="panel-head"><h3>Previsão do mês</h3></div>
+      <p className="previsao-t">{p.fim >= 0 && !p.diaNeg
+        ? <>Nesse ritmo, <b>sobram {brl(p.fim)}</b> no dia {p.ultimo}.</>
+        : p.diaNeg && p.diaNeg <= p.diaHoje ? <>O mês já está no vermelho. Nesse ritmo, <b>termina faltando {brl(-Math.min(0, p.fim))}</b>.</>
+        : <>Nesse ritmo, <b>falta dinheiro a partir do dia {p.diaNeg || p.ultimo}</b>{p.fim < 0 ? <> ({brl(-p.fim)} no fim do mês)</> : null}.</>}</p>
+      <svg className="previsao-g" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+        {min < 0 && <line x1="0" x2={W} y1={zero} y2={zero} className="zero" />}
+        <polyline points={pts} />
+      </svg>
+      <div className="previsao-itens">
+        {p.renda > 0 && <span className="mais">+{brl(p.renda)} salário (dia {p.diaRenda})</span>}
+        {p.consult > 0 && <span className="mais">+{brl(p.consult)} sessões marcadas</span>}
+        {p.contas > 0 && <span className="menos">−{brl(p.contas)} contas que faltam</span>}
+        <span className="menos">−{brl(p.ritmo)} por dia no dia a dia</span>
+      </div>
+      {ruim && <div className="hint">Dá para segurar: um teto em Gastos ajuda a ver onde cortar.</div>}
+    </section>
+  );
+}
+
 function serieSaldo(db, ini, fim) {
   const P = db.pessoal, out = [];
   let acc = 0;
@@ -114,6 +179,8 @@ function conversaPessoal(db, act) {
   });
   const tet = tetosAlerta(db, chave)[0];
   if (tet) falas.push({ txt: tet.pct >= 1 ? <>Você passou do teto de <b>{catDe(tet.cat).nome}</b>: {brl(tet.gasto)} de {brl(tet.teto)} no mês.</> : <><b>{catDe(tet.cat).nome}</b> já está em {Math.round(tet.pct * 100)}% do teto do mês ({brl(tet.gasto)} de {brl(tet.teto)}).</>, acao: { l: "Ver gastos", ic: <I.chart />, fn: () => act.setTab("p-gastos") } });
+  const pv = previsaoMes(db);
+  if (pv.diaHoje < pv.ultimo && (pv.fim < 0 || pv.diaNeg)) falas.unshift({ txt: pv.diaNeg && pv.diaNeg <= pv.diaHoje ? <>Atenção: o mês já está no vermelho e, nesse ritmo, <b>termina faltando {brl(-Math.min(0, pv.fim))}</b>. Vale segurar os gastos do dia a dia.</> : <>Atenção: nesse ritmo, <b>falta dinheiro a partir do dia {pv.diaNeg || pv.ultimo}</b>. Vale segurar os gastos do dia a dia.</>, acao: { l: "Ver gastos", ic: <I.chart />, fn: () => act.setTab("p-gastos") } });
   const r = resumoPessoal(db, chave);
   falas.push({ txt: <>Neste mês entrou <b>{brl(r.entrou)}</b>{r.consult > 0 ? <> (sendo {brl(r.consult)} do consultório)</> : null} e saiu <b>{brl(r.saiu)}</b>. {r.sobra >= 0 ? <>Sobram {brl(r.sobra)}.</> : <>Está {brl(-r.sobra)} no vermelho.</>}</> });
   const top = Object.entries(r.porCat).sort((a, b) => b[1] - a[1])[0];
@@ -182,6 +249,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
         <div className="col">
           <Talk falas={falas} />
           <ProximaConquista act={act} trilhas={["dinheiro", "app"]} />
+          <CasaCartao casa={act.casa} onAbrir={act.abrirCasa} />
           {servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
           <section className="bal">
             <div className="bal-top">
@@ -194,6 +262,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
               {[["7", "7 dias"], ["30", "30 dias"], ["mes", "Mês"]].map(([v, l]) => <button key={v} role="tab" aria-selected={rng === v} className={"rg" + (rng === v ? " on" : "")} onClick={() => setRng(v)}>{l}</button>)}
             </div>
           </section>
+          <CartaoPrevisao db={db} />
           <div className="tiles">
             <div className="tile"><I.down /><div><span>Entrou</span><b style={{ color: "var(--mint)" }}><Money v={r.entrou} /></b></div></div>
             <div className="tile"><I.up /><div><span>Saiu</span><b><Money v={r.saiu} /></b></div></div>
@@ -405,7 +474,31 @@ function ContasTab({ db, act, tema }) {
 
 // campos que outras telas guardam no lançamento (transporte, extrato, voz): editar aqui não pode apagar
 const extrasDe = l => { if (!l) return {}; const o = {}; ["sub", "litros", "precoLitro", "combustivel", "km", "manut", "importId", "via"].forEach(k => { if (l[k] !== undefined) o[k] = l[k]; }); return o; };
-function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onFoto, onSave, onDelete, onClose, onLogo }) {
+// Início pessoal: a casa compartilhada (ou o convite para criar uma)
+function CasaCartao({ casa, onAbrir }) {
+  if (!casa || ["carregando", "indisponivel", "erro"].includes(casa.estado) && !casa.casa) return null;
+  if (!casa.casa) return (
+    <button className="casa-cartao vazio" onClick={onAbrir}>
+      <span className="casa-cartao-ic"><I.users /></span>
+      <span className="tx"><b>Divide as contas com alguém?</b><small>Dinheiro a dois ou em família: quem pagou o quê e quem deve quanto.</small></span>
+      <I.chev />
+    </button>
+  );
+  const { dividas } = saldosCasa(casa.lanc, casa.acertos, casa.membros);
+  const minha = dividas.find(d => d.de === casa.eu || d.para === casa.eu);
+  const nome = id => ((casa.membros.find(m => m.id === id) || {}).nome || "Alguém");
+  const ch = todayISO().slice(0, 7), mes = casa.lanc.filter(l => (l.data || "").startsWith(ch)).reduce((s, l) => s + l.valor, 0);
+  return (
+    <button className="casa-cartao" onClick={onAbrir}>
+      <span className="casa-cartao-av">{casa.membros.slice(0, 3).map(m => <i key={m.id}>{m.foto ? <img src={m.foto} alt="" /> : iniciais(m.nome || "?")}</i>)}</span>
+      <span className="tx"><b>{casa.casa.nome}</b><small>{casa.membros.length < 2 ? "Convide quem divide as contas com você" : minha ? (minha.de === casa.eu ? `Você deve ${brl(minha.valor)} para ${nome(minha.para)}` : `${nome(minha.de)} te deve ${brl(minha.valor)}`) : `Tudo acertado · ${brl(mes)} da casa este mês`}</small></span>
+      <I.chev />
+    </button>
+  );
+}
+
+function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onVoz, onFoto, onSave, onDelete, onClose, onLogo }) {
+  const [dividir, setDividir] = useState(false);
   const fotoRef = useRef(null);
   const cot = useCotacoes();
   const [tipo, setTipo] = useState(inicial ? inicial.tipo : pre ? pre.tipo : tipo0);
@@ -476,8 +569,9 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onFoto, onSave, o
         <SugestoesMarca texto={desc} escolha={escolha} onFoto={onLogo} onEscolha={e => { setEscolha(e); if (e.nome) setDesc(e.nome); if (e.cat && tipo === "saida" && CATEGORIAS.some(c => c.id === e.cat)) setCat(e.cat); }} />
         <Field label="Quando" htmlFor="l-data"><input id="l-data" type="date" value={data} onChange={e => e.target.value && setData(e.target.value)} /></Field>
       </div>
+      {casa && !inicial && tipo === "saida" && <Toggle on={dividir} onClick={() => setDividir(!dividir)}>Dividir com a casa ({casa.membros.length} pessoas{v > 0 ? `, ${brl(v / casa.membros.length)} cada` : ""})</Toggle>}
       {!ok && <div className="hint">{!(v > 0) ? "Digite o valor e escolha uma categoria." : "Escolha uma categoria."}</div>}
-      <button className="btn mode" disabled={!ok} onClick={() => onSave({ ...extrasDe(inicial), id: inicial ? inicial.id : uid(), tipo, valor: emR, cat, desc: desc.trim(), data, ...camposLogo(desc, escolha), ...(fora ? { moeda, valorOrig: v, cotacao: cotUsada, iof: iofOn } : {}) })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
+      <button className="btn mode" disabled={!ok} onClick={() => onSave({ ...(dividir && casa && tipo === "saida" ? { dividirCasa: true } : {}), ...extrasDe(inicial), id: inicial ? inicial.id : uid(), tipo, valor: emR, cat, desc: desc.trim(), data, ...camposLogo(desc, escolha), ...(fora ? { moeda, valorOrig: v, cotacao: cotUsada, iof: iofOn } : {}) })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
       {inicial && <ConfirmButton label="Apagar lançamento" titulo="Apagar este lançamento?" texto="Ele sai do seu extrato e dos totais do mês." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
