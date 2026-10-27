@@ -31,33 +31,35 @@
     <link rel="apple-touch-startup-image" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/640x1136.jpg" />
     <style>
       html{background:#070B1A}
-      #intro{position:fixed;inset:0;z-index:9999;overflow:hidden;background:#070B1A;display:grid;place-items:center;-webkit-tap-highlight-color:transparent;animation:intro-sai .6s cubic-bezier(.4,0,.2,1) 1.88s forwards}
-      #intro .luzes{position:absolute;inset:0;animation:intro-mergulho .85s cubic-bezier(.4,0,.2,1) 1.72s forwards}
+      #intro{position:fixed;inset:0;z-index:9999;overflow:hidden;background:#070B1A;display:grid;place-items:center;-webkit-tap-highlight-color:transparent;animation:intro-sai .6s cubic-bezier(.4,0,.2,1) 2.23s forwards}
+      #intro .luzes{position:absolute;inset:0;animation:intro-mergulho .85s cubic-bezier(.4,0,.2,1) 2.07s forwards}
       #intro .luz{position:absolute;border-radius:50%;will-change:transform}
       #intro .l1{width:120vmax;height:120vmax;left:-55vmax;top:-62vmax;background:radial-gradient(closest-side,rgba(38,78,196,.62),rgba(38,78,196,.22) 55%,transparent);animation:intro-flutua1 6s ease-in-out infinite alternate}
       #intro .l2{width:100vmax;height:100vmax;left:-48vmax;bottom:-62vmax;background:radial-gradient(closest-side,rgba(32,140,140,.42),rgba(32,140,140,.14) 55%,transparent);animation:intro-flutua2 7s ease-in-out infinite alternate}
       #intro .l3{width:90vmax;height:90vmax;right:-52vmax;top:8vmax;background:radial-gradient(closest-side,rgba(72,58,170,.34),rgba(72,58,170,.1) 55%,transparent);animation:intro-flutua3 8s ease-in-out infinite alternate}
       #intro::after{content:"";position:absolute;inset:0;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23g)'/></svg>");opacity:.07;mix-blend-mode:overlay;pointer-events:none}
       #intro.pula{animation:intro-sai .25s ease forwards}
-      .intro-nome{position:relative;z-index:1;width:min(54vw,300px);height:auto;overflow:visible;opacity:0;transform:translateY(10px);animation:intro-sobe .9s cubic-bezier(.22,1,.36,1) .05s forwards,intro-vai .42s cubic-bezier(.4,0,.2,1) 1.6s forwards}
-      .intro-nome .t{opacity:0;stroke-dasharray:var(--L);stroke-dashoffset:var(--L);animation:intro-traco .75s cubic-bezier(.65,0,.35,1) forwards}
-      .intro-nome .t0{animation-delay:.12s}.intro-nome .t1{animation-delay:.22s}.intro-nome .t2{animation-delay:.31s}.intro-nome .t3{animation-delay:.4s}.intro-nome .t4{animation-delay:.49s}.intro-nome .t5{animation-delay:.58s}
+      .intro-nome{position:relative;z-index:1;width:min(54vw,300px);height:auto;overflow:visible;opacity:0;transform:translateY(12px) scale(.96);filter:blur(10px);animation:intro-sobe 1.1s cubic-bezier(.22,1,.36,1) .05s forwards,intro-vai .42s cubic-bezier(.4,0,.2,1) 1.95s forwards}
+      /* cada letra se desenha enquanto desliza de um pouco mais longe até o lugar: o nome "se fecha" no centro */
+      .intro-nome .t{opacity:0;stroke-dasharray:var(--L);stroke-dashoffset:var(--L);transform:translateX(var(--x));animation:intro-traco .8s cubic-bezier(.65,0,.35,1) forwards,intro-junta 1.1s cubic-bezier(.16,1,.3,1) forwards}
+      .intro-nome .t0{--x:-39px;animation-delay:.15s}.intro-nome .t1{--x:-27px;animation-delay:.23s}.intro-nome .t2{--x:-16px;animation-delay:.31s}.intro-nome .t3{--x:2px;animation-delay:.39s}.intro-nome .t4{--x:20px;animation-delay:.47s}.intro-nome .t5{--x:39px;animation-delay:.55s}
       @keyframes intro-traco{0%{opacity:0}5%{opacity:1}to{opacity:1;stroke-dashoffset:0}}
-      @keyframes intro-sobe{to{opacity:1;transform:none}}
+      @keyframes intro-junta{to{transform:none}}
+      @keyframes intro-sobe{to{opacity:1;transform:none;filter:none}}
       @keyframes intro-vai{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-14px) scale(.97)}}
       @keyframes intro-mergulho{to{transform:scale(1.18)}}
       @keyframes intro-sai{to{opacity:0;visibility:hidden}}
       @keyframes intro-flutua1{to{transform:translate(9vmax,6vmax) scale(1.06)}}
       @keyframes intro-flutua2{to{transform:translate(7vmax,-8vmax) scale(1.1)}}
       @keyframes intro-flutua3{to{transform:translate(-8vmax,7vmax) scale(.95)}}
-      @media (prefers-reduced-motion: reduce){#intro .luz,#intro .luzes{animation:none}.intro-nome,.intro-nome .t{animation:none;opacity:1;transform:none;stroke-dashoffset:0}.intro-nome .brilho{display:none}#intro{animation-delay:.7s}}
+      @media (prefers-reduced-motion: reduce){#intro .luz,#intro .luzes{animation:none}.intro-nome,.intro-nome .t{animation:none;opacity:1;transform:none;filter:none;stroke-dashoffset:0}.intro-nome .brilho{display:none}#intro{animation-delay:.7s}}
     </style>
   </head>
   <body>
     <!-- Abertura animada: manchas de luz flutuam no fundo marinho, o nome "alvena" se desenha traço a traço (o primeiro "a" surge em degradê),
          um reflexo de luz passa pelas letras e, na saída, o nome sobe e some enquanto o fundo dá um zoom e revela o app.
          Fica aqui no HTML (e não no React) para aparecer na hora, antes do app carregar. Um toque pula. -->
-    <div id="intro" aria-hidden="true"><div class="luzes"><i class="luz l1"></i><i class="luz l2"></i><i class="luz l3"></i></div><svg class="intro-nome" viewBox="-48 -94 752 242" role="img" aria-label="Alvena"><defs><linearGradient id="nvf" x1="-18" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#EEF3FF" stop-opacity="0"/><stop offset=".45" stop-color="#EEF3FF" stop-opacity=".45"/><stop offset="1" stop-color="#EEF3FF"/></linearGradient><linearGradient id="nvb" x1="0" y1="0" x2="230" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="translate(-328 0)"><stop offset="0" stop-color="#9FD4FF" stop-opacity="0"/><stop offset=".5" stop-color="#C9E7FF" stop-opacity=".95"/><stop offset="1" stop-color="#9FD4FF" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" values="-328 0;754 0" begin="0.95s" dur="0.62s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .55 1"/></linearGradient></defs><g fill="none" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path class="t t0" d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100" stroke="url(#nvf)"/><path class="t t1" d="M136 -46V100" stroke="#EEF3FF"/><path class="t t2" d="M172 0L214 100L256 0" stroke="#EEF3FF"/><path class="t t3" d="M292 50H392A50 50 0 1 0 380.3 82.1" stroke="#EEF3FF"/><path class="t t4" d="M428 100V46A46 46 0 0 1 520 46V100" stroke="#EEF3FF"/><path class="t t5" d="M656 50A50 50 0 1 1 556 50A50 50 0 1 1 656 50M656 0V100" stroke="#EEF3FF"/><g class="brilho" stroke="url(#nvb)"><path d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100"/><path d="M136 -46V100"/><path d="M172 0L214 100L256 0"/><path d="M292 50H392A50 50 0 1 0 380.3 82.1"/><path d="M428 100V46A46 46 0 0 1 520 46V100"/><path d="M656 50A50 50 0 1 1 556 50A50 50 0 1 1 656 50M656 0V100"/></g></g></svg></div>
+    <div id="intro" aria-hidden="true"><div class="luzes"><i class="luz l1"></i><i class="luz l2"></i><i class="luz l3"></i></div><svg class="intro-nome" viewBox="-48 -94 752 242" role="img" aria-label="Alvena"><defs><linearGradient id="nvf" x1="-18" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#EEF3FF" stop-opacity="0"/><stop offset=".45" stop-color="#EEF3FF" stop-opacity=".45"/><stop offset="1" stop-color="#EEF3FF"/></linearGradient><linearGradient id="nvb" x1="0" y1="0" x2="230" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="translate(-328 0)"><stop offset="0" stop-color="#9FD4FF" stop-opacity="0"/><stop offset=".5" stop-color="#C9E7FF" stop-opacity=".95"/><stop offset="1" stop-color="#9FD4FF" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" values="-328 0;754 0" begin="1.3s" dur="0.62s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .55 1"/></linearGradient></defs><g fill="none" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path class="t t0" d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100" stroke="url(#nvf)"/><path class="t t1" d="M136 -46V100" stroke="#EEF3FF"/><path class="t t2" d="M172 0L214 100L256 0" stroke="#EEF3FF"/><path class="t t3" d="M292 50H392A50 50 0 1 0 380.3 82.1" stroke="#EEF3FF"/><path class="t t4" d="M428 100V46A46 46 0 0 1 520 46V100" stroke="#EEF3FF"/><path class="t t5" d="M656 50A50 50 0 1 1 556 50A50 50 0 1 1 656 50M656 0V100" stroke="#EEF3FF"/><g class="brilho" stroke="url(#nvb)"><path d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100"/><path d="M136 -46V100"/><path d="M172 0L214 100L256 0"/><path d="M292 50H392A50 50 0 1 0 380.3 82.1"/><path d="M428 100V46A46 46 0 0 1 520 46V100"/><path d="M656 50A50 50 0 1 1 556 50A50 50 0 1 1 656 50M656 0V100"/></g></g></svg></div>
     <script>
       (function () {
         var el = document.getElementById("intro");
@@ -71,7 +73,7 @@
         var tirar = function () { if (el.parentNode) el.remove(); };
         el.addEventListener("animationend", function (e) { if (e.animationName === "intro-sai") tirar(); });
         el.addEventListener("click", function () { el.classList.add("pula"); setTimeout(tirar, 220); });
-        setTimeout(tirar, 3200); // garantia
+        setTimeout(tirar, 3600); // garantia
       })();
     </script>
     <div id="root"></div>
