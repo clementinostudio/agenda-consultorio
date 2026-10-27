@@ -15,7 +15,7 @@ import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sai
 import { lerBoleto } from "./boleto.js";
 import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
 import { AVATARES, ehAvatarPronto } from "./avatares.js";
-import { precosGuardados } from "./transporte.js";
+import { precosGuardados, veiculosDe } from "./transporte.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -1303,12 +1303,12 @@ function gerarAvisos(db, av, usaPessoal) {
       add(quando(iso, "09:00"), `${c.nome} vence hoje`, `${brlReal(c.valor)} · já pagou? Marque no app.`, `c-${c.id}`);
     }
   });
-  if (usaPessoal) { const vc = db.pessoal && db.pessoal.veiculo, docs = (vc && vc.docs) || {}; [["ipva", "IPVA"], ["licenc", "Licenciamento"], ["seguro", "Seguro do carro"]].forEach(([k, n]) => {
+  if (usaPessoal) { const vs = veiculosDe(db); vs.forEach(vc => { const docs = vc.docs || {}, de = vs.length > 1 && vc.nome ? ` (${vc.nome})` : ""; [["ipva", "IPVA"], ["licenc", "Licenciamento"], ["seguro", "Seguro"]].forEach(([k, n]) => {
     const d = docs[k]; if (!d || !d.data) return;
     const val = d.valor ? ` · ${brlReal(d.valor)}` : "";
-    add(quando(addDays(d.data, -7), "09:00"), `${n} vence em uma semana`, `Dia ${dm(d.data)}${val}. Toque para ver no Transporte.`, `v-${k}`);
-    add(quando(d.data, "09:00"), `${n} vence hoje`, `Já pagou? Marque em Transporte${val}.`, `v-${k}`);
-  }); }
+    add(quando(addDays(d.data, -7), "09:00"), `${n}${de} vence em uma semana`, `Dia ${dm(d.data)}${val}. Toque para ver no Transporte.`, `v-${vc.id}-${k}`);
+    add(quando(d.data, "09:00"), `${n}${de} vence hoje`, `Já pagou? Marque em Transporte${val}.`, `v-${vc.id}-${k}`);
+  }); }); }
   // Resumo da semana: domingo às 20h. Os números vão até a última vez que o app mandou a lista
   // (e ele manda de novo a cada mudança), então chega com a semana inteira.
   if (av.semana !== false) {
@@ -3619,6 +3619,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   VIAGEM = (db.pessoal && db.pessoal.viagem) || null;
   LOGOS = (db.pessoal && db.pessoal.logos) || {};
   const [modo, setModoSt] = useState(() => lerJSON(K.modo(conta.email), "consultorio"));
+  const [veicAtual, setVeicAtual] = useState(null); // veículo mostrado no carrossel do Transporte
   const [tab, setTab] = useState(() => lerJSON(K.modo(conta.email), "consultorio") === "pessoal" ? "p-home" : "home");
   const [sheet, setSheet] = useState(null);
   const [foco, setFoco] = useState(false);
@@ -3901,9 +3902,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     abrirClima: () => setSheet({ type: "clima" }),
     // Transporte é uma aba do modo Pessoal; os painéis dela abrem como os outros
     abrirTransporte: () => { if (sheet) close(); if (modo !== "pessoal") { setModoSt("pessoal"); gravar(K.modo(conta.email), "pessoal"); } setTab("p-transp"); rolarTopo(); },
-    abrirGastoTransp: ({ sub, inicial, manut } = {}) => setSheet({ type: "transp-gasto", sub, inicial, manut, n: Date.now() }),
-    abrirVeiculo: () => setSheet({ type: "veiculo" }),
-    atualizarVeiculo: patch => setP(P => ({ ...P, veiculo: { ...(P.veiculo || {}), ...patch } })),
+    abrirGastoTransp: ({ sub, inicial, manut, veiculoId } = {}) => setSheet({ type: "transp-gasto", sub, inicial, manut, veiculoId, n: Date.now() }),
+    abrirVeiculo: id => setSheet({ type: "veiculo", id: typeof id === "string" ? id : null }),
+    atualizarVeiculo: (id, patch) => setP(P => { const { veiculo, ...resto } = P; return { ...resto, veiculos: veiculosDe({ pessoal: P }).map(x => x.id === id ? { ...x, ...patch } : x) }; }),
     // Consultório: recibo, imposto e anotações
     abrirRecibo: (pid, cid) => setSheet({ type: "recibo", pid, cid }),
     abrirImposto: () => setSheet({ type: "imposto" }),
@@ -3918,7 +3919,17 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     salvarNota: n => setDb(d => ({ ...d, notas: (d.notas || []).some(x => x.id === n.id) ? d.notas.map(x => x.id === n.id ? n : x) : [...(d.notas || []), n],
       sessions: n.sid ? d.sessions.map(s => s.id === n.sid ? { ...s, registro: true } : s) : d.sessions })),
     apagarNota: id => { setDb(d => ({ ...d, notas: (d.notas || []).filter(x => x.id !== id) })); notify("Anotação apagada"); },
-    salvarVeiculo: v => { setP(P => ({ ...P, veiculo: v })); close(); vibrar("ok"); notify(v.tipo === "nenhum" ? "Pronto: sem veículo, foco nos apps e no transporte público" : `${v.nome || "Veículo"} salvo`); },
+    // vários veículos: a lista vai para pessoal.veiculos (o antigo pessoal.veiculo vira o primeiro e some)
+    salvarVeiculo: v => {
+      const item = { ...v, id: v.id || uid() };
+      setP(P => { const vs = veiculosDe({ pessoal: P }), { veiculo, ...resto } = P; return { ...resto, veiculos: vs.some(x => x.id === item.id) ? vs.map(x => x.id === item.id ? item : x) : [...vs, item] }; });
+      setVeicAtual(item.id); close(); vibrar("ok");
+      notify(item.tipo === "nenhum" ? "Pronto: apps e transporte público" : `${item.nome || "Veículo"} salvo`);
+    },
+    removerVeiculo: id => {
+      setP(P => { const { veiculo, ...resto } = P; return { ...resto, veiculos: veiculosDe({ pessoal: P }).filter(x => x.id !== id) }; });
+      setVeicAtual(null); close(); notify("Veículo removido. Os gastos dele continuam em Gastos.");
+    },
     abrirChat: () => { if (sheet) close(); vozApi.current.chat && vozApi.current.chat(); },
     recarregarClima: () => carregarClima(true),
     setTab: t => { if (t === tab) return rolarTopo(); comTransicao(() => { setTab(t); rolarTopo(); }, ORDEM_ABAS.indexOf(t) < ORDEM_ABAS.indexOf(tab) ? "tras" : "frente"); },
@@ -4173,11 +4184,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
       {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
-      {sheet && sheet.type === "transp-gasto" && <Suspense fallback={null}><GastoTransporteSheet key={sheet.n} sub0={sheet.sub} manut0={sheet.manut} inicial={sheet.inicial} veiculo={db.pessoal.veiculo || null} precos={precosGuardados()} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "transp-gasto" && <Suspense fallback={null}><GastoTransporteSheet key={sheet.n} veiculos={veiculosDe(db)} veiculoId={sheet.veiculoId || (sheet.inicial && sheet.inicial.veiculoId) || veicAtual} sub0={sheet.sub} manut0={sheet.manut} inicial={sheet.inicial} precos={precosGuardados()} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "recibo" && <Suspense fallback={null}><ReciboSheet key={sheet.pid + (sheet.cid || "")} db={db} conta={conta} pid={sheet.pid} cid={sheet.cid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "imposto" && <Suspense fallback={null}><ImpostoSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "notas" && <Suspense fallback={null}><NotasSheet key={sheet.pid + (sheet.sid || "")} db={db} pid={sheet.pid} sid={sheet.sid} onClose={close} act={act} /></Suspense>}
-      {sheet && sheet.type === "veiculo" && <Suspense fallback={null}><VeiculoSheet veiculo={db.pessoal.veiculo || null} db={db} onSave={act.salvarVeiculo} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "veiculo" && <Suspense fallback={null}><VeiculoSheet key={sheet.id || "novo"} veiculo={sheet.id && sheet.id !== "novo" ? veiculosDe(db).find(x => x.id === sheet.id) || null : sheet.id === "novo" ? null : veiculosDe(db)[0] || null} db={db} onSave={act.salvarVeiculo} onDelete={act.removerVeiculo} onClose={close} /></Suspense>}
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "boleto" && <Suspense fallback={null}><BoletoSheet key={sheet.n || "boleto"} texto={sheet.texto} act={act} onClose={close} /></Suspense>}
@@ -4241,7 +4252,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         {tabEf === "p-home" && <Suspense fallback={null}><PessoalHome db={db} conta={conta} now={now} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-gastos" && <Suspense fallback={null}><GastosTab db={db} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-contas" && <Suspense fallback={null}><ContasTab db={db} act={act} tema={tema} /></Suspense>}
-        {tabEf === "p-transp" && <Suspense fallback={null}><TransporteTab db={db} act={act} tema={tema} perfil={perfil} /></Suspense>}
+        {tabEf === "p-transp" && <Suspense fallback={null}><TransporteTab db={db} act={act} tema={tema} perfil={perfil} atual={veicAtual} onTrocar={setVeicAtual} /></Suspense>}
       </main>
 
       <div className={"topo-fixo" + (rolou && !sheet ? " on" : "")} aria-hidden={!(rolou && !sheet)} inert={rolou && !sheet ? undefined : ""}>

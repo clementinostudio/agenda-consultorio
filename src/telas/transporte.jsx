@@ -1,7 +1,7 @@
 // Parte do app carregada sob demanda: aba "Transporte" do modo Pessoal (também abre ao tocar em Transporte, em Gastos).
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar, ProximaConquista } from "../App.jsx";
-import { SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
+import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
 
 /* ---------- ícones ---------- */
 const Svg = ({ children }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
@@ -42,14 +42,70 @@ function FotoVeiculo({ v, grande }) {
   return <span className={cls + " emoji"} aria-hidden="true">{EMOJI[v.tipo] || "🚗"}</span>;
 }
 
-export function TransporteTab({ db, act, tema, perfil }) {
-  const v = (db.pessoal && db.pessoal.veiculo) || null;
+// Um cartão por veículo: foto, nome e os números dele; o último cartão adiciona outro veículo
+function SlideVeiculo({ db, v }) {
+  const comb = estatisticasCombustivel(db, v), km = kmAtual(db, v), motor = v.tipo === "carro" || v.tipo === "moto";
+  const nome = v.nome || (v.fipe && v.fipe.modelo) || (v.tipo === "nenhum" ? "Apps e transporte público" : "Seu veículo");
+  return (
+    <div className="transp-slide">
+      <div className="transp-palco"><i className="transp-luz" aria-hidden="true" /><FotoVeiculo v={v} grande /><i className="transp-chao" aria-hidden="true" /></div>
+      <h2>{nome}</h2>
+      <div className="transp-chips">
+        {v.combustivel && motor && <span>{(COMBUSTIVEIS.find(c => c[0] === v.combustivel) || [, ""])[1]}</span>}
+        {motor && comb.consumo && <span>{kml(comb.consumo)} km/l{comb.consumoReal ? "" : " (informado)"}</span>}
+        {motor && km && <span>{km.toLocaleString("pt-BR")} km</span>}
+        {v.fipe && v.fipe.valor && <span>FIPE {v.fipe.valor}</span>}
+      </div>
+    </div>
+  );
+}
+function Carrossel({ db, vs, v, onTrocar, act }) {
+  const ref = useRef(null), espera = useRef(0);
+  const idx = Math.max(0, vs.findIndex(x => v && x.id === v.id));
+  // trocou por fora (veículo novo, toque na bolinha): rola até ele
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const alvo = idx * el.clientWidth;
+    if (Math.abs(el.scrollLeft - alvo) > 4) el.scrollTo({ left: alvo, behavior: el.dataset.pronto ? "smooth" : "auto" });
+    el.dataset.pronto = "1";
+  }, [idx, vs.length]);
+  const rolou = () => {
+    clearTimeout(espera.current);
+    espera.current = setTimeout(() => {
+      const el = ref.current; if (!el) return;
+      const i = Math.round(el.scrollLeft / el.clientWidth);
+      if (i < vs.length && vs[i].id !== (v && v.id)) { vibrar("toque"); onTrocar(vs[i].id); }
+    }, 80);
+  };
+  return (
+    <section className="transp-hero" aria-roledescription="carrossel" aria-label="Seus veículos">
+      <div className="transp-carrossel" ref={ref} onScroll={rolou}>
+        {vs.map(x => <SlideVeiculo key={x.id} db={db} v={x} />)}
+        <div className="transp-slide">
+          <button className="transp-novo" onClick={() => act.abrirVeiculo("novo")}>
+            <span className="transp-novo-ic"><I.plus /></span>
+            <b>Adicionar veículo</b>
+            <small>Outro carro, moto, bike ou só apps e ônibus</small>
+          </button>
+        </div>
+      </div>
+      <div className="transp-pontos" role="tablist">
+        {vs.map((x, i) => <button key={x.id} role="tab" aria-selected={i === idx} className={i === idx ? "on" : ""} onClick={() => onTrocar(x.id)} aria-label={x.nome || `Veículo ${i + 1}`} />)}
+        <button className="mais" onClick={() => act.abrirVeiculo("novo")} aria-label="Adicionar veículo"><I.plus /></button>
+      </div>
+    </section>
+  );
+}
+
+export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
+  const vs = veiculosDe(db);
+  const v = vs.find(x => x.id === atual) || vs[0] || null;
   const [off, setOff] = useState(0);
   const [filtro, setFiltro] = useState(null);
   const hoje = todayISO();
-  const mes = mesDe(off), g = useMemo(() => gastosTransporte(db, mes.chave), [db, mes.chave]);
-  const ant = useMemo(() => gastosTransporte(db, mesDe(off - 1).chave), [db, off]);
-  const seis = useMemo(() => [5, 4, 3, 2, 1, 0].map(k => { const m = mesDe(off - k); return { ...m, total: gastosTransporte(db, m.chave).total }; }), [db, off]);
+  const mes = mesDe(off), g = useMemo(() => gastosTransporte(db, mes.chave, v), [db, mes.chave, v]);
+  const ant = useMemo(() => gastosTransporte(db, mesDe(off - 1).chave, v), [db, off, v]);
+  const seis = useMemo(() => [5, 4, 3, 2, 1, 0].map(k => { const m = mesDe(off - k); return { ...m, total: gastosTransporte(db, m.chave, v).total }; }), [db, off, v]);
   const maior = Math.max(...seis.map(s => s.total), 1);
   const comb = useMemo(() => estatisticasCombustivel(db, v), [db, v]);
   const oleo = proximaTrocaOleo(db, v, hoje);
@@ -72,11 +128,12 @@ export function TransporteTab({ db, act, tema, perfil }) {
   const [idaVolta, setIdaVolta] = useState(true);
   const precoRef = comb.precoPago || (ref && (v && v.combustivel === "etanol" ? ref.p.etanol : v && v.combustivel === "diesel" ? ref.p.diesel : ref.p.gasolina)) || null;
   const kmTotal = num(kmViagem) * (idaVolta ? 2 : 1), litros = comb.consumo ? kmTotal / comb.consumo : 0;
-  const manut = (db.pessoal ? db.pessoal.lanc : []).filter(l => l.cat === "transporte" && ["manutencao", "melhorias"].includes(subDe(l))).sort((a, b) => b.data.localeCompare(a.data));
+  const manut = lancTransp(db, v).filter(l => ["manutencao", "melhorias"].includes(subDe(l))).sort((a, b) => b.data.localeCompare(a.data));
   const manutAno = manut.filter(l => l.data.startsWith(hoje.slice(0, 4))).reduce((s, l) => s + l.valor, 0);
   const subsMes = SUBS.filter(s => g.porSub[s.id]).sort((a, b) => g.porSub[b.id].total - g.porSub[a.id].total);
   const lista = g.itens.filter(i => !filtro || i.sub === filtro);
-  const delta = ant.total > 0 ? (g.total - ant.total) / ant.total : null;
+  // a porcentagem só faz sentido quando o mês anterior teve gasto de verdade
+  const delta = ant.total >= 50 ? (g.total - ant.total) / ant.total : null;
   const nome = (v && v.nome) || (v && v.fipe && v.fipe.modelo) || (v && v.tipo === "nenhum" ? "Apps e transporte público" : "Seu veículo");
   const rodizio = proximoRodizio(db, v, hoje);
   const docs = docsVeiculo(v, hoje);
@@ -89,32 +146,28 @@ export function TransporteTab({ db, act, tema, perfil }) {
     const { tipo, marca, modelo, ano } = v.fipe.ids;
     fipe.valor(tipo, marca, modelo, ano).then(r => {
       const val = valorFipe(r.Valor); if (!val) return;
-      act.atualizarVeiculo({ fipe: { ...v.fipe, valor: r.Valor, mes: r.MesReferencia }, fipeHist: [...hist.filter(h => h.quando !== mesAtual), { quando: mesAtual, valor: val }].slice(-36) });
+      act.atualizarVeiculo(v.id, { fipe: { ...v.fipe, valor: r.Valor, mes: r.MesReferencia }, fipeHist: [...hist.filter(h => h.quando !== mesAtual), { quando: mesAtual, valor: val }].slice(-36) });
     }).catch(() => {});
   }, [v && v.fipe && v.fipe.codigo, hoje.slice(0, 7)]);
   const pagarDoc = d => {
-    act.salvarLanc({ id: uid(), tipo: "saida", cat: "transporte", sub: "documentos", valor: d.valor, data: hoje, desc: `${d.nome} ${d.data.slice(0, 4)}` });
-    act.atualizarVeiculo({ docs: { ...(v.docs || {}), [d.k]: { ...(v.docs || {})[d.k], data: umAnoDepois(d.data) } } });
+    act.salvarLanc({ id: uid(), veiculoId: v.id, tipo: "saida", cat: "transporte", sub: "documentos", valor: d.valor, data: hoje, desc: `${d.nome} ${d.data.slice(0, 4)}` });
+    act.atualizarVeiculo(v.id, { docs: { ...(v.docs || {}), [d.k]: { ...(v.docs || {})[d.k], data: umAnoDepois(d.data) } } });
   };
 
   return (
     <div className="page transp">
       <TopBar eyebrow={nome} title="Transporte" act={act} tema={tema}
-        extra={<button className="icon-btn" onClick={() => act.abrirVeiculo()} aria-label="Editar o veículo"><I.pencil /></button>} />
+        extra={<button className="icon-btn" onClick={() => act.abrirVeiculo(v ? v.id : "novo")} aria-label="Editar o veículo"><I.pencil /></button>} />
       <div className="cols">
         <div className="col">
 
-        <section className="transp-hero">
-          <div className="transp-palco"><i className="transp-luz" aria-hidden="true" /><FotoVeiculo v={v} grande /><i className="transp-chao" aria-hidden="true" /></div>
-          <h2>{nome}</h2>
-          <div className="transp-chips">
-            {v && v.combustivel && temCarro && <span>{(COMBUSTIVEIS.find(c => c[0] === v.combustivel) || [, ""])[1]}</span>}
-            {comb.consumo && <span>{kml(comb.consumo)} km/l{comb.consumoReal ? "" : " (informado)"}</span>}
-            {km && <span>{km.toLocaleString("pt-BR")} km</span>}
-            {v && v.fipe && v.fipe.valor && <span>FIPE {v.fipe.valor}</span>}
-          </div>
-          {!v && <button className="btn ghost transp-escolher" onClick={() => act.abrirVeiculo()}><I.car /> Escolher o meu veículo</button>}
-        </section>
+        {vs.length ? <Carrossel db={db} vs={vs} v={v} onTrocar={id => { onTrocar(id); setOff(0); setFiltro(null); }} act={act} /> : (
+          <section className="transp-hero">
+            <div className="transp-palco"><i className="transp-luz" aria-hidden="true" /><FotoVeiculo v={null} grande /><i className="transp-chao" aria-hidden="true" /></div>
+            <h2>Seu veículo</h2>
+            <button className="btn ghost transp-escolher" onClick={() => act.abrirVeiculo("novo")}><I.car /> Escolher o meu veículo</button>
+          </section>
+        )}
 
         <section className="transp-card transp-mes">
           <div className="transp-mes-nav">
@@ -135,9 +188,9 @@ export function TransporteTab({ db, act, tema, perfil }) {
         </section>
 
         <div className="transp-acoes">
-          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "combustivel" })}><span className="ic ilu"><Ilustra n="bomba" /></span>Abastecer</button>}
-          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "manutencao" })}><span className="ic ilu"><Ilustra n="ferramentas" /></span>Manutenção</button>}
-          <button onClick={() => act.abrirGastoTransp({ sub: temCarro ? "estacionamento" : "app" })}><span className="ic" style={{ "--c": "var(--mode)" }}><I.plus /></span>Outro gasto</button>
+          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "combustivel", veiculoId: v && v.id })}><span className="ic ilu"><Ilustra n="bomba" /></span>Abastecer</button>}
+          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "manutencao", veiculoId: v && v.id })}><span className="ic ilu"><Ilustra n="ferramentas" /></span>Manutenção</button>}
+          <button onClick={() => act.abrirGastoTransp({ sub: temCarro ? "estacionamento" : "app", veiculoId: v && v.id })}><span className="ic" style={{ "--c": "var(--mode)" }}><I.plus /></span>Outro gasto</button>
         </div>
 
         {subsMes.length > 0 && (
@@ -171,8 +224,8 @@ export function TransporteTab({ db, act, tema, perfil }) {
         </div>
         <div className="col">
         {temCarro && (
-          <section className="transp-card com-bomba">
-            <Ilustra n="bomba" className="transp-bomba" />
+          <section className="transp-card com-ilu">
+            <Ilustra n="bomba" className="transp-sai bomba" />
             <div className="transp-card-cab"><h3>Combustível</h3></div>
             {anp.st === "carregando" && <p className="hint">Buscando o preço da semana na ANP…</p>}
             {anp.st === "sem-cidade" && <p className="hint">Coloque a sua cidade em Perfil → Dados pessoais para ver o preço da semana.</p>}
@@ -197,8 +250,9 @@ export function TransporteTab({ db, act, tema, perfil }) {
         )}
 
         {temCarro && (
-          <section className="transp-card">
-            <div className="transp-card-cab"><Ilustra n="ferramentas" className="transp-cab-ilu" /><h3>Manutenção</h3>{manutAno > 0 && <small>{brl(manutAno)} em {hoje.slice(0, 4)}</small>}</div>
+          <section className="transp-card com-ilu">
+            <Ilustra n="ferramentas" className="transp-sai ferramentas" />
+            <div className="transp-card-cab"><h3>Manutenção</h3>{manutAno > 0 && <small>{brl(manutAno)} em {hoje.slice(0, 4)}</small>}</div>
             {oleo ? (
               <div className={"transp-oleo" + (oleo.urgente ? " urgente" : "")}>
                 <b>Próxima troca de óleo</b>
@@ -209,8 +263,8 @@ export function TransporteTab({ db, act, tema, perfil }) {
               <Ilustra n="pneu" />
               <span><b>Pneus</b>{rodizio
                 ? <small>Rodízio e alinhamento {rodizio.faltamKm != null ? (rodizio.faltamKm > 0 ? `em ${rodizio.faltamKm.toLocaleString("pt-BR")} km ou ` : `atrasado ${Math.abs(rodizio.faltamKm).toLocaleString("pt-BR")} km · `) : ""}{rodizio.faltamDias >= 0 ? `até ${dataCurta(rodizio.ate)}` : `venceu em ${dataCurta(rodizio.ate)}`}</small>
-                : <small>Calibre a cada 15 dias. Anote o rodízio e o alinhamento (a cada 10.000 km) e eu lembro do próximo.</small>}</span>
-              <button className="bub-act" onClick={() => act.abrirGastoTransp({ sub: "manutencao", manut: "alinhamento" })}>Anotar rodízio</button>
+                : <small>Calibre a cada 15 dias. Rodízio e alinhamento a cada 10.000 km: anote e eu lembro.</small>}</span>
+              <button className="bub-act" onClick={() => act.abrirGastoTransp({ sub: "manutencao", manut: "alinhamento", veiculoId: v && v.id })}>Anotar rodízio</button>
             </div>
             {manut.slice(0, 4).map(l => (
               <button key={l.id} className="transp-item" onClick={() => act.abrirGastoTransp({ inicial: l })}>
@@ -231,13 +285,14 @@ export function TransporteTab({ db, act, tema, perfil }) {
                 {d.dias <= 60 && <button className="bub-act" onClick={() => pagarDoc(d)}>Paguei</button>}
               </div>
             ))}
-            {docs.length > 0 && docs.length < 3 && <button className="link" onClick={() => act.abrirVeiculo()}>+ Colocar {DOCS_VEICULO.filter(([k]) => !docs.some(d => d.k === k)).map(x => x[1]).join(" ou ")}</button>}
+            {docs.length > 0 && docs.length < 3 && <button className="link" onClick={() => act.abrirVeiculo(v.id)}>+ Colocar {DOCS_VEICULO.filter(([k]) => !docs.some(d => d.k === k)).map(x => x[1]).join(" ou ")}</button>}
           </section>
         )}
 
         {temCarro && (
-          <section className="transp-card">
-            <div className="transp-card-cab"><span className="ic" style={{ "--c": "var(--mode)" }}><Ic.rota /></span><h3>Quanto custa a viagem?</h3></div>
+          <section className="transp-card com-ilu">
+            <Ilustra n="malas" className="transp-sai malas" />
+            <div className="transp-card-cab"><h3>Quanto custa a viagem?</h3></div>
             <div className="transp-calc">
               <Field label="Distância (km)" htmlFor="t-km"><input id="t-km" inputMode="decimal" value={kmViagem} onChange={e => setKmViagem(soNumero(e.target.value))} placeholder="Ex.: 120" /></Field>
               <Toggle on={idaVolta} onClick={() => setIdaVolta(!idaVolta)}>Ida e volta</Toggle>
@@ -267,7 +322,9 @@ export function TransporteTab({ db, act, tema, perfil }) {
 }
 
 /* ---------- Abastecer, manutenção e outros gastos ---------- */
-export function GastoTransporteSheet({ sub0, manut0, inicial, veiculo, precos, onSave, onDelete, onClose }) {
+export function GastoTransporteSheet({ sub0, manut0, inicial, veiculos = [], veiculoId, precos, onSave, onDelete, onClose }) {
+  const [vid, setVid] = useState(() => (veiculos.some(x => x.id === veiculoId) ? veiculoId : (veiculos.find(x => x.tipo !== "nenhum") || veiculos[0] || {}).id) || null);
+  const veiculo = veiculos.find(x => x.id === vid) || null;
   const [sub, setSub] = useState(inicial ? subDe(inicial) : sub0 || "combustivel");
   const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : "");
   const [litros, setLitros] = useState(inicial && inicial.litros ? fmtNum(inicial.litros) : "");
@@ -286,7 +343,7 @@ export function GastoTransporteSheet({ sub0, manut0, inicial, veiculo, precos, o
   const salvar = () => {
     const nomeManut = (MANUTENCOES.find(m => m[0] === manut) || [, ""])[1];
     onSave({
-      ...(inicial || {}), id: inicial ? inicial.id : uid(), tipo: "saida", cat: "transporte", valor: v, data, sub,
+      ...(inicial || {}), id: inicial ? inicial.id : uid(), veiculoId: vid || undefined, tipo: "saida", cat: "transporte", valor: v, data, sub,
       desc: desc.trim() || (ehComb ? `Abastecimento (${(COMBUSTIVEIS.find(c => c[0] === combustivel) || [, "combustível"])[1].toLowerCase()})` : ehManut ? nomeManut : subInfo(sub).nome),
       litros: ehComb && litrosCalc ? Math.round(litrosCalc * 100) / 100 : undefined,
       precoLitro: ehComb && precoCalc ? Math.round(precoCalc * 1000) / 1000 : undefined,
@@ -302,6 +359,9 @@ export function GastoTransporteSheet({ sub0, manut0, inicial, veiculo, precos, o
           <button key={s.id} type="button" role="radio" aria-checked={sub === s.id} className={sub === s.id ? "on" : ""} style={{ "--c": s.cor }} onClick={() => setSub(s.id)}><IconeSub id={s.id} />{s.nome}</button>
         ))}
       </div>
+      {veiculos.length > 1 && <div className="transp-de-qual" role="radiogroup" aria-label="De qual veículo">
+        {veiculos.map(x => <button key={x.id} type="button" role="radio" aria-checked={vid === x.id} className={vid === x.id ? "on" : ""} onClick={() => setVid(x.id)}><FotoVeiculo v={x} />{x.nome || (x.tipo === "nenhum" ? "Apps e ônibus" : "Veículo")}</button>)}
+      </div>}
       <label className="big-amt" htmlFor="tg-valor"><span>R$</span><input id="tg-valor" inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="0,00" autoFocus={!inicial} /></label>
       {ehComb && <>
         <Seg value={combustivel} onChange={setCombustivel} options={[["gasolina", "Gasolina"], ["etanol", "Etanol"], ["diesel", "Diesel"], ["gnv", "GNV"]].map(([k, n]) => ({ v: k, l: n }))} />
@@ -337,7 +397,7 @@ async function fotoDoCarro(file) {
   c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL("image/jpeg", .82);
 }
-export function VeiculoSheet({ veiculo, db, onSave, onClose }) {
+export function VeiculoSheet({ veiculo, db, onSave, onDelete, onClose }) {
   const km0 = kmAtual(db, veiculo);
   const v0 = veiculo || {};
   const [tipo, setTipo] = useState(v0.tipo || "carro");
@@ -362,7 +422,7 @@ export function VeiculoSheet({ veiculo, db, onSave, onClose }) {
   const achado = carroceria(fipeV && fipeV.modelo) || carroceria(nome);
   const info = tipo !== "carro" || propria ? null : foto === "auto" ? (achado ? FOTOS.find(f => f[0] === achado) || [achado, NOME_CARROCERIA[achado] || achado] : null) : FOTOS.find(f => f[0] === foto);
   return (
-    <Sheet title={veiculo ? "Seu veículo" : "Escolha o seu veículo"} sub="Fica só com você, para deixar a tela com a sua cara." onClose={onClose}>
+    <Sheet title={veiculo ? "Seu veículo" : veiculosDe(db).length ? "Novo veículo" : "Escolha o seu veículo"} sub="Fica só com você, para deixar a tela com a sua cara." onClose={onClose}>
       <div className="transp-palco mini"><FotoVeiculo v={veiculoTela} grande /><i className="transp-chao" aria-hidden="true" /></div>
       <Seg value={tipo} onChange={t => { setTipo(t); if (!propria) setFoto("auto"); }} options={[{ v: "carro", l: "Carro" }, { v: "moto", l: "Moto" }, { v: "bike", l: "Bike" }, { v: "nenhum", l: "Sem veículo" }]} />
       <div className="transp-fotos" role="radiogroup" aria-label="Foto do veículo">
@@ -420,6 +480,7 @@ export function VeiculoSheet({ veiculo, db, onSave, onClose }) {
         const hist = !val ? [] : [...(mesmoCarro ? (v0.fipeHist || []).filter(h => h.quando !== mesAtual) : []), { quando: mesAtual, valor: val }];
         onSave({ ...v0, tipo, foto: tipo === "nenhum" ? "" : foto, nome: nome.trim(), combustivel: temMotor ? combustivel : "", consumo: num(consumo) || null, km: num(km) || null, oleoKm, oleoMeses, fipe: temMotor ? fipeV : null, fipeHist: temMotor ? hist : [], docs: docsOk });
       }}><I.check /> Salvar</button>
+      {veiculo && veiculo.id && <ConfirmButton label="Remover este veículo" titulo={`Remover ${veiculo.nome || "este veículo"}?`} texto="Ele sai do Transporte. Os gastos dele continuam guardados em Gastos." acao="Remover" onConfirm={() => onDelete(veiculo.id)} />}
     </Sheet>
   );
 }

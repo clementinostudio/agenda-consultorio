@@ -100,7 +100,7 @@ function medir(db, h, ex) {
     abastecimentos: P.lanc.filter(l => l.cat === "transporte" && l.litros > 0).length,
     comKm: P.lanc.filter(l => l.cat === "transporte" && l.litros > 0 && l.km > 0).length,
     trocasOleo: P.lanc.filter(l => l.cat === "transporte" && l.manut === "oleo").length,
-    docsCarro: P.veiculo && P.veiculo.docs && Object.values(P.veiculo.docs).some(d => d && d.data) ? 1 : 0,
+    docsCarro: (P.veiculos || (P.veiculo ? [P.veiculo] : [])).some(v => v && v.docs && Object.values(v.docs).some(d => d && d.data)) ? 1 : 0,
     instalado: ex.instalado ? 1 : 0, push: ex.push ? 1 : 0, nuvem: ex.nuvem ? 1 : 0,
     discreto: ex.push && !(ex.av && ex.av.nomes) ? 1 : 0,
   };

@@ -245,6 +245,7 @@ function ParaOndeFoi({ db, chave, act }) {
   const nomeAnt = MES_LONGO[pd.getMonth()];
   return (
     <section className="panel pof">
+      <Ilustra n="carrinho" className="pof-ilu" />
       <div className="panel-head"><h3>Para onde foi o dinheiro</h3></div>
       <p className={"pof-resumo " + (delta > 0 ? "mais" : "menos")}>
         {Math.abs(delta) < 10 ? <>Quase igual a {nomeAnt}{corrente ? ` até o dia ${dia}` : ""}.</>

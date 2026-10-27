@@ -75,6 +75,28 @@ export function fotoDoVeiculo(v) {
 export const NOME_CARROCERIA = { picape: "Picape" };
 export const COMBUSTIVEIS = [["flex", "Flex"], ["gasolina", "Gasolina"], ["etanol", "Etanol"], ["diesel", "Diesel"], ["gnv", "GNV"], ["eletrico", "Elétrico"]];
 
+// Vários veículos: a lista fica em pessoal.veiculos (quem tinha um só, em pessoal.veiculo, vira o primeiro)
+export function veiculosDe(db) {
+  const P = (db && db.pessoal) || {};
+  if (Array.isArray(P.veiculos)) return P.veiculos;
+  return P.veiculo ? [{ id: "v1", ...P.veiculo }] : [];
+}
+// De qual veículo é um gasto: o marcado nele; sem marca, apps e ônibus vão para o "sem veículo" (se houver) e o resto para o primeiro com motor
+export function donoDoGasto(l, vs) {
+  if (!vs.length) return null;
+  if (l.veiculoId && vs.some(v => v.id === l.veiculoId)) return l.veiculoId;
+  const sub = subDe(l), semVeiculo = vs.find(v => v.tipo === "nenhum");
+  if (semVeiculo && (sub === "app" || sub === "publico")) return semVeiculo.id;
+  return (vs.find(v => v.tipo !== "nenhum") || vs[0]).id;
+}
+// Gastos de transporte de um veículo (sem veículo informado: todos)
+export function lancTransp(db, veiculo) {
+  const todos = (db.pessoal ? db.pessoal.lanc : []).filter(l => l.cat === "transporte");
+  const vs = veiculosDe(db);
+  if (!veiculo || !veiculo.id || vs.length < 2) return todos;
+  return todos.filter(l => donoDoGasto(l, vs) === veiculo.id);
+}
+
 // Descobre a subcategoria de um gasto de transporte pela loja e pela descrição
 const REGRAS = [
   ["app", /\b(uber|99|99 ?pop|99app|indrive|cabify|taxi|tax[ií]|corrida)\b/],
@@ -93,10 +115,11 @@ export function subDe(l) {
 }
 
 // Tudo o que saiu com transporte num mês (lançamentos + contas fixas pagas da categoria)
-export function gastosTransporte(db, chave) {
+export function gastosTransporte(db, chave, veiculo) {
   const P = db.pessoal || { lanc: [], contas: [] };
-  const lanc = P.lanc.filter(l => l.tipo === "saida" && l.cat === "transporte" && l.data.startsWith(chave)).map(l => ({ ...l, sub: subDe(l) }));
-  const fixas = P.contas.filter(c => c.cat === "transporte" && c.pagas && c.pagas[chave]).map(c => ({ id: "c:" + c.id, conta: true, desc: c.nome, valor: c.valor, data: c.pagas[chave], sub: subDe(c) }));
+  const lanc = lancTransp(db, veiculo).filter(l => l.tipo === "saida" && l.data.startsWith(chave)).map(l => ({ ...l, sub: subDe(l) }));
+  const vs = veiculosDe(db);
+  const fixas = P.contas.filter(c => c.cat === "transporte" && c.pagas && c.pagas[chave] && (!veiculo || !veiculo.id || !vs.length || donoDoGasto(c, vs) === veiculo.id)).map(c => ({ id: "c:" + c.id, conta: true, desc: c.nome, valor: c.valor, data: c.pagas[chave], sub: subDe(c) }));
   const itens = [...lanc, ...fixas].sort((a, b) => b.data.localeCompare(a.data));
   const porSub = {}; itens.forEach(i => { porSub[i.sub] = porSub[i.sub] || { total: 0, n: 0 }; porSub[i.sub].total += i.valor; porSub[i.sub].n++; });
   return { itens, porSub, total: itens.reduce((s, i) => s + i.valor, 0) };
@@ -104,7 +127,7 @@ export function gastosTransporte(db, chave) {
 
 // Abastecimentos com litros: consumo real (método do tanque cheio) e custo por km
 export function estatisticasCombustivel(db, veiculo) {
-  const ab = (db.pessoal ? db.pessoal.lanc : []).filter(l => l.cat === "transporte" && subDe(l) === "combustivel" && l.litros > 0)
+  const ab = lancTransp(db, veiculo).filter(l => subDe(l) === "combustivel" && l.litros > 0)
     .sort((a, b) => a.data.localeCompare(b.data) || (a.km || 0) - (b.km || 0));
   const consumos = [];
   for (let i = 1; i < ab.length; i++) {
@@ -123,13 +146,13 @@ export function estatisticasCombustivel(db, veiculo) {
 
 // Quilometragem mais recente que se conhece (abastecimentos, manutenções ou a informada no veículo)
 export function kmAtual(db, veiculo) {
-  const ks = (db.pessoal ? db.pessoal.lanc : []).filter(l => l.cat === "transporte" && l.km > 0).map(l => l.km);
+  const ks = lancTransp(db, veiculo).filter(l => l.km > 0).map(l => l.km);
   return Math.max(veiculo && veiculo.km > 0 ? veiculo.km : 0, ...ks, 0) || null;
 }
 
 // Próxima troca de óleo: pela km (padrão 10.000) ou pelo tempo (padrão 12 meses), o que vier primeiro
 export function proximaTrocaOleo(db, veiculo, hojeISO) {
-  const trocas = (db.pessoal ? db.pessoal.lanc : []).filter(l => l.cat === "transporte" && (l.manut === "oleo" || /\boleo\b/.test(semAcento(l.desc)))).sort((a, b) => b.data.localeCompare(a.data));
+  const trocas = lancTransp(db, veiculo).filter(l => (l.manut === "oleo" || /\boleo\b/.test(semAcento(l.desc)))).sort((a, b) => b.data.localeCompare(a.data));
   const ult = trocas[0]; if (!ult) return null;
   const cadaKm = (veiculo && veiculo.oleoKm) || 10000, cadaMeses = (veiculo && veiculo.oleoMeses) || 12;
   const d = new Date(ult.data + "T12:00:00"); d.setMonth(d.getMonth() + cadaMeses);
@@ -142,7 +165,7 @@ export function proximaTrocaOleo(db, veiculo, hojeISO) {
 
 // Rodízio e alinhamento dos pneus: a cada 10.000 km ou 12 meses, contando do último anotado
 export function proximoRodizio(db, veiculo, hojeISO) {
-  const feitos = (db.pessoal ? db.pessoal.lanc : []).filter(l => l.cat === "transporte" && (["alinhamento", "pneus"].includes(l.manut) || /\b(rodizio|alinhamento|balanceamento)\b/.test(semAcento(l.desc)))).sort((a, b) => b.data.localeCompare(a.data));
+  const feitos = lancTransp(db, veiculo).filter(l => (["alinhamento", "pneus"].includes(l.manut) || /\b(rodizio|alinhamento|balanceamento)\b/.test(semAcento(l.desc)))).sort((a, b) => b.data.localeCompare(a.data));
   const ult = feitos[0]; if (!ult) return null;
   const d = new Date(ult.data + "T12:00:00"); d.setMonth(d.getMonth() + 12);
   const ate = d.toISOString().slice(0, 10), km = kmAtual(db, veiculo);
@@ -169,7 +192,7 @@ const DO_CARRO = ["combustivel", "manutencao", "melhorias", "estacionamento", "d
 export function custoReal(db, veiculo, hojeISO) {
   const fim = new Date(hojeISO + "T12:00:00"), meses = [];
   for (let i = 0; i < 12; i++) { const m = new Date(fim.getFullYear(), fim.getMonth() - i, 1); meses.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`); }
-  const itens = meses.flatMap(ch => gastosTransporte(db, ch).itens).filter(i => DO_CARRO.includes(i.sub));
+  const itens = meses.flatMap(ch => gastosTransporte(db, ch, veiculo).itens).filter(i => DO_CARRO.includes(i.sub));
   if (!itens.length) return null;
   const primeiro = itens.reduce((m, i) => typeof i.data === "string" && i.data < m ? i.data : m, hojeISO);
   const nMeses = Math.max(1, Math.min(12, (fim.getFullYear() - Number(primeiro.slice(0, 4))) * 12 + fim.getMonth() + 1 - Number(primeiro.slice(5, 7))));
