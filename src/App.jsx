@@ -1635,8 +1635,8 @@ const vivas = () => CAMADAS.filter(c => !c.voltou).length;
 const porGuarda = () => { if (guarda) return; try { history.pushState({ alvenaGuarda: 1 }, ""); guarda = true; } catch (e) {} };
 function corDaBarra() {
   try {
-    // a cor de fundo do tema em uso (variável --bg), em "#rrggbb"
-    const v = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+    // a barra de status fica sempre escura, na cor da névoa do topo (combina com ela nos dois temas)
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--topo-nevoa").trim();
     const m = /^#([\da-f]{6})$/i.test(v) ? [0, 2, 4].map(i => parseInt(v.slice(1 + i, 3 + i), 16)) : (v.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
     if (m.length < 3) return;
     const k = CAMADAS.some(c => c.escurece) ? .42 : 1;

@@ -1652,3 +1652,10 @@ button.catrow:active { background: var(--surface-2); }
 .topo-fixo-t { color: #F2F4F8; }
 .topo-fixo .icon-btn.redondo { background: rgba(255, 255, 255, .12); color: #F2F4F8; border-color: rgba(255, 255, 255, .14); }
 .topo-fixo .me { box-shadow: 0 0 0 2px rgba(255, 255, 255, .2); }
+
+/* Barra de status do celular sempre escura (como a névoa do topo): no iPhone os ícones dela são brancos
+   e ficam por cima da página, então uma faixa escura do tamanho da barra garante que eles apareçam. */
+body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: env(safe-area-inset-top, 0px); z-index: 27; pointer-events: none; background: var(--topo-nevoa); }
+/* botões da barra de cima ao rolar: sempre visíveis sobre a névoa escura */
+.topo-fixo .icon-btn.redondo { background: rgba(255, 255, 255, .16); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22); }
+.topo-fixo .icon-btn.redondo svg { color: #fff; stroke: currentColor; }
