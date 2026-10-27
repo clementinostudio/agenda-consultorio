@@ -2,8 +2,9 @@
 import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
-import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada } from "../App.jsx";
+import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada, Marca } from "../App.jsx";
 import { DadosRecibo } from "./consultorio.jsx";
+import { AssinaturaPagina, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaAssin } from "./assinatura.jsx";
 import { nivelDe, TRILHAS } from "../conquistas.js";
 
 const TXT_PUSH = {
@@ -70,7 +71,11 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   const [aba, setAba] = useState(inicio || null);
   // voltar do Android: de uma seção volta para o Perfil; do Perfil, fecha
   const abaRef = useRef(aba); abaRef.current = aba;
-  useCamada(() => { if (abaRef.current && !inicio) { setAba(null); return false; } onClose(); }, { escurece: false });
+  // telas de dentro da assinatura (planos, pagamento…): voltar passa por elas antes
+  const [assin, setAssin] = useAssinatura(conta);
+  const [sub, setSub] = useState(null);
+  const subRef = useRef(sub); subRef.current = sub;
+  useCamada(() => { if (subRef.current) { setSub(voltaAssin(subRef.current)); return false; } if (abaRef.current && !inicio) { setAba(null); return false; } onClose(); }, { escurece: false });
   const [nome, setNome] = useState(conta.nome);
   const [foto, setFoto] = useState(conta.foto || null);
   const [profissao, setProfissao] = useState(pf.profissao || "Psicologia");
@@ -122,10 +127,11 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
     return () => clearTimeout(t);
   }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, hIni, hFim, diasT, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, avSemana, estilo, vib, pessoal, consult]);
   useEffect(() => { if (!salvo) return; const t = setTimeout(() => setSalvo(false), 1600); return () => clearTimeout(t); }, [salvo]);
-  useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba]);
+  useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba, sub]);
+  useEffect(() => { if (aba !== "assinatura") setSub(null); }, [aba]);
   useEffect(() => {
     const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
-    const k = e => { if (e.key === "Escape") { if (aba) setAba(null); else onClose(); } };
+    const k = e => { if (e.key === "Escape") { if (subRef.current) setSub(voltaAssin(subRef.current)); else if (aba) setAba(null); else onClose(); } };
     window.addEventListener("keydown", k);
     return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", k); };
   }, [aba]);
@@ -172,13 +178,14 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
     ] },
   ];
   const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
-  const titulo = { conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos" }[aba];
+  const resAssin = resumoAssinatura(assin);
+  const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos" }[aba];
 
   return createPortal(
     <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
       <div className="perfil-in">
         <div className="perfil-top">
-          <button className="icon-btn" onClick={() => aba ? setAba(null) : onClose()} aria-label={aba ? "Voltar" : "Fechar"}>{aba ? <I.chevL /> : <I.x />}</button>
+          <button className="icon-btn" onClick={() => sub ? setSub(voltaAssin(sub)) : aba ? setAba(null) : onClose()} aria-label={aba ? "Voltar" : "Fechar"}>{aba ? <I.chevL /> : <I.x />}</button>
           <b>{titulo || "Perfil"}</b>
           <span className={"perfil-salvo" + (salvo ? " on" : "")} aria-live="polite">{salvo ? <><I.check /> Salvo</> : ""}</span>
         </div>
@@ -205,6 +212,16 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
                 <I.chev />
               </button>
             )}
+          </div>
+
+          <div className="perfil-grupo">
+            <h3>Assinatura</h3>
+            <div className="perfil-lista">
+              <button className="perfil-row" onClick={() => setAba("assinatura")}>
+                <i className="assin-ic"><Marca /></i><span><b>Alvena</b><small>{resAssin.texto}</small></span>
+                {resAssin.selo && <em className="assin-selo">{resAssin.selo}</em>}<I.chev />
+              </button>
+            </div>
           </div>
 
           {secoes.map(g => (
@@ -340,6 +357,8 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
         </div>}
 
         {aba === "conquistas" && <ConquistasPagina lista={conq} />}
+
+        {aba === "assinatura" && <AssinaturaPagina a={assin} setA={setAssin} tela={sub} setTela={setSub} act={act} />}
 
         {aba === "app" && <div className="stack">
           <Ilustra n="ipad" className="perfil-ilustra" />

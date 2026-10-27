@@ -2100,5 +2100,5 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .assin-demo { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding: 14px; border-radius: 20px; border: 1.5px dashed var(--line); }
 .assin-demo b { color: var(--muted); font-size: 12.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .assin-demo small { color: var(--muted); font-size: 13px; font-weight: 600; }
-.assin-demo .btn { height: 44px; font-size: 14.5px; }
+.assin-demo .btn { height: 44px; font-size: 14.5px; background: var(--card); box-shadow: var(--card-shadow); }
 .casa-convite > svg, .casa-cartao > svg { width: 18px; height: 18px; flex: none; color: var(--muted); }
