@@ -15,27 +15,7 @@ const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } c
 const novoId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 const fotoPequena = f => (f && f.length <= 150000 ? f : null);
 
-// Quem deve quanto. Gasto: quem pagou "adianta" o valor; cada participante deve a sua parte.
-// Acerto: quem pagou a dívida (de) para quem recebeu (para).
-export function saldos(lanc, acertos, membros) {
-  const s = Object.fromEntries(membros.map(m => [m.id, 0]));
-  lanc.forEach(l => {
-    const parts = (l.participantes && l.participantes.length ? l.participantes : membros.map(m => m.id)).filter(id => id in s);
-    if (!parts.length || !(l.pagou in s)) return;
-    s[l.pagou] += l.valor;
-    parts.forEach(p => { s[p] -= l.valor / parts.length; });
-  });
-  acertos.forEach(a => { if (a.de in s && a.para in s) { s[a.de] += a.valor; s[a.para] -= a.valor; } });
-  // quem deve paga para quem tem a receber, do maior para o menor (o menor número de transferências)
-  const dev = Object.entries(s).filter(([, v]) => v < -0.01).map(([id, v]) => ({ id, v: -v })).sort((a, b) => b.v - a.v);
-  const cred = Object.entries(s).filter(([, v]) => v > 0.01).map(([id, v]) => ({ id, v })).sort((a, b) => b.v - a.v);
-  const dividas = [];
-  for (const d of dev) for (const c of cred) {
-    if (d.v < 0.01) break; if (c.v < 0.01) continue;
-    const x = Math.min(d.v, c.v); dividas.push({ de: d.id, para: c.id, valor: Math.round(x * 100) / 100 }); d.v -= x; c.v -= x;
-  }
-  return { saldo: s, dividas };
-}
+export { partes, pesosDe, saldos } from "./casa-contas.js";
 
 // O "motor" da casa. Devolve sempre o mesmo formato, na nuvem ou na demonstração.
 export function useCasa(conta, db, setDb) {
@@ -145,7 +125,8 @@ export function useCasa(conta, db, setDb) {
   return {
     nuvem, eu, estado: nuvem ? st : local ? "ok" : "sem",
     casa: atual && atual.casa, membros: (atual && atual.membros) || [],
-    lanc: lista("lanc"), acertos: lista("acerto"),
+    lanc: lista("lanc"), acertos: lista("acerto"), contas: lista("conta"), compras: lista("compra"),
+    config: lista("config").find(x => x.id === "divisao") || { id: "divisao", modo: "igual" },
     salvar, apagar, criar, convidar, verConvite, entrar, sair, tirar, simularEntrada, recarregar: () => nuvem && carregar().catch(() => {}),
   };
 }
