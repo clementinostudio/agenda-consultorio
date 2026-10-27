@@ -110,6 +110,10 @@ const PROMPT_IMAGEM = `Esta é uma foto de comprovante, nota fiscal, recibo, cup
 Responda SÓ com JSON: {"valor":número total pago em reais,"descricao":"nome curto da loja ou de quem recebeu","data":"AAAA-MM-DD" ou "","tipo":"saida"|"entrada","categoria":uma das categorias}
 "entrada" só se a foto mostrar dinheiro RECEBIDO (Pix recebido, transferência recebida). Use o valor TOTAL. Se não der para ler, use valor 0.`;
 
+const PROMPT_NOTA = `Esta é uma foto de nota fiscal ou cupom de supermercado, padaria, farmácia ou loja.
+Responda SÓ com JSON: {"loja":"nome do estabelecimento","data":"AAAA-MM-DD" ou "","total":número total pago,"itens":[{"nome":"descrição do produto como está na nota","qtd":número,"valor":número total do item em reais}]}
+Liste TODOS os itens que der para ler, na ordem da nota. Não invente itens nem valores. Use ponto como separador decimal. Se não for uma nota, responda {"itens":[]}.`;
+
 async function rodarTexto(env, sistema, usuario, max = 400) {
   return env.AI.run(IA_TEXTO, { messages: [{ role: "system", content: sistema }, { role: "user", content: usuario }], max_tokens: max, temperature: 0.1 });
 }
@@ -166,6 +170,20 @@ export default {
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
 
+    // Nota fiscal do mercado (NFC-e): o QR code aponta para a página da Sefaz com os itens e os preços.
+    // O servidor só busca a página (o navegador não pode, por CORS) e devolve como veio; quem lê é o aparelho.
+    // Só aceita endereços da Sefaz (.gov.br), para não virar uma porta aberta para qualquer site.
+    if (url.pathname === "/nfce") {
+      if (!permitida) return json({ erro: "Origem não permitida" }, 403);
+      let alvo; try { alvo = new URL(limpar(b.url, 1500)); } catch (e) { return json({ erro: "Endereço inválido" }, 400); }
+      if (!/^https?:$/.test(alvo.protocol) || !/\.gov\.br$/i.test(alvo.hostname) || !/(fazenda|sefaz|nfce|nfe|sped|sef)/i.test(alvo.hostname)) return json({ erro: "Esse QR code não é de uma nota da Sefaz" }, 400);
+      try {
+        const pag = await fetch(alvo.toString(), { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36", Accept: "text/html,application/xhtml+xml" } });
+        if (!pag.ok) return json({ erro: "A Sefaz não respondeu" }, 502);
+        return new Response(pag.body, { headers: { ...cors, "Content-Type": pag.headers.get("content-type") || "text/html", "Cache-Control": "private, max-age=600" } });
+      } catch (e) { return json({ erro: "A Sefaz não respondeu" }, 502); }
+    }
+
     // Transcreve a fala do app (Whisper na própria Cloudflare). O áudio não fica guardado em lugar nenhum.
     if (url.pathname === "/transcrever") {
       if (!permitida) return json({ erro: "Origem não permitida" }, 403);
@@ -186,7 +204,7 @@ export default {
     }
 
     // IA: entender frase, responder pergunta e ler foto
-    if (url.pathname === "/entender" || url.pathname === "/perguntar" || url.pathname === "/ler-imagem") {
+    if (url.pathname === "/entender" || url.pathname === "/perguntar" || url.pathname === "/ler-imagem" || url.pathname === "/ler-nota") {
       if (!permitida) return json({ erro: "Origem não permitida" }, 403);
       if (!env.AI) return json({ erro: "sem-ia" }, 501);
       const hoje = limpar(b.hoje, 40), cats = (Array.isArray(b.categorias) ? b.categorias : []).slice(0, 30).map(c => limpar(c, 20)).join(", ");
@@ -208,6 +226,15 @@ export default {
           const r = await env.AI.run(IA_TEXTO, { messages: [{ role: "system", content: `${PROMPT_PERGUNTAR}\n\nHOJE: ${hoje}\n\nDADOS:\n${contexto}` }, ...hist, { role: "user", content: pergunta }], max_tokens: 300, temperature: 0.2 });
           const resposta = textoDe(r);
           return resposta ? json({ ok: true, resposta }) : json({ erro: "A IA não respondeu" }, 502);
+        }
+        // /ler-nota: a nota inteira, item por item (resposta maior)
+        if (url.pathname === "/ler-nota") {
+          const foto = typeof b.imagem === "string" ? b.imagem : "";
+          if (!/^data:image\/(jpeg|png|webp);base64,/.test(foto) || foto.length > 1600000) return json({ erro: "Imagem inválida ou grande demais" }, 400);
+          const rn = await env.AI.run(IA_VISAO, { messages: [{ role: "user", content: [{ type: "text", text: `${PROMPT_NOTA}
+HOJE: ${hoje}` }, { type: "image_url", image_url: { url: foto } }] }], max_tokens: 1800, temperature: 0.1 });
+          const nota = lerJson(rn);
+          return nota && Array.isArray(nota.itens) ? json({ ok: true, nota }) : json({ erro: "A IA não conseguiu ler a nota" }, 502);
         }
         // /ler-imagem
         const imagem = typeof b.imagem === "string" ? b.imagem : "";

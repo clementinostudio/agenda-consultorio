@@ -3296,6 +3296,8 @@ const VeiculoSheet = lazy(() => import("./telas/transporte.jsx").then(m => ({ de
 const CasaPagina = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.CasaPagina })));
 const GastoCasaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.GastoCasaSheet })));
 const ContaCasaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.ContaCasaSheet })));
+const NotaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.NotaSheet })));
+const NotaVerSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.NotaVerSheet })));
 const TrazerGastosSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.TrazerGastosSheet })));
 const ConviteCasaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.ConviteCasaSheet })));
 // Recibo em PDF, relatório do imposto e anotações trancadas (carregam só quando abrem)
@@ -3950,6 +3952,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     abrirCasa: () => { if (sheet) close(); if (modo !== "pessoal") { setModoSt("pessoal"); gravar(K.modo(conta.email), "pessoal"); } setTab("p-casa"); rolarTopo(); },
     abrirGastoCasa: (inicial, pre) => setSheet({ type: "casa-gasto", inicial: inicial || null, pre: pre || null, n: Date.now() }),
     abrirContaCasa: c => setSheet({ type: "casa-conta", inicial: c || null, n: Date.now() }),
+    lerNotaCasa: () => setSheet({ type: "casa-nota", n: Date.now() }),
+    verNotaCasa: l => setSheet({ type: "casa-nota-ver", lanc: l, n: Date.now() }),
     trazerParaCasa: ids => setSheet({ type: "casa-trazer", ids: ids || [], n: Date.now() }),
     // gastos pessoais que a pessoa escolheu levar para a casa (dividindo entre todos ou só mostrando)
     compartilharComCasa: async (ids, dividir = true) => {
@@ -4257,6 +4261,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "imposto" && <Suspense fallback={null}><ImpostoSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "notas" && <Suspense fallback={null}><NotasSheet key={sheet.pid + (sheet.sid || "")} db={db} pid={sheet.pid} sid={sheet.sid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "casa-gasto" && <Suspense fallback={null}><GastoCasaSheet key={sheet.n} casa={casa} inicial={sheet.inicial} pre={sheet.pre} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "casa-nota" && <Suspense fallback={null}><NotaSheet key={sheet.n} casa={casa} servidor={servidorAvisos()} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "casa-nota-ver" && <Suspense fallback={null}><NotaVerSheet key={sheet.n} lanc={sheet.lanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "casa-conta" && <Suspense fallback={null}><ContaCasaSheet key={sheet.n} casa={casa} inicial={sheet.inicial} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "casa-trazer" && <Suspense fallback={null}><TrazerGastosSheet key={sheet.n} casa={casa} db={db} ids0={sheet.ids} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "convite-casa" && <Suspense fallback={null}><ConviteCasaSheet casa={casa} token={sheet.token} onClose={close} onEntrou={() => { notify("Você entrou na casa!"); act.abrirCasa(); }} /></Suspense>}

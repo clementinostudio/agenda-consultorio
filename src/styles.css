@@ -2196,3 +2196,57 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .casa-pct small { color: var(--muted); font-weight: 700; }
 .casa-contas > .link, .casa-compras .btn svg { display: inline-flex; align-items: center; gap: 6px; }
 .casa-contas > .link svg { width: 16px; height: 16px; flex: none; }
+
+/* ---------- lista de compras: corredores, preços, sugestões e a nota do mercado ---------- */
+.casa-sug { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.casa-sug small { width: 100%; color: var(--muted); font-size: 12px; font-weight: 700; }
+.casa-sug button { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px 6px 9px; border-radius: 999px; background: var(--surface-2); border: 1px dashed color-mix(in srgb, var(--fg) 22%, transparent); color: var(--fg); font-weight: 700; font-size: 13.5px; text-transform: capitalize; }
+.casa-sug svg { width: 13px; height: 13px; color: var(--mode); }
+.casa-secao { display: grid; gap: 0; }
+.casa-secao-t { color: var(--muted); font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 8px 0 2px; }
+.casa-secao.feitos { opacity: .8; }
+.casa-item-q { color: var(--mode-text, var(--mode)); margin-right: 5px; }
+.casa-item-p { color: var(--muted); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
+.casa-estimado { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 10px 14px; border-radius: 14px; background: var(--surface-2); }
+.casa-estimado span { font-weight: 700; font-size: 14px; }
+.casa-estimado small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.casa-compras .btn svg, .casa-compras .btn-row .btn svg { width: 18px; height: 18px; flex: none; }
+.casa-mercado { position: relative; display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); margin-top: 22px; }
+.casa-mercado .panel-head { padding-right: 90px; }
+.casa-mercado-ilu { position: absolute; right: 10px; top: -40px; width: 84px; height: auto; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, .28)); transform: rotate(6deg); }
+.casa-mercado-n { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.casa-mercado-n span { display: grid; gap: 1px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.casa-mercado-n b { font-size: 17px; }
+.casa-mercado-n small { color: var(--muted); font-size: 12px; font-weight: 600; }
+.casa-nota-l { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); color: var(--fg); text-align: left; background: none; }
+.casa-nota-l .mid { flex: 1; display: grid; gap: 1px; min-width: 0; }
+.casa-nota-l small { color: var(--muted); font-size: 12.5px; }
+.casa-nota-l > svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.casa-preco { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.casa-preco .mid { flex: 1; display: grid; gap: 1px; min-width: 0; }
+.casa-preco .mid b { text-transform: capitalize; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.casa-preco small { color: var(--muted); font-size: 12px; }
+.casa-preco .v { display: grid; text-align: right; }
+.casa-preco.subiu .v small { color: var(--amber); font-weight: 800; }
+.casa-preco.caiu .v small { color: var(--mint); font-weight: 800; }
+.nota-cam .nota-guia { position: absolute; left: 50%; top: 50%; width: 56%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 3px solid rgba(255, 255, 255, .85); border-radius: 18px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .35); }
+.nota-link { display: flex; gap: 8px; align-items: center; padding: 4px 4px 4px 14px; border-radius: 16px; background: var(--surface-2); }
+.nota-link input { flex: 1; min-width: 0; border: 0; background: none; color: var(--fg); font: inherit; font-size: 14px; outline: none; padding: 8px 0; }
+.nota-lendo { display: grid; justify-items: center; gap: 6px; padding: 30px 0; text-align: center; }
+.nota-lendo .ilustra { width: 110px; height: auto; animation: carro-anda 2.4s ease-in-out infinite; }
+.nota-lendo small { color: var(--muted); }
+.nota-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); }
+.nota-topo span { display: grid; gap: 2px; min-width: 0; }
+.nota-topo small { color: var(--muted); font-size: 12.5px; }
+.nota-total { font-size: 22px; font-family: var(--f-display); }
+.nota-bate { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--amber) 12%, transparent); font-size: 13.5px; line-height: 1.4; }
+.nota-bate.tudo { background: color-mix(in srgb, var(--mint) 14%, transparent); }
+.nota-bate svg { width: 18px; height: 18px; flex: none; color: var(--mint); margin-top: 1px; }
+.nota-itens { display: grid; max-height: 42vh; overflow-y: auto; border-radius: 14px; background: var(--surface-2); padding: 2px 12px; }
+.nota-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.nota-item:first-child { border-top: 0; }
+.nota-item .mid { flex: 1; display: grid; gap: 1px; min-width: 0; }
+.nota-item .mid b { font-size: 13.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nota-item small { color: var(--muted); font-size: 12px; }
+.nota-item.da-lista .mid b { color: var(--mint); }
+.nota-foto { width: 100%; border-radius: 16px; }

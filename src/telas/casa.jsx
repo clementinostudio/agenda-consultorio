@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, ConfirmButton, iniciais, CATEGORIAS, catDe, catVars, CatIcon, TopBar, useCamada } from "../App.jsx";
 import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
+import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja } from "../nota.js";
+import { lerQRs } from "./ferramentas.jsx";
 
 const VAGAS = ["Parceiro(a)", "Mãe ou pai", "Filho(a)", "Amigo(a)"];
 const Pessoa = ({ m, grande }) => <span className={"casa-av" + (grande ? " grande" : "")}>{m.foto ? <img src={m.foto} alt="" /> : iniciais(m.nome || "?")}</span>;
@@ -147,6 +149,7 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
             ); })}
           </section>
 
+          <MercadoCasa C={C} act={act} />
           {!sozinho && <ComoDividem C={C} />}
 
           <div className="casa-fim">
@@ -279,30 +282,229 @@ export function ContaCasaSheet({ casa: C, inicial, onClose, act }) {
 /* ---------- lista de compras da casa (aparece na hora no celular de todos) ---------- */
 function ListaCompras({ C, act }) {
   const [txt, setTxt] = useState("");
-  const itens = [...C.compras].sort((a, b) => (a.feito ? 1 : 0) - (b.feito ? 1 : 0) || (a.criado || 0) - (b.criado || 0));
-  const feitos = itens.filter(x => x.feito);
-  const add = e => { e.preventDefault(); const t = txt.trim(); if (!t) return; t.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean).forEach((s, i) => C.salvar("compra", { texto: s, feito: false, criado: Date.now() + i, autor: C.eu })); setTxt(""); vibrar("toque"); };
+  const hist = useMemo(() => historico(C.lanc), [C.lanc]);
+  const preco = x => { const u = ultimoPreco(hist, x.texto); return u ? { ...u, total: u.unit * (x.qtd || 1) } : null; };
+  const ordem = Object.fromEntries([...SECOES.map(s => s[0]), "outros"].map((s, i) => [s, i]));
+  const abertos = C.compras.filter(x => !x.feito).map(x => ({ ...x, secao: x.secao || secaoDe(x.texto) })).sort((a, b) => ordem[a.secao] - ordem[b.secao] || (a.criado || 0) - (b.criado || 0));
+  const feitos = C.compras.filter(x => x.feito).sort((a, b) => (a.criado || 0) - (b.criado || 0));
+  const comPreco = abertos.map(preco).filter(Boolean), estimado = comPreco.reduce((s, p) => s + p.total, 0);
+  // o que a casa sempre compra e não está na lista (pelas notas): sugestão de "acabou?"
+  const sugestoes = useMemo(() => Object.entries(hist).filter(([, v]) => v.length >= 2).sort((a, b) => b[1].length - a[1].length)
+    .map(([k]) => k.split(" ")[0]).filter((w, i, arr) => arr.indexOf(w) === i && !C.compras.some(x => combina(x.texto, w) || combina(w, x.texto))).slice(0, 6), [hist, C.compras]);
+  const adicionar = textos => textos.forEach((s, i) => { const it = lerItem(s); if (it.texto) C.salvar("compra", { texto: it.texto, qtd: it.qtd, secao: secaoDe(it.texto), feito: false, criado: Date.now() + i, autor: C.eu }); });
+  const add = e => { e.preventDefault(); const t = txt.trim(); if (!t) return; adicionar(t.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean)); setTxt(""); vibrar("toque"); };
   const limpar = () => feitos.forEach(x => C.apagar("compra", x.id));
+  const mandar = async () => {
+    const linhas = abertos.map(x => `• ${x.qtd > 1 ? x.qtd + "× " : ""}${x.texto}`).join("\n");
+    const texto = `Lista de compras (${C.casa.nome}):\n${linhas}`;
+    if (navigator.share) { try { await navigator.share({ text: texto }); return; } catch (e) { if (e.name === "AbortError") return; } }
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank", "noopener");
+  };
+  const grupos = []; abertos.forEach(x => { const g = grupos[grupos.length - 1]; if (g && g.secao === x.secao) g.itens.push(x); else grupos.push({ secao: x.secao, itens: [x] }); });
+  const Item = ({ x }) => { const p = !x.feito && preco(x); return (
+    <div className={"casa-item" + (x.feito ? " feito" : "")}>
+      <button className={"box " + (x.feito ? "done" : "up")} onClick={() => { vibrar("toque"); C.salvar("compra", { ...x, feito: !x.feito, por: C.eu }); }} aria-label={x.feito ? `Desmarcar ${x.texto}` : `Marcar ${x.texto}`}>{x.feito && <I.check />}</button>
+      <span>{x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== C.eu ? <small> · {nomeDe(C, x.autor)}</small> : null}</span>
+      {p && <small className="casa-item-p" title={`Último preço: ${brlReal(p.unit)} em ${p.loja}, ${dm(p.data)}`}>~{brl(p.total)}</small>}
+      <button className="casa-item-x" onClick={() => C.apagar("compra", x.id)} aria-label={`Tirar ${x.texto}`}><I.x /></button>
+    </div>
+  ); };
   return (
     <section className="panel casa-compras">
-      <div className="panel-head"><h3>Lista de compras</h3>{itens.length > 0 && <small>{feitos.length} de {itens.length}</small>}</div>
+      <div className="panel-head"><h3>Lista de compras</h3>{C.compras.length > 0 && <small>{feitos.length} de {C.compras.length}</small>}</div>
       <form className="casa-compras-add" onSubmit={add}>
-        <input value={txt} onChange={e => setTxt(e.target.value)} placeholder="Adicionar (ex.: leite, pão, café)" aria-label="Item da lista de compras" enterKeyHint="done" />
+        <input value={txt} onChange={e => setTxt(e.target.value)} placeholder="Adicionar (ex.: 2 leite, pão, café)" aria-label="Item da lista de compras" enterKeyHint="done" />
         <button type="submit" className="icon-btn" aria-label="Adicionar" disabled={!txt.trim()}><I.plus /></button>
       </form>
-      {itens.length === 0 && <div className="hint">O que um coloca aparece na hora para os outros. Quem estiver no mercado marca o que pegou.</div>}
-      {itens.map(x => (
-        <div key={x.id} className={"casa-item" + (x.feito ? " feito" : "")}>
-          <button className={"box " + (x.feito ? "done" : "up")} onClick={() => C.salvar("compra", { ...x, feito: !x.feito, por: C.eu })} aria-label={x.feito ? `Desmarcar ${x.texto}` : `Marcar ${x.texto}`}>{x.feito && <I.check />}</button>
-          <span>{x.texto}{x.autor && x.autor !== C.eu ? <small> · {nomeDe(C, x.autor)}</small> : null}</span>
-          <button className="casa-item-x" onClick={() => C.apagar("compra", x.id)} aria-label={`Tirar ${x.texto}`}><I.x /></button>
+      {sugestoes.length > 0 && <div className="casa-sug"><small>Vocês sempre compram. Acabou?</small>{sugestoes.map(s => <button key={s} type="button" onClick={() => { adicionar([s]); vibrar("toque"); }}><I.plus />{s}</button>)}</div>}
+      {C.compras.length === 0 && <div className="hint">O que um coloca aparece na hora para os outros, já separado por corredor. Depois da compra, leia a nota: os itens da lista se riscam sozinhos e os preços ficam guardados.</div>}
+      {grupos.map(g => (
+        <div key={g.secao} className="casa-secao">
+          {abertos.length >= 4 && <small className="casa-secao-t">{nomeSecao(g.secao)}</small>}
+          {g.itens.map(x => <Item key={x.id} x={x} />)}
         </div>
       ))}
-      {feitos.length > 0 && <div className="btn-row">
-        <button className="btn ghost" onClick={() => act.abrirGastoCasa(null, { desc: "Compras do mercado", cat: "mercado" })}><I.plus /> Anotar a compra</button>
-        <button className="btn ghost" onClick={limpar}>Limpar comprados</button>
+      {feitos.length > 0 && <div className="casa-secao feitos"><small className="casa-secao-t">No carrinho</small>{feitos.map(x => <Item key={x.id} x={x} />)}</div>}
+      {estimado > 0 && <div className="casa-estimado"><span>Estimativa da lista</span><b className="num">{brl(estimado)}</b><small>pelo último preço de {comPreco.length} {comPreco.length === 1 ? "item" : "itens"}</small></div>}
+      <button className="btn mode" onClick={() => act.lerNotaCasa()}><I.receipt /> Ler a nota do mercado</button>
+      {(abertos.length > 0 || feitos.length > 0) && <div className="btn-row">
+        {abertos.length > 0 && <button className="btn ghost" onClick={mandar}><I.share /> Mandar a lista</button>}
+        {feitos.length > 0 && <button className="btn ghost" onClick={limpar}>Limpar comprados</button>}
       </div>}
     </section>
+  );
+}
+
+/* ---------- mercado da casa: últimas notas e preços que mudaram ---------- */
+function MercadoCasa({ C, act }) {
+  const comNota = C.lanc.filter(l => l.nota && Array.isArray(l.nota.itens)).sort((a, b) => b.data.localeCompare(a.data));
+  const hist = useMemo(() => historico(C.lanc), [C.lanc]);
+  if (!comNota.length) return null;
+  const ch = todayISO().slice(0, 7);
+  const mesMercado = C.lanc.filter(l => (l.data || "").startsWith(ch) && (l.cat === "mercado" || l.nota)).reduce((s, l) => s + l.valor, 0);
+  // preços que mudaram entre as duas últimas compras do mesmo produto
+  const mudou = Object.values(hist).filter(v => v.length >= 2).map(v => { const a = v[v.length - 2], b = v[v.length - 1]; return { nome: b.nome, de: a, para: b, pct: a.unit > 0 ? (b.unit - a.unit) / a.unit : 0 }; })
+    .filter(x => Math.abs(x.pct) >= 0.03).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 5);
+  return (
+    <section className="panel casa-mercado">
+      <Ilustra n="carrinho" className="casa-mercado-ilu" />
+      <div className="panel-head"><h3>Mercado da casa</h3></div>
+      <div className="casa-mercado-n"><span><b className="num">{brl(mesMercado)}</b><small>em mercado este mês</small></span><span><b>{comNota.length}</b><small>{comNota.length === 1 ? "nota guardada" : "notas guardadas"}</small></span></div>
+      <small className="casa-secao-t">Últimas notas</small>
+      {comNota.slice(0, 4).map(l => (
+        <button key={l.id} className="casa-nota-l" onClick={() => act.verNotaCasa(l)}>
+          <span className="mid"><b>{nomeLoja(l.nota.loja) || l.desc || "Mercado"}</b><small>{dm(l.data)} · {l.nota.itens.length} itens · {nomeDe(C, l.pagou)} pagou</small></span>
+          <b className="num">{brl(l.valor)}</b><I.chev />
+        </button>
+      ))}
+      {mudou.length > 0 && <>
+        <small className="casa-secao-t">Preços que mudaram</small>
+        {mudou.map(x => (
+          <div key={x.nome} className={"casa-preco" + (x.pct > 0 ? " subiu" : " caiu")}>
+            <span className="mid"><b>{x.nome.toLowerCase()}</b><small>era {brlReal(x.de.unit)} ({x.de.loja}, {dm(x.de.data)})</small></span>
+            <span className="v"><b className="num">{brlReal(x.para.unit)}</b><small>{x.pct > 0 ? "▲" : "▼"} {Math.round(Math.abs(x.pct) * 100)}%</small></span>
+          </div>
+        ))}
+      </>}
+    </section>
+  );
+}
+
+/* ---------- ler a nota do mercado: QR code (mais preciso), foto (a IA lê) ou o link ---------- */
+export function NotaSheet({ casa: C, servidor, onClose, act }) {
+  const [etapa, setEtapa] = useState("escolher"); // escolher | camera | lendo | revisar
+  const [nota, setNota] = useState(null), [erro, setErro] = useState(""), [link, setLink] = useState("");
+  const [pagou, setPagou] = useState(C.eu), [modo, setModo] = useState("dividir");
+  const video = React.useRef(null), stream = React.useRef(null), vivo = React.useRef(true), fotoRef = React.useRef(null);
+  const parar = () => { if (stream.current) stream.current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} }); stream.current = null; };
+  useEffect(() => () => { vivo.current = false; parar(); }, []);
+  const falhou = m => { setErro(m); setEtapa("escolher"); vibrar("erro"); };
+  const pronto = n => { if (!n.itens.length) return falhou("Não achei os itens dessa nota. Tente pela foto, com a nota inteira e reta."); setNota(n); setEtapa("revisar"); vibrar("ok"); };
+  // QR code: o servidor busca a página da Sefaz e o aparelho lê os itens
+  const buscar = async url => {
+    if (!servidor) return falhou("Para ler a nota, ligue o servidor de avisos (Perfil → Avisos).");
+    if (!ehLinkNfce(url)) return falhou("Esse QR code não é de uma nota fiscal. Procure o QR code no fim da nota.");
+    setEtapa("lendo"); setErro("");
+    try {
+      const r = await fetch(`${servidor}/nfce`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); return falhou(j.erro ? `${j.erro}. Tente pela foto da nota.` : "A Sefaz não respondeu. Tente pela foto da nota."); }
+      const buf = await r.arrayBuffer(), ct = r.headers.get("content-type") || "";
+      let cs = (ct.match(/charset=([\w-]+)/i) || [])[1];
+      let html = new TextDecoder(cs || "utf-8").decode(buf);
+      if (!cs) { const m = html.match(/<meta[^>]+charset=["']?([\w-]+)/i); if (m && !/utf-?8/i.test(m[1])) html = new TextDecoder(m[1]).decode(buf); }
+      const n = lerPaginaNfce(html);
+      if (!n.itens.length) return falhou("Esse estado mostra a nota de um jeito que eu ainda não leio. Tire uma foto da nota que a IA lê.");
+      pronto({ ...n, fonte: "qr", url });
+    } catch (e) { falhou("Não consegui buscar a nota. Confira a internet ou tente pela foto."); }
+  };
+  const abrirCamera = async () => {
+    setErro(""); setEtapa("camera");
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+      if (!vivo.current) { s.getTracks().forEach(t => t.stop()); return; }
+      stream.current = s; const v = video.current; v.srcObject = s; v.setAttribute("playsinline", ""); await v.play().catch(() => {});
+      const tela = document.createElement("canvas");
+      const passo = async () => {
+        if (!vivo.current || !stream.current) return;
+        try {
+          if (v.videoWidth) { tela.width = v.videoWidth; tela.height = v.videoHeight; tela.getContext("2d", { willReadFrequently: true }).drawImage(v, 0, 0); const t = (await lerQRs(tela)).find(ehLinkNfce); if (t) { parar(); return buscar(t); } }
+        } catch (e) {}
+        setTimeout(passo, 220);
+      };
+      passo();
+    } catch (e) { parar(); falhou(e && e.name === "NotAllowedError" ? "A câmera não foi liberada. Use a foto da nota." : "Não consegui abrir a câmera. Use a foto da nota."); }
+  };
+  // foto: primeiro procura o QR code nela; se não tiver, a IA lê a nota inteira
+  const daFoto = async e => {
+    const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return;
+    setErro(""); setEtapa("lendo");
+    try { const t = (await lerQRs(f)).find(ehLinkNfce); if (t) return buscar(t); } catch (e2) {}
+    if (!servidor) return falhou("Para ler a foto da nota, ligue o servidor de avisos (Perfil → Avisos).");
+    try {
+      const imagem = await reduzirFoto(f, 1400, 0.72);
+      const r = await fetch(`${servidor}/ler-nota`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imagem, hoje: todayISO() }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.nota) return falhou((j.erro || "Não consegui ler a nota") + ". Tire de perto, com boa luz e a nota inteira.");
+      pronto({ ...arrumarNotaIA(j.nota), fonte: "foto", foto: await reduzirFoto(f, 800, 0.55) });
+    } catch (e2) { falhou("Não consegui ler a foto. Tente de novo, com boa luz."); }
+  };
+  const lista = C.compras;
+  const naNota = nota ? lista.filter(x => nota.itens.some(i => combina(x.texto, i.nome))) : [];
+  const ficou = nota ? lista.filter(x => !x.feito && !naNota.includes(x)) : [];
+  const salvar = async () => {
+    const parts = modo === "dividir" ? C.membros.map(m => m.id) : [pagou];
+    const { _tr, ...n } = nota;
+    await C.salvar("lanc", { valor: n.total, desc: nomeLoja(n.loja) || "Mercado", cat: "mercado", data: n.data || todayISO(), pagou, participantes: parts, pesos: modo === "dividir" ? pesosDe(C.config, parts) : undefined, nota: n, criado: Date.now(), autor: C.eu });
+    naNota.forEach(x => C.apagar("compra", x.id));
+    vibrar("ok"); act.toast(naNota.length ? `Compra salva · ${naNota.length} ${naNota.length === 1 ? "item da lista riscado" : "itens da lista riscados"}` : "Compra salva com a nota");
+    onClose();
+  };
+  return (
+    <Sheet title="Nota do mercado" sub={etapa === "revisar" ? "Confira e salve" : "Os itens e os preços ficam guardados"} onClose={onClose}>
+      {(etapa === "escolher" || etapa === "camera") && <>
+        <div className={"boleto-cam nota-cam" + (etapa === "camera" ? " on" : "")}>
+          <video ref={video} muted playsInline aria-label="Câmera" />
+          {etapa === "camera" ? <><i className="nota-guia" aria-hidden="true" /><span className="boleto-dica">Aponte para o QR code no fim da nota</span></>
+            : <button type="button" className="boleto-abrir" onClick={abrirCamera}><I.camera /><b>Apontar para o QR code</b><small>o jeito mais preciso: vêm todos os itens e preços</small></button>}
+        </div>
+        <div className="acts-linha">
+          <button type="button" className="pill-btn" onClick={() => fotoRef.current && fotoRef.current.click()}><I.upload /> Foto da nota</button>
+          {etapa === "camera" && <button type="button" className="pill-btn" onClick={() => { parar(); setEtapa("escolher"); }}>Parar câmera</button>}
+        </div>
+        <input ref={fotoRef} type="file" accept="image/*" capture="environment" hidden onChange={daFoto} />
+        <form className="nota-link" onSubmit={e => { e.preventDefault(); if (link.trim()) buscar(link.trim()); }}>
+          <input value={link} onChange={e => setLink(e.target.value)} placeholder="Ou cole o link do QR code" aria-label="Link do QR code da nota" inputMode="url" />
+          <button type="submit" className="bub-act" disabled={!link.trim()}>Buscar</button>
+        </form>
+        {erro && <div className="error" role="alert">{erro}</div>}
+        <button className="btn text" onClick={() => act.abrirGastoCasa(null, { desc: "Mercado", cat: "mercado" })}>Sem nota? Anotar só o total</button>
+      </>}
+      {etapa === "lendo" && <div className="nota-lendo"><Ilustra n="carrinho" /><b>Lendo a nota…</b><small>Isso leva alguns segundos.</small></div>}
+      {etapa === "revisar" && nota && <>
+        <div className="nota-topo">
+          <span><b>{nomeLoja(nota.loja) || "Mercado"}</b><small>{nota.data ? dm(nota.data) : "Hoje"} · {nota.itens.length} itens · {nota.fonte === "qr" ? "lida pelo QR code" : "lida pela foto (confira os valores)"}</small></span>
+          <b className="num nota-total">{brl(nota.total)}</b>
+        </div>
+        {lista.length > 0 && <div className={"nota-bate" + (ficou.length ? "" : " tudo")}>
+          <I.check /><span>{naNota.length ? <><b>{naNota.length} {naNota.length === 1 ? "item da lista veio" : "itens da lista vieram"}</b>{ficou.length ? <> · ficou faltando: {ficou.slice(0, 4).map(x => x.texto).join(", ")}{ficou.length > 4 ? "…" : ""}</> : " · a lista está completa!"}</> : "Nenhum item da lista apareceu nesta nota."}</span>
+        </div>}
+        <div className="nota-itens">
+          {nota.itens.map((x, i) => { const ok = lista.some(l => combina(l.texto, x.nome)); return (
+            <div key={i} className={"nota-item" + (ok ? " da-lista" : "")}>
+              <span className="mid"><b>{x.nome}</b><small>{x.qtd !== 1 ? `${String(x.qtd).replace(".", ",")} ${x.un || "un"} × ${brlReal(x.unit)}` : brlReal(x.unit)}{ok ? " · da lista" : ""}</small></span>
+              <b className="num">{brlReal(x.valor)}</b>
+            </div>
+          ); })}
+        </div>
+        {C.membros.length > 1 && <>
+          <div className="hint">Quem pagou</div>
+          <div className="casa-chips" role="radiogroup" aria-label="Quem pagou">{C.membros.map(m => <button key={m.id} type="button" className={pagou === m.id ? "on" : ""} onClick={() => setPagou(m.id)}><Pessoa m={m} />{m.id === C.eu ? "Você" : m.nome}</button>)}</div>
+          <Seg value={modo} onChange={setModo} options={[{ v: "dividir", l: "Dividir entre todos" }, { v: "mostrar", l: "Só guardar" }]} />
+        </>}
+        <button className="btn mode" onClick={salvar}><I.check /> Salvar a compra ({brl(nota.total)})</button>
+        <button className="btn text" onClick={() => { setNota(null); setEtapa("escolher"); }}>Ler outra nota</button>
+      </>}
+    </Sheet>
+  );
+}
+
+// Ver uma nota guardada: itens, preços e a foto (ou o link da Sefaz)
+export function NotaVerSheet({ lanc: l, onClose }) {
+  const n = l.nota || { itens: [] };
+  return (
+    <Sheet title={nomeLoja(n.loja) || l.desc || "Nota do mercado"} sub={`${dm(l.data)} · ${n.itens.length} itens`} onClose={onClose}>
+      <div className="nota-topo"><span><b>Total</b><small>{n.fonte === "qr" ? "Lida pelo QR code" : "Lida pela foto"}</small></span><b className="num nota-total">{brl(l.valor)}</b></div>
+      <div className="nota-itens">
+        {n.itens.map((x, i) => (
+          <div key={i} className="nota-item">
+            <span className="mid"><b>{x.nome}</b><small>{x.qtd !== 1 ? `${String(x.qtd).replace(".", ",")} ${x.un || "un"} × ${brlReal(x.unit)}` : brlReal(x.unit)}</small></span>
+            <b className="num">{brlReal(x.valor)}</b>
+          </div>
+        ))}
+      </div>
+      {n.foto && <img className="nota-foto" src={n.foto} alt="Foto da nota" />}
+      {n.url && <a className="btn ghost" href={n.url} target="_blank" rel="noopener noreferrer"><I.share /> Ver a nota na Sefaz</a>}
+    </Sheet>
   );
 }
 
@@ -369,6 +571,7 @@ export function GastoCasaSheet({ casa: C, inicial, pre, onClose, act }) {
       </>}
       <div className="fields"><Field label="Quando" htmlFor="cg-dt"><input id="cg-dt" type="date" value={data} onChange={e => e.target.value && setData(e.target.value)} /></Field></div>
       <button className="btn mode" disabled={!ok} onClick={salvar}><I.check /> {inicial ? "Salvar" : "Anotar"}</button>
+      {inicial && inicial.nota && <button className="btn ghost" onClick={() => act.verNotaCasa(inicial)}><I.receipt /> Ver a nota ({inicial.nota.itens.length} itens)</button>}
       {inicial && <ConfirmButton label="Apagar este gasto" titulo="Apagar o gasto da casa?" texto="Ele some para todas as pessoas da casa. O seu lançamento pessoal (se veio de lá) continua." acao="Apagar" onConfirm={async () => { await C.apagar("lanc", inicial.id); act.desligarDaCasa(inicial.id); onClose(); }} />}
     </Sheet>
   );

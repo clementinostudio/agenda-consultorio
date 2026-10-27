@@ -32,6 +32,24 @@ async function lerCodigos(fonte) {
   return r.filter(x => x.isValid !== false).map(x => x.text);
 }
 
+// QR code (o da nota fiscal do mercado): leitor nativo quando ele lê QR; senão, o zxing
+let NATIVO_QR;
+async function leitorNativoQR() {
+  if (NATIVO_QR !== undefined) return NATIVO_QR;
+  try { NATIVO_QR = "BarcodeDetector" in window && (await window.BarcodeDetector.getSupportedFormats()).includes("qr_code") ? new window.BarcodeDetector({ formats: ["qr_code"] }) : null; }
+  catch (e) { NATIVO_QR = null; }
+  return NATIVO_QR;
+}
+// fonte: canvas (quadro da câmera) ou arquivo de foto
+export async function lerQRs(fonte) {
+  const nat = await leitorNativoQR();
+  if (nat) { try { const r = await nat.detect(fonte instanceof Blob ? await createImageBitmap(fonte) : fonte); if (r.length) return r.map(x => x.rawValue); } catch (e) {} }
+  const zx = await leitorZxing();
+  const img = fonte instanceof HTMLCanvasElement ? fonte.getContext("2d").getImageData(0, 0, fonte.width, fonte.height) : fonte;
+  const r = await zx.readBarcodes(img, { formats: ["QRCode"], tryHarder: true, maxNumberOfSymbols: 1 });
+  return r.filter(x => x.isValid !== false).map(x => x.text);
+}
+
 export function BoletoSheet({ texto, act, onClose }) {
   const [res, setRes] = useState(() => (texto ? lerBoleto(texto) : null));
   const [cod, setCod] = useState(texto || "");
