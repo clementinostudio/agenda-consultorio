@@ -6,7 +6,7 @@ import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } 
 import { DinheiroHome } from "./dinheiro.jsx";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
 import { logoPropria, lerArquivo } from "../App.jsx";
-import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos } from "../App.jsx";
+import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos, Confirmar, vibrar } from "../App.jsx";
 
 /* ---------- Logo enquanto digita: sugere as empresas parecidas (mesmo com erro de digitação),
    tenta achar o site de quem não está na lista e deixa usar uma foto como logo ---------- */
@@ -123,10 +123,17 @@ function conversaPessoal(db, act) {
   return falas.slice(0, ESTILO === "curto" ? 2 : 4);
 }
 
-function LancRow({ l, act }) {
+// sel: modo de seleção ligado; segurar o dedo num lançamento também liga a seleção (como nos apps do celular)
+function LancRow({ l, act, sel, marcado, onMarcar, onSegurar }) {
   const cat = catDe(l.cat);
+  const tempo = useRef(0), segurou = useRef(false);
+  const apertou = () => { if (!onSegurar) return; segurou.current = false; clearTimeout(tempo.current); tempo.current = setTimeout(() => { segurou.current = true; onSegurar(l.id); }, 450); };
+  const soltou = () => clearTimeout(tempo.current);
+  const tocou = () => { if (segurou.current) { segurou.current = false; return; } if (sel) onMarcar(l.id); else act.editLanc(l.id); };
   return (
-    <button className="txn" onClick={() => act.editLanc(l.id)}>
+    <button className={"txn" + (sel ? " sel" : "") + (marcado ? " marcado" : "")} onClick={tocou} onPointerDown={apertou} onPointerUp={soltou} onPointerLeave={soltou} onPointerCancel={soltou}
+      onContextMenu={e => { if (onSegurar) e.preventDefault(); }} aria-pressed={sel ? !!marcado : undefined}>
+      {sel && <span className={"sel-box" + (marcado ? " on" : "")} aria-hidden="true">{marcado && <I.check />}</span>}
       <MarcaLogo key={(l.marca || l.logoSite || l.cat) + (l.desc || "")} marca={l.semLogo ? null : l.marca || (acharMarca(l.desc || "") || {}).id} site={l.semLogo ? null : l.logoSite} nome={l.desc} cat={cat} className="txn-av" />
       <span className="mid"><span className="nm">{l.desc || cat.nome}</span><span className="sb">{cat.nome}{l.moeda ? ` · ${ESCONDER ? "•••" : fmtMoeda(l.valorOrig, l.moeda)}` : ""} · {relativo(l.data).toLowerCase()}</span></span>
       <span className={"amt" + (l.tipo === "entrada" ? " pos" : "")}>{l.tipo === "entrada" ? "+" : "−"}<Money v={l.valor} /></span>
@@ -232,6 +239,13 @@ function GastosTab({ db, act, tema }) {
   if (filtro === "entrada") lista = lista.filter(l => l.tipo === "entrada");
   lista.sort((a, b) => b.data.localeCompare(a.data));
   const grupos = []; lista.forEach(l => { const g = grupos[grupos.length - 1]; if (g && g.d === l.data) g.itens.push(l); else grupos.push({ d: l.data, itens: [l] }); });
+  // Seleção para apagar vários de uma vez
+  const [sel, setSel] = useState(null); // null = modo normal; Set de ids = selecionando
+  const [confirmar, setConfirmar] = useState(false);
+  useEffect(() => { setSel(null); }, [off, filtro]);
+  const marcar = id => setSel(s => { const n = new Set(s || []); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const segurar = id => { vibrar("toque"); setSel(s => new Set([...(s || []), id])); };
+  const todos = sel && lista.length > 0 && lista.every(l => sel.has(l.id));
   const nav = <>
     <button className="icon-btn" onClick={() => setOff(off - 1)} aria-label="Mês anterior"><I.chevL /></button>
     <button className="icon-btn" onClick={() => setOff(off + 1)} aria-label="Próximo mês"><I.chev /></button>
@@ -260,7 +274,21 @@ function GastosTab({ db, act, tema }) {
         </div>
         <div className="col">
           <div className="panel">
-            <div className="panel-head"><h3>Lançamentos</h3><span className="panel-acts"><button className="link" onClick={act.importar}><I.upload /> Importar extrato</button><button className="link" onClick={() => act.novoLanc("saida")}>+ Novo</button></span></div>
+            {sel ? (
+              <div className="panel-head sel-head">
+                <h3>{sel.size ? `${sel.size} ${sel.size === 1 ? "selecionado" : "selecionados"}` : "Toque para selecionar"}</h3>
+                <span className="panel-acts">
+                  <button className="link" onClick={() => setSel(todos ? new Set() : new Set(lista.map(l => l.id)))}>{todos ? "Desmarcar tudo" : "Selecionar tudo"}</button>
+                  <button className="link" onClick={() => setSel(null)}>Cancelar</button>
+                </span>
+              </div>
+            ) : (
+              <div className="panel-head"><h3>Lançamentos</h3><span className="panel-acts">
+                {lista.length > 0 && <button className="link" onClick={() => setSel(new Set())}><I.check /> Selecionar</button>}
+                <button className="link" onClick={act.importar}><I.upload /> Importar</button>
+                <button className="link" onClick={() => act.novoLanc("saida")}>+ Novo</button>
+              </span></div>
+            )}
             <div className="chips" role="tablist">
               {[["tudo", "Tudo"], ["saida", "Gastos"], ["entrada", "Entradas"]].map(([v, l]) => <button key={v} role="tab" aria-selected={filtro === v} className={"fchip" + (filtro === v ? " on" : "")} onClick={() => setFiltro(v)}>{l}</button>)}
             </div>
@@ -275,12 +303,20 @@ function GastosTab({ db, act, tema }) {
             {grupos.map(g => (
               <React.Fragment key={g.d}>
                 <div className="day-sep">{relativo(g.d)}</div>
-                {g.itens.map(l => <LancRow key={l.id} l={l} act={act} />)}
+                {g.itens.map(l => <LancRow key={l.id} l={l} act={act} sel={!!sel} marcado={!!sel && sel.has(l.id)} onMarcar={marcar} onSegurar={segurar} />)}
               </React.Fragment>
             ))}
           </div>
         </div>
       </div>
+      {sel && (
+        <div className="sel-barra" role="toolbar" aria-label="Ações da seleção">
+          <span>{sel.size ? `${sel.size} ${sel.size === 1 ? "lançamento" : "lançamentos"} · ${brl(soma(lista.filter(l => sel.has(l.id)), l => l.valor))}` : "Nada selecionado"}</span>
+          <button className="sel-apagar" disabled={!sel.size} onClick={() => setConfirmar(true)}><I.trash /> Apagar</button>
+        </div>
+      )}
+      {confirmar && sel && <Confirmar titulo={`Apagar ${sel.size} ${sel.size === 1 ? "lançamento" : "lançamentos"}?`} texto="Eles saem do extrato e dos totais do mês. Logo depois aparece a opção de desfazer." acao="Apagar" icon={<I.trash />}
+        onSim={() => { act.apagarLancs([...sel]); setSel(null); }} onFim={() => setConfirmar(false)} />}
     </div>
   );
 }

@@ -532,7 +532,7 @@ function distancia(a, b, max) {
 }
 const tolerancia = len => (len <= 3 ? 0 : len <= 5 ? 1 : len <= 9 ? 2 : 3);
 // palavras comuns que não podem virar marca por engano ("mercado" não é "Mercadão")
-const COMUNS = new Set("mercado mercados supermercado supermercados super atacado atacadista atacadistas farmacia farmacias drogaria drogarias posto postos loja lojas casa conta contas banco cartao padaria restaurante lanchonete academia escola curso internet energia agua luz gas aluguel hiper mini mais menos gastei paguei comprei hoje ontem reais real pix caixa light nacional mundial formosa lider pinheiro planalto unidas movida decolar original natural conto contos pila pilas mango mangos paus torrei gastou deu dei recebi ganhei".split(" "));
+const COMUNS = new Set("mercado mercados supermercado supermercados super atacado atacadista atacadistas farmacia farmacias drogaria drogarias posto postos loja lojas casa conta contas banco cartao padaria restaurante lanchonete academia escola curso internet energia agua luz gas aluguel hiper mini mais menos gastei paguei comprei hoje ontem reais real pix caixa light nacional mundial formosa lider pinheiro planalto unidas movida decolar original natural conto contos pila pilas mango mangos paus torrei gastou deu dei recebi ganhei amiga amigas amigo amigos cinema venda vendas vendi semana jantar almoco livro livros usado usada presente aniversario feira compra compras".split(" "));
 
 // Pontua o quanto o texto digitado combina com uma marca (0 a 100)
 function pontuar(q, m) {
@@ -597,6 +597,9 @@ export function acharMarca(frase) {
   for (const p of pedacos) for (const m of MARCAS) {
     for (const a of [normalizar(m.nome), ...m.apelidos]) {
       if (a.length < 5 || COMUNS.has(a) || Math.abs(a.length - p.length) > 2) continue;
+      // erro de digitação quase nunca troca a primeira letra ("venda" não é "Tenda"),
+      // e o começo de um nome não é o nome ("cinema" não é "Cinemark")
+      if (p[0] !== a[0] || (a.startsWith(p) && a.length - p.length >= 2)) continue;
       const tol = a.length <= 7 ? 1 : 2;
       const d = distancia(p, a, tol);
       if (d <= tol && 10 - d > nota) { nota = 10 - d; achou = m; }

@@ -3993,6 +3993,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       notify(novoL ? `${l.tipo === "entrada" ? "Entrada" : "Gasto"} de ${l.moeda ? `${fmtMoeda(l.valorOrig, l.moeda)} (${brlReal(l.valor)})` : brlReal(l.valor)} anotado` : "Lançamento atualizado", novoL ? () => setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== l.id) })) : undefined);
     },
     apagarLanc: id => { setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== id) })); close(); notify("Lançamento apagado"); },
+    // vários de uma vez (seleção em Gastos), com desfazer
+    apagarLancs: ids => {
+      const s = new Set(ids), tirados = db.pessoal.lanc.filter(x => s.has(x.id));
+      if (!tirados.length) return;
+      setP(P => ({ ...P, lanc: P.lanc.filter(x => !s.has(x.id)) }));
+      vibrar("aviso");
+      notify(`${tirados.length} ${tirados.length === 1 ? "lançamento apagado" : "lançamentos apagados"}`, () => setP(P => ({ ...P, lanc: [...P.lanc.filter(x => !s.has(x.id)), ...tirados] })));
+    },
     novaConta: () => setSheet({ type: "conta" }),
     // foto escolhida como logo de uma empresa (vale para tudo com esse nome)
     salvarLogo: (nome, url) => { const k = normalizar(nome); if (!k) return; setP(P => ({ ...P, logos: { ...(P.logos || {}), [k]: url } })); vibrar("ok"); notify("Logo salva"); },
@@ -4308,6 +4316,6 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos };
+export { logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar };
 
 export default App;
