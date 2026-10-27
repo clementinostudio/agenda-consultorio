@@ -166,6 +166,10 @@ export async function precosCombustivel(servidor, uf, cidade, forcar) {
     return out;
   } catch (e) { if (salvo) return { ...salvo, velho: true }; throw e; }
 }
+// O último preço buscado (da cidade, ou do estado), para a janela de abastecer comparar sem esperar a internet
+export function precosGuardados() {
+  try { const s = JSON.parse(localStorage.getItem(K_ANP) || "null"); if (!s) return null; return Object.keys(s.cidade || {}).length ? s.cidade : Object.keys(s.estado || {}).length ? s.estado : s.brasil || null; } catch (e) { return null; }
+}
 // Etanol ou gasolina? (regra dos 70%: o etanol rende cerca de 70% da gasolina)
 export function etanolOuGasolina(precos) {
   const g = precos && precos.gasolina, e = precos && precos.etanol;

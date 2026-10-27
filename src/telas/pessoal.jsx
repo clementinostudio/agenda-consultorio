@@ -182,10 +182,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
         <div className="col">
           <Talk falas={falas} />
           <ProximaConquista act={act} trilhas={["dinheiro", "app"]} />
-          <div className="small-acts">
-            {servidorAvisos() && <button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
-            <button className="chip-btn" onClick={act.abrirTransporte}><I.car />Meu transporte</button>
-          </div>
+          {servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
           <section className="bal">
             <div className="bal-top">
               <span className="lab">{rotulo} <button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></span>

@@ -1,8 +1,6 @@
-// Parte do app carregada sob demanda: "Meu transporte" (abre ao tocar em Transporte, em Gastos).
+// Parte do app carregada sob demanda: aba "Transporte" do modo Pessoal (também abre ao tocar em Transporte, em Gastos).
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, useCamada, ConfirmButton } from "../App.jsx";
-import { TetoSheet } from "./pessoal.jsx";
+import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar } from "../App.jsx";
 import { SUBS, subInfo, subDe, MANUTENCOES, FOTOS, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
 
 /* ---------- ícones ---------- */
@@ -40,18 +38,14 @@ function FotoVeiculo({ v, grande }) {
   const cls = "transp-foto" + (grande ? " grande" : "");
   if (v && v.foto && v.foto.startsWith("data:")) return <img className={cls + " propria"} src={v.foto} alt="Seu veículo" />;
   const f = FOTOS.find(x => x[0] === (v && v.foto)) || (!v || v.tipo === "carro" || !v.tipo ? FOTOS[0] : null);
-  if (f) return <Ilustra n={f[2]} className={cls} alt={f[1]} />;
+  if (f) return <Ilustra n={f[2]} className={cls + " f-" + f[0]} alt={f[1]} />;
   return <span className={cls + " emoji"} aria-hidden="true">{EMOJI[v.tipo] || "🚗"}</span>;
 }
 
-export function TransportePage({ db, act, perfil, onClose }) {
+export function TransporteTab({ db, act, tema, perfil }) {
   const v = (db.pessoal && db.pessoal.veiculo) || null;
   const [off, setOff] = useState(0);
   const [filtro, setFiltro] = useState(null);
-  const [folha, setFolha] = useState(null); // { tipo: "gasto" | "veiculo" | "teto", ... }
-  const folhaRef = useRef(folha); folhaRef.current = folha;
-  // voltar do Android: fecha a janela de dentro; sem janela, fecha a tela
-  useCamada(() => { if (folhaRef.current) { setFolha(null); return false; } onClose(); }, { escurece: false });
   const hoje = todayISO();
   const mes = mesDe(off), g = useMemo(() => gastosTransporte(db, mes.chave), [db, mes.chave]);
   const ant = useMemo(() => gastosTransporte(db, mesDe(off - 1).chave), [db, off]);
@@ -84,16 +78,13 @@ export function TransportePage({ db, act, perfil, onClose }) {
   const lista = g.itens.filter(i => !filtro || i.sub === filtro);
   const delta = ant.total > 0 ? (g.total - ant.total) / ant.total : null;
   const nome = (v && v.nome) || (v && v.fipe && v.fipe.modelo) || (v && v.tipo === "nenhum" ? "Apps e transporte público" : "Seu veículo");
-  const salvar = l => { act.salvarLanc(l); setFolha(null); };
 
-  return createPortal(
-    <div className="transp" role="dialog" aria-modal="true" aria-label="Meu transporte">
-      <div className="transp-in">
-        <header className="transp-topo">
-          <button className="icon-btn" onClick={onClose} aria-label="Voltar"><I.chevL /></button>
-          <b>Meu transporte</b>
-          <button className="icon-btn" onClick={() => setFolha({ tipo: "veiculo" })} aria-label="Editar o veículo"><I.pencil /></button>
-        </header>
+  return (
+    <div className="page transp">
+      <TopBar eyebrow={nome} title="Transporte" act={act} tema={tema}
+        extra={<button className="icon-btn" onClick={() => act.abrirVeiculo()} aria-label="Editar o veículo"><I.pencil /></button>} />
+      <div className="cols">
+        <div className="col">
 
         <section className="transp-hero">
           <div className="transp-palco"><i className="transp-luz" aria-hidden="true" /><FotoVeiculo v={v} grande /><i className="transp-chao" aria-hidden="true" /></div>
@@ -104,7 +95,7 @@ export function TransportePage({ db, act, perfil, onClose }) {
             {km && <span>{km.toLocaleString("pt-BR")} km</span>}
             {v && v.fipe && v.fipe.valor && <span>FIPE {v.fipe.valor}</span>}
           </div>
-          {!v && <button className="btn ghost transp-escolher" onClick={() => setFolha({ tipo: "veiculo" })}><I.car /> Escolher o meu veículo</button>}
+          {!v && <button className="btn ghost transp-escolher" onClick={() => act.abrirVeiculo()}><I.car /> Escolher o meu veículo</button>}
         </section>
 
         <section className="transp-card transp-mes">
@@ -126,9 +117,9 @@ export function TransportePage({ db, act, perfil, onClose }) {
         </section>
 
         <div className="transp-acoes">
-          {temCarro && <button onClick={() => setFolha({ tipo: "gasto", sub: "combustivel" })}><span className="ic" style={{ "--c": subInfo("combustivel").cor }}><Ic.combustivel /></span>Abastecer</button>}
-          {temCarro && <button onClick={() => setFolha({ tipo: "gasto", sub: "manutencao" })}><span className="ic" style={{ "--c": subInfo("manutencao").cor }}><Ic.manutencao /></span>Manutenção</button>}
-          <button onClick={() => setFolha({ tipo: "gasto", sub: temCarro ? "estacionamento" : "app" })}><span className="ic" style={{ "--c": "var(--mode)" }}><I.plus /></span>Outro gasto</button>
+          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "combustivel" })}><span className="ic" style={{ "--c": subInfo("combustivel").cor }}><Ic.combustivel /></span>Abastecer</button>}
+          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "manutencao" })}><span className="ic" style={{ "--c": subInfo("manutencao").cor }}><Ic.manutencao /></span>Manutenção</button>}
+          <button onClick={() => act.abrirGastoTransp({ sub: temCarro ? "estacionamento" : "app" })}><span className="ic" style={{ "--c": "var(--mode)" }}><I.plus /></span>Outro gasto</button>
         </div>
 
         {subsMes.length > 0 && (
@@ -142,6 +133,8 @@ export function TransportePage({ db, act, perfil, onClose }) {
           </section>
         )}
 
+        </div>
+        <div className="col">
         {temCarro && (
           <section className="transp-card">
             <div className="transp-card-cab"><span className="ic" style={{ "--c": subInfo("combustivel").cor }}><Ic.combustivel /></span><h3>Combustível</h3></div>
@@ -177,7 +170,7 @@ export function TransportePage({ db, act, perfil, onClose }) {
               </div>
             ) : <p className="hint">Anote a última troca de óleo (em Manutenção) e eu aviso quando chegar a próxima.</p>}
             {manut.slice(0, 4).map(l => (
-              <button key={l.id} className="transp-item" onClick={() => setFolha({ tipo: "gasto", inicial: l })}>
+              <button key={l.id} className="transp-item" onClick={() => act.abrirGastoTransp({ inicial: l })}>
                 <span className="ic" style={{ "--c": subInfo(subDe(l)).cor }}><IconeSub id={subDe(l)} /></span>
                 <span className="mid"><b>{l.desc || subInfo(subDe(l)).nome}</b><small>{relativo(l.data)}{l.km ? ` · ${l.km.toLocaleString("pt-BR")} km` : ""}</small></span>
                 <span className="amt">−<Money v={l.valor} /></span>
@@ -203,26 +196,22 @@ export function TransportePage({ db, act, perfil, onClose }) {
           <div className="transp-card-cab"><h3>{filtro ? subInfo(filtro).nome : "Gastos do mês"}</h3>{filtro && <button className="link" onClick={() => setFiltro(null)}>Ver todos</button>}</div>
           {lista.length === 0 && <div className="empty">{filtro ? "Nada nesta categoria no mês." : "Nenhum gasto com transporte neste mês."}</div>}
           {lista.map(l => (
-            <button key={l.id} className="transp-item" disabled={l.conta} onClick={() => !l.conta && setFolha({ tipo: "gasto", inicial: l })}>
+            <button key={l.id} className="transp-item" disabled={l.conta} onClick={() => !l.conta && act.abrirGastoTransp({ inicial: l })}>
               <span className="ic" style={{ "--c": subInfo(l.sub).cor }}><IconeSub id={l.sub} /></span>
               <span className="mid"><b>{l.desc || subInfo(l.sub).nome}</b><small>{subInfo(l.sub).nome} · {relativo(l.data).toLowerCase()}{l.litros ? ` · ${fmtNum(l.litros)} L` : ""}{l.conta ? " · conta fixa" : ""}</small></span>
               <span className="amt">−<Money v={l.valor} /></span>
             </button>
           ))}
-          <button className="link transp-teto" onClick={() => setFolha({ tipo: "teto" })}><I.gauge /> Teto de gastos com transporte</button>
+          <button className="link transp-teto" onClick={() => act.abrirTeto("transporte")}><I.gauge /> Teto de gastos com transporte</button>
         </section>
+        </div>
       </div>
-
-      {folha && folha.tipo === "gasto" && <GastoTransporteSheet sub0={folha.sub} inicial={folha.inicial} veiculo={v} precos={ref && ref.p} onSave={salvar} onDelete={id => { act.apagarLanc(id); setFolha(null); }} onClose={() => setFolha(null)} />}
-      {folha && folha.tipo === "veiculo" && <VeiculoSheet veiculo={v} km={km} onSave={nv => { act.salvarVeiculo(nv); setFolha(null); }} onClose={() => setFolha(null)} />}
-      {folha && folha.tipo === "teto" && <TetoSheet db={db} cat="transporte" act={{ ...act, salvarTeto: (c, valor) => { act.salvarTeto(c, valor); setFolha(null); } }} onClose={() => setFolha(null)} />}
-    </div>,
-    document.body
+    </div>
   );
 }
 
 /* ---------- Abastecer, manutenção e outros gastos ---------- */
-function GastoTransporteSheet({ sub0, inicial, veiculo, precos, onSave, onDelete, onClose }) {
+export function GastoTransporteSheet({ sub0, inicial, veiculo, precos, onSave, onDelete, onClose }) {
   const [sub, setSub] = useState(inicial ? subDe(inicial) : sub0 || "combustivel");
   const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : "");
   const [litros, setLitros] = useState(inicial && inicial.litros ? fmtNum(inicial.litros) : "");
@@ -292,7 +281,8 @@ async function fotoDoCarro(file) {
   c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL("image/jpeg", .82);
 }
-function VeiculoSheet({ veiculo, km: km0, onSave, onClose }) {
+export function VeiculoSheet({ veiculo, db, onSave, onClose }) {
+  const km0 = kmAtual(db, veiculo);
   const v0 = veiculo || {};
   const [tipo, setTipo] = useState(v0.tipo || "carro");
   const [foto, setFoto] = useState(v0.foto || "sedan");
@@ -348,26 +338,43 @@ function VeiculoSheet({ veiculo, km: km0, onSave, onClose }) {
 }
 
 // Tabela FIPE (opcional): marca -> modelo -> ano -> valor
+// nomes como as pessoas falam ("Chevrolet", e não "GM - Chevrolet"), apelidos e as marcas mais comuns primeiro
+const nomeMarca = n => n.replace(/^GM - Chevrolet$/i, "Chevrolet").replace(/^VW - VolksWagen$/i, "Volkswagen").replace(/^(GM|VW) - /i, "");
+const simples = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+const APELIDOS_MARCA = { gm: "chevrolet", chevy: "chevrolet", vw: "volkswagen", volks: "volkswagen", wolks: "volkswagen", mercedes: "mercedes", citroen: "citroen", chery: "chery" };
+const POPULARES = ["chevrolet", "fiat", "volkswagen", "ford", "toyota", "hyundai", "renault", "honda", "jeep", "nissan", "peugeot", "citroen", "byd", "caoa chery", "yamaha", "kawasaki", "suzuki", "bmw"];
 function BuscaFipe({ tipo, valor, onEscolher }) {
+  const [qMarca, setQMarca] = useState(""), [marcaNome, setMarcaNome] = useState("");
   const [aberto, setAberto] = useState(false);
   const [marcas, setMarcas] = useState([]), [modelos, setModelos] = useState([]), [anos, setAnos] = useState([]);
   const [marca, setMarca] = useState(""), [modelo, setModelo] = useState(""), [busca, setBusca] = useState("");
   const [st, setSt] = useState("");
   useEffect(() => { if (!aberto || marcas.length) return; setSt("carregando"); fipe.marcas(tipo).then(m => { setMarcas(m); setSt(""); }).catch(() => setSt("erro")); }, [aberto, tipo]);
-  const escolherMarca = id => { setMarca(id); setModelo(""); setAnos([]); setModelos([]); if (!id) return; setSt("carregando"); fipe.modelos(tipo, id).then(m => { setModelos(m); setSt(""); }).catch(() => setSt("erro")); };
+  const escolherMarca = (id, nome) => { setMarca(id); setMarcaNome(nome || ""); setBusca(""); setModelo(""); setAnos([]); setModelos([]); if (!id) return; setSt("carregando"); fipe.modelos(tipo, id).then(m => { setModelos(m); setSt(""); }).catch(() => setSt("erro")); };
   const escolherModelo = id => { setModelo(id); setAnos([]); if (!id) return; setSt("carregando"); fipe.anos(tipo, marca, id).then(a => { setAnos(a); setSt(""); }).catch(() => setSt("erro")); };
   const escolherAno = id => { if (!id) return; setSt("carregando"); fipe.valor(tipo, marca, modelo, id).then(r => { onEscolher({ marca: r.Marca, modelo: r.Modelo, ano: r.AnoModelo === 32000 ? "Zero km" : r.AnoModelo, combustivel: r.Combustivel, valor: r.Valor, mes: r.MesReferencia, codigo: r.CodigoFipe }); setSt(""); setAberto(false); vibrar("ok"); }).catch(() => setSt("erro")); };
+  const q = simples(qMarca), qAlvo = APELIDOS_MARCA[q] || q;
+  const listaMarcas = q
+    ? marcas.filter(m => simples(nomeMarca(m.nome)).includes(qAlvo) || simples(m.nome).includes(q)).slice(0, 14)
+    : POPULARES.map(p => marcas.find(m => simples(nomeMarca(m.nome)) === p)).filter(Boolean).slice(0, 12);
   const filtrados = busca.trim() ? modelos.filter(m => m.nome.toLowerCase().includes(busca.trim().toLowerCase())) : modelos;
   if (!aberto) return (
     <div className="transp-fipe">
-      {valor ? <div><small>Tabela FIPE · {valor.mes}</small><b>{valor.valor}</b><span>{valor.marca} {valor.modelo} · {valor.ano}</span></div> : <span className="hint" style={{ padding: 0 }}>Quanto vale o seu {tipo === "motos" ? "moto" : "carro"}? Puxe da Tabela FIPE (opcional).</span>}
+      {valor ? <div><small>Tabela FIPE · {valor.mes}</small><b>{valor.valor}</b><span>{nomeMarca(valor.marca || "")} {valor.modelo} · {valor.ano}</span></div> : <span className="hint" style={{ padding: 0 }}>Quanto vale o seu {tipo === "motos" ? "moto" : "carro"}? Puxe da Tabela FIPE (opcional).</span>}
       <button type="button" className="pill-btn" onClick={() => setAberto(true)}>{valor ? "Trocar" : "Buscar na FIPE"}</button>
       {valor && <button type="button" className="link" onClick={() => onEscolher(null)}>Tirar</button>}
     </div>
   );
   return (
     <div className="transp-fipe aberto">
-      <select value={marca} onChange={e => escolherMarca(e.target.value)} aria-label="Marca"><option value="">Marca…</option>{marcas.map(m => <option key={m.codigo} value={m.codigo}>{m.nome}</option>)}</select>
+      {!marca ? <>
+        <input value={qMarca} onChange={e => setQMarca(e.target.value)} placeholder="Marca (ex.: Chevrolet, Fiat, VW)" aria-label="Buscar a marca" autoComplete="off" />
+        <div className="fipe-marcas">
+          {!q && marcas.length > 0 && <small>Mais comuns</small>}
+          {listaMarcas.map(m => <button key={m.codigo} type="button" onClick={() => escolherMarca(m.codigo, nomeMarca(m.nome))}>{nomeMarca(m.nome)}</button>)}
+          {q && marcas.length > 0 && !listaMarcas.length && <span className="hint" style={{ padding: 0 }}>Nenhuma marca com esse nome.</span>}
+        </div>
+      </> : <div className="fipe-escolhida"><b>{marcaNome}</b><button type="button" className="link" onClick={() => escolherMarca("")}>Trocar marca</button></div>}
       {marca && <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Filtrar o modelo (ex.: onix 1.0)" aria-label="Filtrar modelo" />}
       {marca && <select value={modelo} onChange={e => escolherModelo(e.target.value)} aria-label="Modelo"><option value="">{modelos.length ? `Modelo… (${filtrados.length})` : "Carregando…"}</option>{filtrados.slice(0, 400).map(m => <option key={m.codigo} value={m.codigo}>{m.nome}</option>)}</select>}
       {modelo && <select defaultValue="" onChange={e => escolherAno(e.target.value)} aria-label="Ano"><option value="">{anos.length ? "Ano…" : "Carregando…"}</option>{anos.map(a => <option key={a.codigo} value={a.codigo}>{a.nome.replace(/^32000/, "Zero km")}</option>)}</select>}

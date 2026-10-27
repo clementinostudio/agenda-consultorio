@@ -15,6 +15,7 @@ import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sai
 import { lerBoleto } from "./boleto.js";
 import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
 import { AVATARES, ehAvatarPronto } from "./avatares.js";
+import { precosGuardados } from "./transporte.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -159,7 +160,7 @@ const comTransicao = (fn, tipo = "frente") => {
   } catch (e) {}
   fn();
 };
-const ORDEM_ABAS = ["home", "agenda", "pac", "fin", "p-home", "p-gastos", "p-contas"];
+const ORDEM_ABAS = ["home", "agenda", "pac", "fin", "p-home", "p-gastos", "p-contas", "p-transp"];
 const brlReal = v => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brl = v => ESCONDER ? "R$ •••" : brlReal(v);
 const num = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
@@ -1462,6 +1463,7 @@ const I = {
   bill: () => <Svg><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h4"/></Svg>,
   cart: () => <Svg><path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H7"/><circle cx="9.5" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></Svg>,
   car: () => <Svg><path d="M4 16v-4l2-5h12l2 5v4M4 16h16M4 16v2.5M20 16v2.5"/><circle cx="7.5" cy="13.5" r=".8"/><circle cx="16.5" cy="13.5" r=".8"/></Svg>,
+  carOn: () => <Svg><path fill="currentColor" stroke="none" fillRule="evenodd" d="M6.9 5.5h10.2a1.5 1.5 0 0 1 1.4.94l1.9 4.76c.4.36.6.86.6 1.4V17a1 1 0 0 1-1 1h-.5v1.2a1 1 0 0 1-2 0V18H6.5v1.2a1 1 0 0 1-2 0V18H4a1 1 0 0 1-1-1v-4.4c0-.54.2-1.04.6-1.4L5.5 6.44a1.5 1.5 0 0 1 1.4-.94zM6.2 10.5h11.6l-1.3-3.2H7.5zM7.5 15.2a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6zm9 0a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6z"/></Svg>,
   food: () => <Svg><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 21V3c-2 1-3.5 3.5-3.5 7h3.5"/></Svg>,
   heart: () => <Svg><path d="M12 20s-7.5-4.5-7.5-10A4.3 4.3 0 0 1 12 7.5 4.3 4.3 0 0 1 19.5 10C19.5 15.5 12 20 12 20z"/></Svg>,
   star: () => <Svg><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/></Svg>,
@@ -3254,7 +3256,9 @@ const LancSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default:
 const ContaSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.ContaSheet })));
 const CaixinhaSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.CaixinhaSheet })));
 const TetoSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.TetoSheet })));
-const TransportePage = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.TransportePage })));
+const TransporteTab = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.TransporteTab })));
+const GastoTransporteSheet = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.GastoTransporteSheet })));
+const VeiculoSheet = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.VeiculoSheet })));
 const BoletoSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.BoletoSheet })));
 const ImportarSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.ImportarSheet })));
 const ParceladoSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ParceladoSheet })));
@@ -3601,7 +3605,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   // Conquistas: calculadas a partir dos dados; as novas ganham comemoração (uma de cada vez)
   const conquistas = useMemo(() => avaliarConquistas(db, ajudaConquistas(), { perfil, usaPessoal, instalado: appInstalado(), push, nuvem: !!conta.uid, av }), [db, push, perfil, usaPessoal, conta.uid, av.nomes]);
   const [festa, setFesta] = useState([]);
-  const [transp, setTransp] = useState(false); // tela "Meu transporte"
   // Barra de cima que aparece quando a página rola
   const [rolou, setRolou] = useState(false);
   // A barra de baixo fica sempre parada no lugar; só a de cima reage à rolagem
@@ -3867,8 +3870,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     toast: m => notify(m),
     conquistas,
     abrirClima: () => setSheet({ type: "clima" }),
-    abrirTransporte: () => { if (sheet) close(); setTransp(true); },
-    salvarVeiculo: v => { setP(P => ({ ...P, veiculo: v })); vibrar("ok"); notify(v.tipo === "nenhum" ? "Pronto: sem veículo, foco nos apps e no transporte público" : `${v.nome || "Veículo"} salvo`); },
+    // Transporte é uma aba do modo Pessoal; os painéis dela abrem como os outros
+    abrirTransporte: () => { if (sheet) close(); if (modo !== "pessoal") { setModoSt("pessoal"); gravar(K.modo(conta.email), "pessoal"); } setTab("p-transp"); rolarTopo(); },
+    abrirGastoTransp: ({ sub, inicial } = {}) => setSheet({ type: "transp-gasto", sub, inicial, n: Date.now() }),
+    abrirVeiculo: () => setSheet({ type: "veiculo" }),
+    salvarVeiculo: v => { setP(P => ({ ...P, veiculo: v })); close(); vibrar("ok"); notify(v.tipo === "nenhum" ? "Pronto: sem veículo, foco nos apps e no transporte público" : `${v.nome || "Veículo"} salvo`); },
     abrirChat: () => { if (sheet) close(); vozApi.current.chat && vozApi.current.chat(); },
     recarregarClima: () => carregarClima(true),
     setTab: t => { if (t === tab) return rolarTopo(); comTransicao(() => { setTab(t); rolarTopo(); }, ORDEM_ABAS.indexOf(t) < ORDEM_ABAS.indexOf(tab) ? "tras" : "frente"); },
@@ -4104,7 +4110,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const modoEf = usaPessoal ? modo : "consultorio";
   const tabEf = !usaPessoal && tab.startsWith("p-") ? "home" : tab;
   const abas = modoEf === "pessoal"
-    ? [{ id: "p-home", l: "Início", ic: <I.home />, on: <I.homeOn />, n: 0 }, { id: "p-gastos", l: "Gastos", ic: <I.chart />, on: <I.chartOn />, n: 0 }, { id: "p-contas", l: "Contas", ic: <I.bill />, on: <I.billOn />, n: contasUrg }]
+    ? [{ id: "p-home", l: "Início", ic: <I.home />, on: <I.homeOn />, n: 0 }, { id: "p-gastos", l: "Gastos", ic: <I.chart />, on: <I.chartOn />, n: 0 }, { id: "p-contas", l: "Contas", ic: <I.bill />, on: <I.billOn />, n: contasUrg }, { id: "p-transp", l: "Transporte", ic: <I.car />, on: <I.carOn />, n: 0 }]
     : [{ id: "home", l: "Início", ic: <I.home />, on: <I.homeOn />, n: atrasados }, { id: "agenda", l: "Agenda", ic: <I.cal />, on: <I.calOn />, n: 0 }, { id: "pac", l: TERMO.P, ic: <I.users />, on: <I.usersOn />, n: 0 }, { id: "fin", l: "Finanças", ic: <I.wallet />, on: <I.walletOn />, n: pendentes }];
   const lancSel = sheet && sheet.type === "lanc" && sheet.id ? db.pessoal.lanc.find(l => l.id === sheet.id) : null;
   const contaSel = sheet && sheet.type === "conta" && sheet.id ? db.pessoal.contas.find(c => c.id === sheet.id) : null;
@@ -4123,6 +4129,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
       {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "transp-gasto" && <Suspense fallback={null}><GastoTransporteSheet key={sheet.n} sub0={sheet.sub} inicial={sheet.inicial} veiculo={db.pessoal.veiculo || null} precos={precosGuardados()} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "veiculo" && <Suspense fallback={null}><VeiculoSheet veiculo={db.pessoal.veiculo || null} db={db} onSave={act.salvarVeiculo} onClose={close} /></Suspense>}
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "boleto" && <Suspense fallback={null}><BoletoSheet key={sheet.n || "boleto"} texto={sheet.texto} act={act} onClose={close} /></Suspense>}
@@ -4186,6 +4194,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         {tabEf === "p-home" && <Suspense fallback={null}><PessoalHome db={db} conta={conta} now={now} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-gastos" && <Suspense fallback={null}><GastosTab db={db} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-contas" && <Suspense fallback={null}><ContasTab db={db} act={act} tema={tema} /></Suspense>}
+        {tabEf === "p-transp" && <Suspense fallback={null}><TransporteTab db={db} act={act} tema={tema} perfil={perfil} /></Suspense>}
       </main>
 
       <div className={"topo-fixo" + (rolou && !sheet ? " on" : "")} aria-hidden={!(rolou && !sheet)} inert={rolou && !sheet ? undefined : ""}>
@@ -4218,7 +4227,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
 
       {paineis}
       {foco && <Agora db={db} conta={conta} now={now} onClose={() => setFoco(false)} act={act} />}
-      {transp && usaPessoal && <Suspense fallback={null}><TransportePage db={db} act={act} perfil={perfil} onClose={() => setTransp(false)} /></Suspense>}
 
       {toast && (
         <div className={"toast" + (toast.undo ? "" : " solo")} role="status">
