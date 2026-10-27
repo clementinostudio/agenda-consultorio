@@ -3254,6 +3254,7 @@ const LancSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default:
 const ContaSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.ContaSheet })));
 const CaixinhaSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.CaixinhaSheet })));
 const TetoSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.TetoSheet })));
+const TransportePage = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.TransportePage })));
 const BoletoSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.BoletoSheet })));
 const ImportarSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.ImportarSheet })));
 const ParceladoSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ParceladoSheet })));
@@ -3600,6 +3601,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   // Conquistas: calculadas a partir dos dados; as novas ganham comemoração (uma de cada vez)
   const conquistas = useMemo(() => avaliarConquistas(db, ajudaConquistas(), { perfil, usaPessoal, instalado: appInstalado(), push, nuvem: !!conta.uid, av }), [db, push, perfil, usaPessoal, conta.uid, av.nomes]);
   const [festa, setFesta] = useState([]);
+  const [transp, setTransp] = useState(false); // tela "Meu transporte"
   // Barra de cima que aparece quando a página rola
   const [rolou, setRolou] = useState(false);
   // A barra de baixo fica sempre parada no lugar; só a de cima reage à rolagem
@@ -3865,6 +3867,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     toast: m => notify(m),
     conquistas,
     abrirClima: () => setSheet({ type: "clima" }),
+    abrirTransporte: () => { if (sheet) close(); setTransp(true); },
+    salvarVeiculo: v => { setP(P => ({ ...P, veiculo: v })); vibrar("ok"); notify(v.tipo === "nenhum" ? "Pronto: sem veículo, foco nos apps e no transporte público" : `${v.nome || "Veículo"} salvo`); },
     abrirChat: () => { if (sheet) close(); vozApi.current.chat && vozApi.current.chat(); },
     recarregarClima: () => carregarClima(true),
     setTab: t => { if (t === tab) return rolarTopo(); comTransicao(() => { setTab(t); rolarTopo(); }, ORDEM_ABAS.indexOf(t) < ORDEM_ABAS.indexOf(tab) ? "tras" : "frente"); },
@@ -4214,6 +4218,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
 
       {paineis}
       {foco && <Agora db={db} conta={conta} now={now} onClose={() => setFoco(false)} act={act} />}
+      {transp && usaPessoal && <Suspense fallback={null}><TransportePage db={db} act={act} perfil={perfil} onClose={() => setTransp(false)} /></Suspense>}
 
       {toast && (
         <div className={"toast" + (toast.undo ? "" : " solo")} role="status">

@@ -145,6 +145,24 @@ export default {
       }
     }
 
+    // Preço do combustível: acha a planilha semanal mais recente da ANP e repassa ao app (quem lê é o aparelho:
+    // o plano grátis só tem 10 ms de processamento por pedido, e baixar/repassar quase não gasta nada)
+    if (url.pathname === "/anp") {
+      const UA = { "User-Agent": "Mozilla/5.0 (Alvena; precos de combustivel)" };
+      try {
+        const pag = await fetch("https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos/levantamento-de-precos-de-combustiveis-ultimas-semanas-pesquisadas", { headers: UA });
+        const html = await pag.text();
+        // a mais recente é a de data final maior (os nomes misturam "_" e "-")
+        const links = [...new Set(html.match(/https?:\/\/[^"'\s]+resumo_semanal_lpc_[^"'\s]+\.xlsx/gi) || [])];
+        const fim = s => (s.match(/(\d{4})[-_](\d{2})[-_](\d{2})\.xlsx$/i) || []).slice(1).join("");
+        links.sort((a, b) => fim(b).localeCompare(fim(a)));
+        if (!links.length) return json({ erro: "Planilha da ANP não encontrada" }, 502);
+        const arq = await fetch(links[0], { headers: UA });
+        if (!arq.ok) return json({ erro: "ANP fora do ar" }, 502);
+        return new Response(arq.body, { headers: { ...cors, "Content-Type": "application/octet-stream", "Cache-Control": "public, max-age=21600", "X-ANP-Arquivo": links[0].split("/").pop(), "Access-Control-Expose-Headers": "X-ANP-Arquivo" } });
+      } catch (e) { return json({ erro: "ANP fora do ar" }, 502); }
+    }
+
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
 

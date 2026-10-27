@@ -182,7 +182,10 @@ function PessoalHome({ db, conta, now, act, tema }) {
         <div className="col">
           <Talk falas={falas} />
           <ProximaConquista act={act} trilhas={["dinheiro", "app"]} />
-          {servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
+          <div className="small-acts">
+            {servidorAvisos() && <button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
+            <button className="chip-btn" onClick={act.abrirTransporte}><I.car />Meu transporte</button>
+          </div>
           <section className="bal">
             <div className="bal-top">
               <span className="lab">{rotulo} <button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></span>
@@ -262,7 +265,7 @@ function GastosTab({ db, act, tema }) {
             {cats.length === 0 ? <div className="empty">Nenhum gasto neste mês.</div> : cats.map(([id, v]) => {
               const cat = catDe(id), teto = tetos[id] > 0 ? tetos[id] : 0, pct = teto ? v / teto : 0;
               return (
-                <button className={"catrow" + (teto ? pct >= 1 ? " estourou" : pct >= .8 ? " perto" : " com-teto" : "")} key={id} style={catVars(cat)} onClick={() => act.abrirTeto(id)} aria-label={`${cat.nome}: ${teto ? "mudar teto" : "definir teto"}`}>
+                <button className={"catrow" + (teto ? pct >= 1 ? " estourou" : pct >= .8 ? " perto" : " com-teto" : "")} key={id} style={catVars(cat)} onClick={() => id === "transporte" ? act.abrirTransporte() : act.abrirTeto(id)} aria-label={id === "transporte" ? "Abrir Meu transporte" : `${cat.nome}: ${teto ? "mudar teto" : "definir teto"}`}>
                   <span className="ci"><CatIcon cat={cat} /></span>
                   <div style={{ minWidth: 0 }}><b>{cat.nome}{teto ? <small className="teto-txt">{pct >= 1 ? ` · passou ${brl(v - teto)}` : ` · ${Math.round(pct * 100)}% do teto`}</small> : null}</b><div className="bar"><i style={{ width: `${teto ? Math.min(100, pct * 100) : v / maior * 100}%` }} /></div></div>
                   <span className="v"><Money v={v} />{teto ? <small className="teto-de">de {brl(teto)}</small> : null}</span>
@@ -360,6 +363,8 @@ function ContasTab({ db, act, tema }) {
   );
 }
 
+// campos que outras telas guardam no lançamento (transporte, extrato, voz): editar aqui não pode apagar
+const extrasDe = l => { if (!l) return {}; const o = {}; ["sub", "litros", "precoLitro", "combustivel", "km", "manut", "importId", "via"].forEach(k => { if (l[k] !== undefined) o[k] = l[k]; }); return o; };
 function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onFoto, onSave, onDelete, onClose, onLogo }) {
   const fotoRef = useRef(null);
   const cot = useCotacoes();
@@ -432,7 +437,7 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, onVoz, onFoto, onSave, o
         <Field label="Quando" htmlFor="l-data"><input id="l-data" type="date" value={data} onChange={e => e.target.value && setData(e.target.value)} /></Field>
       </div>
       {!ok && <div className="hint">{!(v > 0) ? "Digite o valor e escolha uma categoria." : "Escolha uma categoria."}</div>}
-      <button className="btn mode" disabled={!ok} onClick={() => onSave({ id: inicial ? inicial.id : uid(), tipo, valor: emR, cat, desc: desc.trim(), data, ...camposLogo(desc, escolha), ...(fora ? { moeda, valorOrig: v, cotacao: cotUsada, iof: iofOn } : {}) })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
+      <button className="btn mode" disabled={!ok} onClick={() => onSave({ ...extrasDe(inicial), id: inicial ? inicial.id : uid(), tipo, valor: emR, cat, desc: desc.trim(), data, ...camposLogo(desc, escolha), ...(fora ? { moeda, valorOrig: v, cotacao: cotUsada, iof: iofOn } : {}) })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
       {inicial && <ConfirmButton label="Apagar lançamento" titulo="Apagar este lançamento?" texto="Ele sai do seu extrato e dos totais do mês." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
     </Sheet>
   );
