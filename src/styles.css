@@ -1643,3 +1643,12 @@ button.catrow:active { background: var(--surface-2); }
 .panel-head { flex-wrap: wrap; row-gap: 4px; }
 .panel-acts { flex-wrap: wrap; justify-content: flex-end; gap: 6px 14px; margin-left: auto; }
 .panel-acts .link { white-space: nowrap; }
+
+/* Barra de cima ao rolar: a névoa escura de antes, igual nos dois temas (no claro também) */
+:root { --topo-nevoa: #0A0C11; }
+.topo-fixo::before { height: calc(env(safe-area-inset-top, 0px) + 164px); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none;
+  background: linear-gradient(to bottom, var(--topo-nevoa) 0%, color-mix(in srgb, var(--topo-nevoa) 97%, transparent) calc(env(safe-area-inset-top, 0px) + 76px), color-mix(in srgb, var(--topo-nevoa) 80%, transparent) calc(env(safe-area-inset-top, 0px) + 108px), transparent 100%); }
+/* sobre a névoa escura, título e botões claros (também no tema claro) */
+.topo-fixo-t { color: #F2F4F8; }
+.topo-fixo .icon-btn.redondo { background: rgba(255, 255, 255, .12); color: #F2F4F8; border-color: rgba(255, 255, 255, .14); }
+.topo-fixo .me { box-shadow: 0 0 0 2px rgba(255, 255, 255, .2); }
