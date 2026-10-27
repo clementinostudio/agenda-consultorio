@@ -97,7 +97,8 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   const [avSemana, setAvSemana] = useState(av0.semana !== false);
   const [estilo, setEstilo] = useState(pf.estilo || "detalhado");
   const [vib, setVib] = useState(pf.vibrar !== false);
-  const [pessoal, setPessoal] = useState(pf.pessoal !== false);
+  const [pessoal, setPessoal] = useState(pf.pessoal !== false || pf.consultorio === false);
+  const [consult, setConsult] = useState(pf.consultorio !== false);
   const [permissao, setPermissao] = useState(() => "Notification" in window ? Notification.permission : "indisponivel");
   const [teste, setTeste] = useState(null);
   const [salvo, setSalvo] = useState(false);
@@ -114,12 +115,12 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
         perfil: { ...atual, profissao, nascimento: nasc, cidade: cidade.trim(), termo, duracao: dur, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar,
           meta: num(meta) || 0, valorPadrao: num(valorPadrao) || atual.valorPadrao || 0, subPadrao: num(subPadrao), reserva,
           avisos: { ...av0, ...(atual.avisos || {}), ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar, semana: avSemana },
-          estilo, vibrar: vib, pessoal },
+          estilo, vibrar: vib, pessoal: pessoal || !consult, consultorio: consult },
       }, pix.trim());
       setSalvo(true);
     }, 450);
     return () => clearTimeout(t);
-  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, hIni, hFim, diasT, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, avSemana, estilo, vib, pessoal]);
+  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, hIni, hFim, diasT, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, avSemana, estilo, vib, pessoal, consult]);
   useEffect(() => { if (!salvo) return; const t = setTimeout(() => setSalvo(false), 1600); return () => clearTimeout(t); }, [salvo]);
   useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba]);
   useEffect(() => {
@@ -156,20 +157,22 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
       { id: "dados", ic: <I.user />, t: "Dados pessoais", v: [profissao, cidade].filter(Boolean).join(" · ") || "Nome, foto e cidade" },
       { id: "pix", ic: <I.key />, t: "Chave Pix", v: pix ? "Entra nas cobranças" : "Ainda não colocou" },
     ] },
-    { grupo: "Consultório", itens: [
+    ...(consult ? [{ grupo: "Consultório", itens: [
       { id: "agenda", ic: <I.cal />, t: "Agenda", v: `${hIni}h às ${hFim}h · ${diasTxt || "sem dias"}` },
       { id: "dinheiro", ic: <I.wallet />, t: "Valores e metas", v: meta ? `Meta de ${brl(num(meta))}` : "Sem meta" },
       { id: "docs", ic: <I.receipt />, t: "Recibos e imposto", v: pf.doc && pf.doc.registro ? "Seus dados prontos para o recibo" : "CPF, registro e assinatura" },
-      { id: "avisos", ic: <I.bell />, t: "Avisos", v: !avAtivo ? "Desligados" : pushLigado() ? `Com o app fechado · ${antec} min antes` : `${antec} min antes` },
+    ] }] : []),
+    { grupo: "Avisos", itens: [
+      { id: "avisos", ic: <I.bell />, t: "Avisos", v: !avAtivo ? "Desligados" : pushLigado() ? (consult ? `Com o app fechado · ${antec} min antes` : "Com o app fechado") : consult ? `${antec} min antes` : "Ligados" },
     ] },
     { grupo: "App", itens: [
       { id: "visual", ic: <I.sun />, t: "Aparência e fundo", v: temaNome },
-      ...[{ id: "pessoal", ic: <I.piggy />, t: "Modo Pessoal", v: pessoal ? "Ligado" : "Desligado" }],
+      { id: "pessoal", ic: <I.piggy />, t: "Como você usa o app", v: !consult ? "Só a vida pessoal" : pessoal ? "Consultório e vida pessoal" : "Só o consultório" },
       { id: "app", ic: <I.down />, t: "Instalar e atalhos", v: appInstalado() ? "Instalado" : "Colocar na tela inicial" },
     ] },
   ];
   const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
-  const titulo = { conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Modo Pessoal", app: "Instalar e atalhos" }[aba];
+  const titulo = { conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos" }[aba];
 
   return createPortal(
     <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
@@ -317,6 +320,8 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
 
         {aba === "visual" && <div className="stack">
           <div className="fields"><Field label="Aparência"><Seg value={tema.modo} onChange={tema.setModo} options={[{ v: "dark", l: "Escuro" }, { v: "light", l: "Claro" }, { v: "auto", l: "Do aparelho" }]} /></Field></div>
+          <div className="fields"><Field label="Barra de baixo"><Seg value={conta.barra === "botoes" ? "botoes" : "inteira"} onChange={act.setBarra} options={[{ v: "inteira", l: "Inteira" }, { v: "botoes", l: "Botões soltos" }]} /></Field></div>
+          <div className="hint">{conta.barra === "botoes" ? "Cada aba vira um botão quadrado separado, flutuando sobre a tela." : "Uma faixa só, de ponta a ponta, com as abas lado a lado."}</div>
           <h3 className="section-title">Fundo do app</h3>
           <FundoPicker fundo={conta.fundo} meus={act.meusFundos} onChange={act.setFundo} onAdd={act.addFundo} onUpdate={act.updFundo} onDelete={act.delFundo} />
           <Toggle on={conta.vidro !== false} onClick={() => act.setVidro(conta.vidro === false)}>Efeito de vidro</Toggle>
@@ -326,9 +331,12 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
         </div>}
 
         {aba === "pessoal" && <div className="stack">
-          <div className="note"><I.piggy /><span>O modo Pessoal guarda os gastos da casa, as contas fixas e o que sobra no mês, separado do consultório.</span></div>
-          <Toggle on={pessoal} onClick={() => setPessoal(!pessoal)}>Usar também o modo Pessoal</Toggle>
-          {pessoal && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
+          <div className="note"><I.piggy /><span>O consultório tem agenda, pacientes e cobranças. A vida pessoal tem gastos, contas, transporte e caixinhas. Use os dois ou só um.</span></div>
+          <Toggle on={consult} onClick={() => { if (consult && !pessoal) setPessoal(true); setConsult(!consult); }}>Usar o consultório</Toggle>
+          <Toggle on={pessoal || !consult} onClick={() => { if (!consult) return; setPessoal(!pessoal); }}>Usar a vida pessoal</Toggle>
+          {!consult && <div className="hint">Sem o consultório, o app abre direto nos seus gastos e some o seletor de modo. Seus pacientes ficam guardados se você voltar a usar.</div>}
+          {pessoal && consult && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
+          {(pessoal || !consult) && <EntradaMes renda={db.pessoal.renda} onChange={act.salvarRenda} />}
         </div>}
 
         {aba === "conquistas" && <ConquistasPagina lista={conq} />}
@@ -347,6 +355,28 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
 }
 
 // Conquistas: nível, trilhas e o progresso de cada uma
+// Entrada do mês (salário): valor, dia e se lança sozinho
+function EntradaMes({ renda, onChange }) {
+  const r0 = renda || {};
+  const [valor, setValor] = useState(r0.valor ? fmtNum(r0.valor) : "");
+  const [dia, setDia] = useState(String(r0.dia || 5));
+  const [auto, setAuto] = useState(r0.auto !== false);
+  const primeira = useRef(true);
+  useEffect(() => {
+    if (primeira.current) { primeira.current = false; return; }
+    const t = setTimeout(() => onChange(num(valor) > 0 ? { ...r0, valor: num(valor), dia: Math.min(31, Math.max(1, Number(dia) || 5)), auto, nome: r0.nome || "Salário", lancados: r0.lancados || {} } : null), 450);
+    return () => clearTimeout(t);
+  }, [valor, dia, auto]);
+  return <>
+    <h3 className="section-title">Entrada do mês</h3>
+    <div className="fields duas">
+      <Field label="Quanto entra (R$)" icon={<I.money />} htmlFor="p-renda"><input id="p-renda" inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="Salário, pensão…" /></Field>
+      <Field label="Dia que cai" htmlFor="p-rdia"><input id="p-rdia" inputMode="numeric" value={dia} onChange={e => setDia(e.target.value.replace(/D/g, "").slice(0, 2))} /></Field>
+    </div>
+    {num(valor) > 0 && <Toggle on={auto} onClick={() => setAuto(!auto)}>Lançar sozinho como entrada todo mês</Toggle>}
+  </>;
+}
+
 function ConquistasPagina({ lista }) {
   const feitas = lista.filter(c => c.feito).length, nv = nivelDe(feitas);
   const grupos = Object.keys(TRILHAS).map(t => [t, lista.filter(c => c.trilha === t)]).filter(([, l]) => l.length);

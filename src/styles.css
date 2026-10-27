@@ -1632,6 +1632,25 @@ button.catrow:active { background: var(--surface-2); }
 .nav { background: var(--nav-fundo); box-shadow: var(--nav-sombra); }
 .nv, .nav-mic { color: var(--nav-ic); }
 .nv.on, .nav-mic.on { color: var(--nav-ic-on); }
+
+/* ===== Barra de baixo "Botões soltos" (escolhida em Aparência) =====
+   Sem faixa: cada aba é um quadrado de cantos bem redondos, separado dos outros, flutuando sobre a tela. */
+@media (max-width: 899px) {
+  .shell.barra-botoes { --barra-h: 74px; --tile-fundo: rgba(46, 46, 50, .92); --tile-borda: rgba(255, 255, 255, .06); --tile-sombra: 0 8px 24px rgba(0, 0, 0, .4); }
+  :root[data-app-theme="light"] .shell.barra-botoes { --tile-fundo: rgba(255, 255, 255, .94); --tile-borda: rgba(18, 20, 40, .08); --tile-sombra: 0 8px 22px rgba(20, 24, 40, .16); }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-app-theme="dark"]) .shell.barra-botoes { --tile-fundo: rgba(255, 255, 255, .94); --tile-borda: rgba(18, 20, 40, .08); --tile-sombra: 0 8px 22px rgba(20, 24, 40, .16); }
+  }
+  .barra-botoes .nav { background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; pointer-events: none;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); }
+  .barra-botoes .nav-in { height: 64px; justify-content: center; align-items: center; gap: 10px; }
+  .barra-botoes :is(.nv, .nav-mic) { pointer-events: auto; flex: 0 1 64px; height: 64px; border-radius: 22px;
+    background: var(--tile-fundo); box-shadow: inset 0 0 0 1px var(--tile-borda), var(--tile-sombra);
+    -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
+  .barra-botoes.solido :is(.nv, .nav-mic) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .barra-botoes .nv svg { width: 30px; height: 30px; }
+  .barra-botoes .nav .badge { top: -14px; left: calc(100% - 4px); }
+}
 .topo-fixo::before { height: calc(env(safe-area-inset-top, 0px) + 76px); background: var(--topo-vidro); -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%); box-shadow: 0 1px 0 var(--topo-linha), var(--topo-sombra); }
 .act { background: var(--act-bg); color: var(--act-fg); box-shadow: inset 0 0 0 1px var(--act-borda); }
 /* texto que fica direto sobre a foto de fundo: legível em qualquer tema */
@@ -1871,11 +1890,6 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .transp-carrossel::-webkit-scrollbar { display: none; }
 .transp-slide { flex: 0 0 100%; scroll-snap-align: center; scroll-snap-stop: always; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 16px; min-width: 0; }
 .transp-slide h2 { margin: 0; text-align: center; }
-.transp-novo { width: 100%; height: 100%; min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: 28px; border: 2px dashed var(--line); background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--fg); padding: 20px; }
-.transp-novo-ic { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--mode); color: var(--mode-ink); box-shadow: 0 10px 24px color-mix(in srgb, var(--mode) 40%, transparent); }
-.transp-novo-ic svg { width: 28px; height: 28px; }
-.transp-novo b { font-size: 17px; }
-.transp-novo small { color: var(--muted); font-size: 13.5px; text-align: center; }
 .transp-pontos { display: flex; justify-content: center; align-items: center; gap: 7px; margin-top: 10px; }
 .transp-pontos button { width: 8px; height: 8px; padding: 0; border-radius: 99px; background: color-mix(in srgb, var(--fg) 25%, transparent); transition: width .25s, background .25s; }
 .transp-pontos button.on { width: 22px; background: var(--mode); }
@@ -1883,11 +1897,11 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .transp-pontos .mais svg { width: 16px; height: 16px; }
 /* imagens 3D que saem um pouco para fora do cartão */
 .transp-card.com-ilu { position: relative; margin-top: 28px; }
-.transp-card.com-ilu .transp-card-cab { padding-right: 112px; min-height: 30px; }
+.transp-card.com-ilu .transp-card-cab { padding-right: 92px; min-height: 30px; }
 .transp-sai { position: absolute; pointer-events: none; height: auto; filter: drop-shadow(0 12px 16px rgba(0, 0, 0, .3)); animation: sai-flutua 5s ease-in-out infinite; }
 .transp-sai.bomba { right: 6px; top: -46px; width: 150px; --rot: -8deg; }
-.transp-sai.ferramentas { right: 10px; top: -42px; width: 104px; --rot: 6deg; }
-.transp-sai.malas { right: 12px; top: -52px; width: 92px; --rot: -4deg; }
+.transp-sai.ferramentas { right: 12px; top: -34px; width: 80px; --rot: 6deg; }
+.transp-sai.malas { right: 14px; top: -40px; width: 70px; --rot: -4deg; }
 @keyframes sai-flutua { 0%, 100% { transform: rotate(var(--rot, 0deg)) translateY(0); } 50% { transform: rotate(var(--rot, 0deg)) translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .transp-sai { animation: none; } }
 /* de qual veículo é o gasto */
@@ -1901,3 +1915,44 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .pof .panel-head { padding-right: 96px; }
 .pof-ilu { position: absolute; right: 8px; top: -44px; width: 96px; height: auto; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, .28)); transform: rotate(6deg); }
 .transp-slide .transp-chips { flex-wrap: wrap; justify-content: center; max-width: 100%; }
+
+/* Adicionar veículo: minimalista */
+.transp-novo { width: 100%; height: 100%; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; border-radius: 26px; border: 1.5px dashed color-mix(in srgb, var(--fg) 18%, transparent); background: transparent; color: var(--muted); padding: 20px; transition: border-color .2s, color .2s; }
+.transp-novo:active { border-color: var(--mode); color: var(--fg); }
+.transp-novo-ic { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid currentColor; }
+.transp-novo-ic svg { width: 20px; height: 20px; }
+.transp-novo b { font-size: 15px; font-weight: 700; color: var(--fg); }
+
+/* Cadastro: como vai usar, contas fixas, locomoção */
+.ob-usos { display: grid; gap: 10px; }
+.ob-uso { position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 20px; background: var(--surface-2); border: 2px solid transparent; color: var(--fg); text-align: left; }
+.ob-uso.on { border-color: var(--accent); background: var(--accent-soft); }
+.ob-uso .ilustra { width: 54px; height: 54px; object-fit: contain; flex: none; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .2)); }
+.ob-uso span { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.ob-uso b { font-size: 16px; }
+.ob-uso small { font-size: 13px; color: var(--muted); line-height: 1.35; font-weight: 600; }
+.ob-uso i { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; flex: none; }
+.ob-uso i svg { width: 15px; height: 15px; }
+.ob-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ob-chip { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border-radius: 999px; background: var(--surface-2); border: 2px solid transparent; color: var(--fg); font-weight: 700; font-size: 14.5px; }
+.ob-chip.on { border-color: var(--accent); background: var(--accent-soft); }
+.ob-chip svg { width: 15px; height: 15px; color: var(--accent); }
+.ob-contas { display: grid; gap: 8px; }
+.ob-conta { display: grid; grid-template-columns: 1fr 112px 66px; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-radius: 16px; background: var(--surface-2); }
+.ob-conta b { font-size: 14.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-conta label { display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.ob-conta label span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.ob-conta input { width: 100%; min-width: 0; border: 0; background: none; color: var(--fg); font: inherit; font-weight: 700; font-size: 15px; padding: 0; outline: none; }
+.ob-toggle { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); color: var(--fg); font-weight: 700; font-size: 14.5px; text-align: left; }
+.ob-toggle .box { width: 24px; height: 24px; border-radius: 8px; border: 2px solid var(--line); display: grid; place-items: center; flex: none; }
+.ob-toggle.on .box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ob-toggle .box svg { width: 14px; height: 14px; }
+.ob-emoji { font-size: 22px; line-height: 1; margin-bottom: 2px; }
+.ob-carro { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-radius: 16px; background: var(--surface-2); }
+.ob-carro .ilustra { width: 90px; height: 56px; object-fit: contain; }
+.ob-carro small { color: var(--muted); font-weight: 700; }
+.ob-resumo { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: var(--accent-soft); font-size: 14px; line-height: 1.4; }
+.ob-resumo svg { width: 18px; height: 18px; color: var(--accent); flex: none; margin-top: 1px; }
+/* cadastro: opções não marcadas com borda leve (no tema claro o fundo é quase igual) */
+.ob .choice:not(.on), .ob-uso:not(.on), .ob-chip:not(.on) { border-color: var(--line); background: var(--surface); }
+.ob-carro, .ob-toggle { background: var(--surface); border: 1px solid var(--line); }

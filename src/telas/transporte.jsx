@@ -85,7 +85,6 @@ function Carrossel({ db, vs, v, onTrocar, act }) {
           <button className="transp-novo" onClick={() => act.abrirVeiculo("novo")}>
             <span className="transp-novo-ic"><I.plus /></span>
             <b>Adicionar veículo</b>
-            <small>Outro carro, moto, bike ou só apps e ônibus</small>
           </button>
         </div>
       </div>

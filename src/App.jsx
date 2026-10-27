@@ -70,7 +70,7 @@ const PROFISSOES = [
   { id: "Fisioterapia", termo: "Paciente" }, { id: "Coaching", termo: "Cliente" },
 ];
 const DURACOES = [30, 40, 45, 50, 60];
-const K = { contas: "agenda-contas", sessao: "agenda-sessao", tema: "agenda-tema", oculto: "agenda-oculto", db: e => `agenda-db:${e}`, modo: e => `agenda-modo:${e}`, avisos: e => `agenda-avisos:${e}` };
+const K = { contas: "agenda-contas", sessao: "agenda-sessao", tema: "agenda-tema", oculto: "agenda-oculto", db: e => `agenda-db:${e}`, modo: e => `agenda-modo:${e}`, avisos: e => `agenda-avisos:${e}`, inicial: e => `agenda-inicial:${e}` };
 
 /* =========================================================
    2. DATAS, HORAS E DINHEIRO
@@ -2018,7 +2018,7 @@ function HelloRow({ conta, act, tema, modo }) {
     <div className="hello">
       <div className="hello-l">
         <Avatar conta={conta} onClick={act.openSettings} />
-        {conta.perfil && conta.perfil.pessoal !== false && <ModeSwitch modo={modo} setModo={act.setModo} />}
+        {conta.perfil && conta.perfil.pessoal !== false && conta.perfil.consultorio !== false && <ModeSwitch modo={modo} setModo={act.setModo} />}
       </div>
       <div className="top-actions">
         <button className="icon-btn" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button>
@@ -3164,7 +3164,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const ouvindoAgora = fase === "ouvindo" && (est === "ouvindo" || est === "falando");
   const estadoBola = falandoResp ? "falando" : fase === "pensando" ? "pensando" : ouvindoAgora ? (est === "falando" ? "falando" : "ouvindo") : fase === "contando" ? "contando" : "";
   const subtitulo = falandoResp ? "falando…" : fase === "pensando" ? "pensando…" : ouvindoAgora ? (est === "falando" ? "ouvindo você…" : "pode falar") : est === "processando" ? "entendendo…" : fase === "contando" ? `anotando em ${conta}…` : "online";
-  const sugestoes = ["Quem eu atendo amanhã?", "Quem está me devendo?", "Quanto recebi este mês?", ...(usaPessoal ? ["Quanto gastei este mês?", "Quais contas vencem esta semana?"] : [])];
+  const sugestoes = [...(PERFIL.consultorio !== false ? ["Quem eu atendo amanhã?", "Quem está me devendo?", "Quanto recebi este mês?"] : []), ...(usaPessoal ? ["Quanto gastei este mês?", "Quais contas vencem esta semana?"] : [])];
   const cartao = (<>
       {itens.length > 0 && (
         <div className="vozb-card">
@@ -3612,7 +3612,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   TERMO = termoDe(perfil.termo || "Paciente");
   ESTILO = perfil.estilo || "detalhado";
   PERFIL = perfil;
-  const usaPessoal = perfil.pessoal !== false;
+  const usaConsultorio = perfil.consultorio !== false;
+  const usaPessoal = perfil.pessoal !== false || !usaConsultorio;
+  const doisModos = usaPessoal && usaConsultorio;
   const av = { ...AVISOS_PADRAO, ...(perfil.avisos || {}) };
   const [db, setDb] = useState(() => carregarDb(conta));
   const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem (demonstração)
@@ -3734,6 +3736,31 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     document.addEventListener("visibilitychange", vis);
     return () => { window.removeEventListener("cotacoes", recalc); document.removeEventListener("visibilitychange", vis); };
   }, [usaPessoal]);
+  // Respostas do cadastro (contas fixas, veículo, caixinha, entrada do mês): entram uma vez no db
+  useEffect(() => {
+    const ini = lerJSON(K.inicial(conta.email), null);
+    if (!ini) return;
+    localStorage.removeItem(K.inicial(conta.email));
+    setDb(d => {
+      const P = d.pessoal || pessoalVazio(), nomes = new Set(P.contas.map(c => c.nome.toLowerCase()));
+      const contas = [...P.contas, ...(ini.contas || []).filter(c => !nomes.has(c.nome.toLowerCase())).map(c => { const m = acharMarca(c.nome); return { ...c, marca: m ? m.id : null }; })];
+      const vs = Array.isArray(P.veiculos) ? P.veiculos : P.veiculo ? [{ id: "v1", ...P.veiculo }] : [];
+      const { veiculo, ...resto } = P;
+      return { ...d, pessoal: { ...resto, incluirConsultorio: ini.incluirConsultorio, contas,
+        veiculos: vs.length ? vs : ini.veiculos || [],
+        caixinhas: [...(P.caixinhas || []), ...(ini.caixinhas || []).filter(c => !(P.caixinhas || []).some(x => x.nome === c.nome))],
+        ...(ini.renda ? { renda: ini.renda } : {}) } };
+    });
+  }, []);
+  // Entrada do mês (salário): no dia combinado, vira um lançamento sozinho (uma vez por mês, mesmo que apaguem)
+  useEffect(() => {
+    const R = db.pessoal && db.pessoal.renda; if (!usaPessoal || !R || !R.auto || !(R.valor > 0)) return;
+    const hoje = todayISO(), ch = hoje.slice(0, 7), dia = Math.min(R.dia || 5, diasNoMes(ch));
+    if ((R.lancados || {})[ch] || Number(hoje.slice(8, 10)) < dia) return;
+    const l = { id: uid(), tipo: "entrada", cat: "trabalho", valor: R.valor, desc: R.nome || "Salário", data: `${ch}-${pad(dia)}`, rendaMes: ch };
+    setP(P => ({ ...P, lanc: [...P.lanc, l], renda: { ...P.renda, lancados: { ...(P.renda.lancados || {}), [ch]: true } } }));
+    notify(`${l.desc} de ${MES_LONGO[Number(ch.slice(5)) - 1]} lançado: ${brlReal(l.valor)}`);
+  }, [db.pessoal && db.pessoal.renda, now.getDate()]);
   // Depois que o app abriu, deixa as outras telas prontas em segundo plano (abrem na hora, sem esperar)
   useEffect(() => {
     const pre = () => ["perfil", "paineis", "recorte", "pessoal", "dinheiro"].forEach(n => {
@@ -4024,6 +4051,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     exportar: chave => exportarMes(db, chave, act),
     setFundo: f => onAtualizar({ fundo: f }),
     setVidro: v => onAtualizar({ vidro: v }),
+    setBarra: v => onAtualizar({ barra: v }),
     addFundo: async img => { const item = { id: uid(), dono: conta.email, img, criado: Date.now() }; await IDB.salvar(item); setMeusFundos(l => [...l, item]); onAtualizar({ fundo: { veu: (conta.fundo && conta.fundo.veu) || "medio", id: "u:" + item.id } }); notify("Fundo adicionado"); },
     updFundo: async (id, img) => { const velho = meusFundos.find(m => m.id === id); const item = { ...velho, img }; await IDB.salvar(item); setMeusFundos(l => l.map(m => m.id === id ? item : m)); notify("Fundo ajustado"); },
     delFundo: async id => { await IDB.apagar(id).catch(() => {}); setMeusFundos(l => l.filter(m => m.id !== id)); if (conta.fundo && conta.fundo.id === "u:" + id) onAtualizar({ fundo: null }); notify("Fundo excluído"); },
@@ -4040,8 +4068,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       setDb(d => d.settings.pix === pix ? d : { ...d, settings: { ...d.settings, pix } });
       onAtualizar(patch);
       if (patch.perfil && patch.perfil.pessoal === false && modo === "pessoal") { setModoSt("consultorio"); gravar(K.modo(conta.email), "consultorio"); setTab("home"); }
+      if (patch.perfil && patch.perfil.consultorio === false && modo !== "pessoal") { setModoSt("pessoal"); gravar(K.modo(conta.email), "pessoal"); setTab("p-home"); }
     },
-    modo: usaPessoal ? modo : "consultorio",
+    modo: !usaConsultorio ? "pessoal" : usaPessoal ? modo : "consultorio",
     salvarPaciente: p => {
       setDb(d => ({ ...d, patients: d.patients.some(x => x.id === p.id) ? d.patients.map(x => x.id === p.id ? p : x) : [...d.patients, p] }));
       vibrar("ok"); close(); notify(`${primeiro(p.name)} salvo · próxima ${dm(p.nextDate)} às ${p.time}`);
@@ -4094,6 +4123,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     },
     despagarConta: id => { const ch = chaveAtual(); setP(P => ({ ...P, contas: P.contas.map(x => { if (x.id !== id) return x; const pg = { ...(x.pagas || {}) }; delete pg[ch]; return { ...x, pagas: pg }; }) })); notify("Voltou para a pagar"); },
     toggleIncluir: () => setP(P => ({ ...P, incluirConsultorio: !P.incluirConsultorio })),
+    salvarRenda: renda => setP(P => { const n = { ...P }; if (renda) n.renda = renda; else delete n.renda; return n; }),
     // Teto do mês por categoria
     abrirTeto: cat => setSheet({ type: "teto", cat: typeof cat === "string" ? cat : null }),
     salvarTeto: (cat, valor) => {
@@ -4162,8 +4192,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const atrasados = db.patients.filter(p => p.active && p.nextDate && p.nextDate < t).length;
   const pendentes = db.charges.filter(c => !c.paid).length;
   const contasUrg = db.pessoal.contas.filter(c => { const s = situacaoConta(c, ch).st; return s === "atrasada" || s === "hoje"; }).length;
-  const modoEf = usaPessoal ? modo : "consultorio";
-  const tabEf = !usaPessoal && tab.startsWith("p-") ? "home" : tab;
+  const modoEf = !usaConsultorio ? "pessoal" : usaPessoal ? modo : "consultorio";
+  const tabEf = !usaPessoal && tab.startsWith("p-") ? "home" : !usaConsultorio && !tab.startsWith("p-") ? "p-home" : tab;
   const abas = modoEf === "pessoal"
     ? [{ id: "p-home", l: "Início", ic: <I.home />, on: <I.homeOn />, n: 0 }, { id: "p-gastos", l: "Gastos", ic: <I.chart />, on: <I.chartOn />, n: 0 }, { id: "p-contas", l: "Contas", ic: <I.bill />, on: <I.billOn />, n: contasUrg }, { id: "p-transp", l: "Transporte", ic: <I.car />, on: <I.carOn />, n: 0 }]
     : [{ id: "home", l: "Início", ic: <I.home />, on: <I.homeOn />, n: atrasados }, { id: "agenda", l: "Agenda", ic: <I.cal />, on: <I.calOn />, n: 0 }, { id: "pac", l: TERMO.P, ic: <I.users />, on: <I.usersOn />, n: 0 }, { id: "fin", l: "Finanças", ic: <I.wallet />, on: <I.walletOn />, n: pendentes }];
@@ -4202,11 +4232,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   if (!saindo) paineisCong.current = paineis;
 
   return (
-    <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " com-foto" + (conta.vidro !== false ? " glass" : "") : "") + (conta.vidro === false ? " solido" : "")} data-mode={modoEf}>
+    <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " com-foto" + (conta.vidro !== false ? " glass" : "") : "") + (conta.vidro === false ? " solido" : "") + (conta.barra === "botoes" ? " barra-botoes" : "")} data-mode={modoEf}>
       {conta.fundo && imagemFundo(conta.fundo, meusFundos) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo, meusFundos)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
       <aside className="side" aria-label="Menu">
         <div className="side-brand"><i><Marca /></i>Alvena</div>
-        {usaPessoal && <ModeSwitch modo={modo} setModo={act.setModo} block />}
+        {doisModos && <ModeSwitch modo={modo} setModo={act.setModo} block />}
         <nav className="side-nav">
           {abas.map(a => (
             <button key={a.id} className={"si" + (tabEf === a.id ? " on" : "")} onClick={() => act.setTab(a.id)} aria-current={tabEf === a.id ? "page" : undefined}>
@@ -4260,7 +4290,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
           <Avatar conta={conta} onClick={act.openSettings} label="Sua conta" />
           <button className="topo-fixo-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{tabEf === "home" || tabEf === "p-home" ? primeiro(conta.nome) : (abas.find(a => a.id === tabEf) || {}).l}</button>
           <button className="icon-btn redondo" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>
-          {usaPessoal
+          {doisModos
             ? <button className="topo-fixo-pill" onClick={() => act.setModo(modoEf === "pessoal" ? "consultorio" : "pessoal")} aria-label="Trocar de modo">{modoEf === "pessoal" ? "Pessoal" : "Consultório"}<I.repeat /></button>
             : <button className="icon-btn redondo" onClick={act.trocarTema} aria-label="Trocar tema">{tema.escuro ? <I.sun /> : <I.moon />}</button>}
         </div>
@@ -4381,7 +4411,7 @@ function App() {
     if (!(sessao && sessao.conta)) entrar(await contaDaNuvem(user, lerJSON(K.contas, {})[user.email]), false);
   }} />;
   if (!sessao || sessao.legado) return <Auth onLogin={entrar} emailInicial={sessao && sessao.legado} aviso={sessao && sessao.legado ? "Agora seus dados ficam guardados na nuvem. Entre com a sua senha de sempre e eu levo tudo para lá." : null} />;
-  if (!sessao.conta.perfil || sessao.conta.perfil.refazer) return <Suspense fallback={null}><Onboarding conta={sessao.conta} onSair={sair} onDone={d => { atualizar(d, { pronto: true }); window.scrollTo(0, 0); }} /></Suspense>;
+  if (!sessao.conta.perfil || sessao.conta.perfil.refazer) return <Suspense fallback={null}><Onboarding conta={sessao.conta} onSair={sair} onDone={({ inicial, ...d }) => { const e = sessao.conta.email; if (inicial) gravar(K.inicial(e), inicial); gravar(K.modo(e), d.perfil.consultorio === false ? "pessoal" : "consultorio"); atualizar(d, { pronto: true }); window.scrollTo(0, 0); }} /></Suspense>;
   return <Painel key={sessao.conta.email} conta={sessao.conta} novo={sessao.novo} pronto={sessao.pronto} tema={tema} onSair={sair} onAtualizar={atualizar} onPerfilNuvem={perfilNuvem} />;
 }
 
