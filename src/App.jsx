@@ -161,7 +161,7 @@ const comTransicao = (fn, tipo = "frente") => {
   } catch (e) {}
   fn();
 };
-const ORDEM_ABAS = ["home", "agenda", "pac", "fin", "p-home", "p-gastos", "p-contas", "p-transp"];
+const ORDEM_ABAS = ["home", "agenda", "pac", "fin", "p-home", "p-gastos", "p-contas", "p-transp", "p-casa"];
 const brlReal = v => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brl = v => ESCONDER ? "R$ •••" : brlReal(v);
 const num = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
@@ -1828,9 +1828,10 @@ function ConfirmButton({ label, onConfirm, icon, titulo, texto, acao }) {
   );
 }
 
-function TopBar({ eyebrow, title, act, tema, extra }) {
+function TopBar({ eyebrow, title, act, tema, extra, voltar }) {
   return (
-    <header className="top">
+    <header className={"top" + (voltar ? " com-voltar" : "")}>
+      {voltar && <button className="icon-btn top-voltar" onClick={voltar} aria-label="Voltar"><I.chevL /></button>}
       <div style={{ minWidth: 0 }}><div className="eyebrow">{eyebrow}</div><h1>{title}</h1></div>
       <div className="top-actions">
         {extra}
@@ -3292,7 +3293,9 @@ const TransporteTab = lazy(() => import("./telas/transporte.jsx").then(m => ({ d
 const GastoTransporteSheet = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.GastoTransporteSheet })));
 const VeiculoSheet = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.VeiculoSheet })));
 // Dinheiro a dois (casa compartilhada)
-const CasaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.CasaSheet })));
+const CasaPagina = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.CasaPagina })));
+const GastoCasaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.GastoCasaSheet })));
+const TrazerGastosSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.TrazerGastosSheet })));
 const ConviteCasaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ default: m.ConviteCasaSheet })));
 // Recibo em PDF, relatório do imposto e anotações trancadas (carregam só quando abrem)
 const ReciboSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.ReciboSheet })));
@@ -3943,7 +3946,22 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     // Transporte é uma aba do modo Pessoal; os painéis dela abrem como os outros
     abrirTransporte: () => { if (sheet) close(); if (modo !== "pessoal") { setModoSt("pessoal"); gravar(K.modo(conta.email), "pessoal"); } setTab("p-transp"); rolarTopo(); },
     abrirGastoTransp: ({ sub, inicial, manut, veiculoId } = {}) => setSheet({ type: "transp-gasto", sub, inicial, manut, veiculoId, n: Date.now() }),
-    abrirCasa: () => setSheet({ type: "casa" }),
+    abrirCasa: () => { if (sheet) close(); if (modo !== "pessoal") { setModoSt("pessoal"); gravar(K.modo(conta.email), "pessoal"); } setTab("p-casa"); rolarTopo(); },
+    abrirGastoCasa: inicial => setSheet({ type: "casa-gasto", inicial: inicial || null, n: Date.now() }),
+    trazerParaCasa: ids => setSheet({ type: "casa-trazer", ids: ids || [], n: Date.now() }),
+    // gastos pessoais que a pessoa escolheu levar para a casa (dividindo entre todos ou só mostrando)
+    compartilharComCasa: async (ids, dividir = true) => {
+      if (!casa.casa) return;
+      const ls = db.pessoal.lanc.filter(l => ids.includes(l.id) && !l.casaId && l.tipo === "saida");
+      const marcas = {};
+      for (const l of ls) {
+        const it = await casa.salvar("lanc", { id: uid(), valor: l.valor, desc: l.desc, cat: l.cat, data: l.data, pagou: casa.eu, participantes: dividir ? casa.membros.map(m => m.id) : [casa.eu], origem: l.id, criado: Date.now() });
+        marcas[l.id] = it.id;
+      }
+      setP(P => ({ ...P, lanc: P.lanc.map(l => marcas[l.id] ? { ...l, casaId: marcas[l.id] } : l) }));
+      vibrar("ok"); notify(ls.length === 1 ? "Gasto levado para a casa" : `${ls.length} gastos levados para a casa`);
+    },
+    desligarDaCasa: casaItemId => setP(P => ({ ...P, lanc: P.lanc.map(l => l.casaId === casaItemId ? (({ casaId, ...r }) => r)(l) : l) })),
     casa,
     abrirVeiculo: id => setSheet({ type: "veiculo", id: typeof id === "string" ? id : null }),
     atualizarVeiculo: (id, patch) => setP(P => { const { veiculo, ...resto } = P; return { ...resto, veiculos: veiculosDe({ pessoal: P }).map(x => x.id === id ? { ...x, ...patch } : x) }; }),
@@ -4096,7 +4114,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     editLanc: id => setSheet({ type: "lanc", id }),
     salvarLanc: l00 => {
       const { dividirCasa, ...l0 } = l00;
-      if (dividirCasa && casa.casa) casa.salvar("lanc", { valor: l0.valor, desc: l0.desc, cat: l0.cat, data: l0.data, pagou: casa.eu, participantes: casa.membros.map(m => m.id), criado: Date.now() });
+      if (dividirCasa && casa.casa && !l0.casaId) { const cid = uid(); l0.casaId = cid; casa.salvar("lanc", { id: cid, valor: l0.valor, desc: l0.desc, cat: l0.cat, data: l0.data, pagou: casa.eu, participantes: casa.membros.map(m => m.id), origem: l0.id, criado: Date.now() }); }
       const mm = acharMarca(l0.desc || ""); const l = { ...l0, marca: l0.marca !== undefined ? l0.marca : mm ? mm.id : null };
       const novoL = !db.pessoal.lanc.some(x => x.id === l.id);
       setP(P => separarAuto({ ...P, lanc: novoL ? [...P.lanc, l] : P.lanc.map(x => x.id === l.id ? l : x) }, novoL && l.tipo === "entrada" ? l : null));
@@ -4235,8 +4253,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "recibo" && <Suspense fallback={null}><ReciboSheet key={sheet.pid + (sheet.cid || "")} db={db} conta={conta} pid={sheet.pid} cid={sheet.cid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "imposto" && <Suspense fallback={null}><ImpostoSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "notas" && <Suspense fallback={null}><NotasSheet key={sheet.pid + (sheet.sid || "")} db={db} pid={sheet.pid} sid={sheet.sid} onClose={close} act={act} /></Suspense>}
-      {sheet && sheet.type === "casa" && <Suspense fallback={null}><CasaSheet casa={casa} conta={conta} onClose={close} act={act} /></Suspense>}
-      {sheet && sheet.type === "convite-casa" && <Suspense fallback={null}><ConviteCasaSheet casa={casa} token={sheet.token} onClose={close} onEntrou={() => { notify("Você entrou na casa!"); setSheet({ type: "casa" }); }} /></Suspense>}
+      {sheet && sheet.type === "casa-gasto" && <Suspense fallback={null}><GastoCasaSheet key={sheet.n} casa={casa} inicial={sheet.inicial} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "casa-trazer" && <Suspense fallback={null}><TrazerGastosSheet key={sheet.n} casa={casa} db={db} ids0={sheet.ids} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "convite-casa" && <Suspense fallback={null}><ConviteCasaSheet casa={casa} token={sheet.token} onClose={close} onEntrou={() => { notify("Você entrou na casa!"); act.abrirCasa(); }} /></Suspense>}
       {sheet && sheet.type === "veiculo" && <Suspense fallback={null}><VeiculoSheet key={sheet.id || "novo"} veiculo={sheet.id && sheet.id !== "novo" ? veiculosDe(db).find(x => x.id === sheet.id) || null : sheet.id === "novo" ? null : veiculosDe(db)[0] || null} db={db} onSave={act.salvarVeiculo} onDelete={act.removerVeiculo} onClose={close} /></Suspense>}
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
@@ -4301,13 +4320,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         {tabEf === "p-home" && <Suspense fallback={null}><PessoalHome db={db} conta={conta} now={now} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-gastos" && <Suspense fallback={null}><GastosTab db={db} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-contas" && <Suspense fallback={null}><ContasTab db={db} act={act} tema={tema} /></Suspense>}
+        {tabEf === "p-casa" && <Suspense fallback={null}><CasaPagina casa={casa} conta={conta} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-transp" && <Suspense fallback={null}><TransporteTab db={db} act={act} tema={tema} perfil={perfil} atual={veicAtual} onTrocar={setVeicAtual} /></Suspense>}
       </main>
 
       <div className={"topo-fixo" + (rolou && !sheet ? " on" : "")} aria-hidden={!(rolou && !sheet)} inert={rolou && !sheet ? undefined : ""}>
         <div className="topo-fixo-in">
           <Avatar conta={conta} onClick={act.openSettings} label="Sua conta" />
-          <button className="topo-fixo-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{tabEf === "home" || tabEf === "p-home" ? primeiro(conta.nome) : (abas.find(a => a.id === tabEf) || {}).l}</button>
+          <button className="topo-fixo-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{tabEf === "home" || tabEf === "p-home" ? primeiro(conta.nome) : (abas.find(a => a.id === tabEf) || {}).l || (tabEf === "p-casa" ? ((casa.casa && casa.casa.nome) || "Nossa casa") : "")}</button>
           <button className="icon-btn redondo" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>
           {doisModos
             ? <button className="topo-fixo-pill" onClick={() => act.setModo(modoEf === "pessoal" ? "consultorio" : "pessoal")} aria-label="Trocar de modo">{modoEf === "pessoal" ? "Pessoal" : "Consultório"}<I.repeat /></button>

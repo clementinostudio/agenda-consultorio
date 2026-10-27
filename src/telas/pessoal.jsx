@@ -424,6 +424,7 @@ function GastosTab({ db, act, tema }) {
       {sel && (
         <div className="sel-barra" role="toolbar" aria-label="Ações da seleção">
           <span>{sel.size ? `${sel.size} ${sel.size === 1 ? "lançamento" : "lançamentos"} · ${brl(soma(lista.filter(l => sel.has(l.id)), l => l.valor))}` : "Nada selecionado"}</span>
+          {act.casa && act.casa.casa && <button className="sel-casa" disabled={!sel.size} onClick={() => { act.trazerParaCasa([...sel]); setSel(null); }}><I.users /> Casa</button>}
           <button className="sel-apagar" disabled={!sel.size} onClick={() => setConfirmar(true)}><I.trash /> Apagar</button>
         </div>
       )}
@@ -569,7 +570,8 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onVoz, onFoto, onS
         <SugestoesMarca texto={desc} escolha={escolha} onFoto={onLogo} onEscolha={e => { setEscolha(e); if (e.nome) setDesc(e.nome); if (e.cat && tipo === "saida" && CATEGORIAS.some(c => c.id === e.cat)) setCat(e.cat); }} />
         <Field label="Quando" htmlFor="l-data"><input id="l-data" type="date" value={data} onChange={e => e.target.value && setData(e.target.value)} /></Field>
       </div>
-      {casa && !inicial && tipo === "saida" && <Toggle on={dividir} onClick={() => setDividir(!dividir)}>Dividir com a casa ({casa.membros.length} pessoas{v > 0 ? `, ${brl(v / casa.membros.length)} cada` : ""})</Toggle>}
+      {casa && inicial && inicial.casaId && <div className="hint">Este gasto também está na casa.</div>}
+      {casa && !(inicial && inicial.casaId) && tipo === "saida" && <Toggle on={dividir} onClick={() => setDividir(!dividir)}>Dividir com a casa ({casa.membros.length} pessoas{v > 0 ? `, ${brl(v / casa.membros.length)} cada` : ""})</Toggle>}
       {!ok && <div className="hint">{!(v > 0) ? "Digite o valor e escolha uma categoria." : "Escolha uma categoria."}</div>}
       <button className="btn mode" disabled={!ok} onClick={() => onSave({ ...(dividir && casa && tipo === "saida" ? { dividirCasa: true } : {}), ...extrasDe(inicial), id: inicial ? inicial.id : uid(), tipo, valor: emR, cat, desc: desc.trim(), data, ...camposLogo(desc, escolha), ...(fora ? { moeda, valorOrig: v, cotacao: cotUsada, iof: iofOn } : {}) })}><I.check /> {inicial ? "Salvar" : tipo === "entrada" ? "Anotar entrada" : "Anotar gasto"}</button>
       {inicial && <ConfirmButton label="Apagar lançamento" titulo="Apagar este lançamento?" texto="Ele sai do seu extrato e dos totais do mês." acao="Apagar" onConfirm={() => onDelete(inicial.id)} />}
