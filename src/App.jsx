@@ -1303,6 +1303,12 @@ function gerarAvisos(db, av, usaPessoal) {
       add(quando(iso, "09:00"), `${c.nome} vence hoje`, `${brlReal(c.valor)} · já pagou? Marque no app.`, `c-${c.id}`);
     }
   });
+  if (usaPessoal) { const vc = db.pessoal && db.pessoal.veiculo, docs = (vc && vc.docs) || {}; [["ipva", "IPVA"], ["licenc", "Licenciamento"], ["seguro", "Seguro do carro"]].forEach(([k, n]) => {
+    const d = docs[k]; if (!d || !d.data) return;
+    const val = d.valor ? ` · ${brlReal(d.valor)}` : "";
+    add(quando(addDays(d.data, -7), "09:00"), `${n} vence em uma semana`, `Dia ${dm(d.data)}${val}. Toque para ver no Transporte.`, `v-${k}`);
+    add(quando(d.data, "09:00"), `${n} vence hoje`, `Já pagou? Marque em Transporte${val}.`, `v-${k}`);
+  }); }
   // Resumo da semana: domingo às 20h. Os números vão até a última vez que o app mandou a lista
   // (e ele manda de novo a cada mudança), então chega com a semana inteira.
   if (av.semana !== false) {
@@ -1375,11 +1381,15 @@ function exemplo() {
 function exemploPessoal() {
   const t = todayISO(), chave = t.slice(0, 7);
   const diaDe = off => fromISO(addDays(t, off)).getDate();
-  const pago = dia => { const v = `${chave}-${pad(Math.min(dia, diasNoMes(chave)))}`; return { [chave]: v < t ? v : t }; };
+  const pago = dia => { const v = `${chave}-${pad(Math.min(dia, diasNoMes(chave)))}`; return { [ant]: `${ant}-${pad(Math.min(dia, diasNoMes(ant)))}`, [chave]: v < t ? v : t }; };
   const l = (tipo, valor, cat, desc, off) => ({ id: uid(), tipo, valor, cat, desc, data: addDays(t, off) });
+  // um pouco do mês passado, para a comparação de "para onde foi o dinheiro"
+  const pm = new Date(Number(chave.slice(0, 4)), Number(chave.slice(5)) - 2, 1), ant = `${pm.getFullYear()}-${pad(pm.getMonth() + 1)}`;
+  const la = (valor, cat, desc, dia) => ({ id: uid(), tipo: "saida", valor, cat, desc, data: `${ant}-${pad(Math.min(dia, Math.max(1, Number(t.slice(8, 10)))))}` });
   return {
     incluirConsultorio: true,
     lanc: [
+      la(380.2, "mercado", "Compras do mês", 3), la(48, "comida", "Lanche", 5), la(186, "lazer", "Show", 6), la(64.9, "saude", "Farmácia", 2), la(15, "transporte", "Ônibus", 4),
       l("saida", 312.4, "mercado", "Compra da semana", -2),
       l("saida", 68, "comida", "Almoço com amigas", -1),
       l("saida", 22.5, "transporte", "Uber", 0),
@@ -2310,6 +2320,7 @@ function SessionSheet({ db, item, onClose, act }) {
           {charge && <div className="rc-row"><span className="l">Pagamento</span><span className="v">{charge.paid ? <span className="chip mint">Pago em {dm(charge.paidAt)}</span> : <span className="chip amber">Em aberto</span>}</span></div>}
         </div>
         {s.status === "done" && PERFIL.registro !== false && <Toggle on={!!s.registro} onClick={() => act.toggleRegistro(s.id)}>Registro da sessão feito</Toggle>}
+        {s.status === "done" && <button className="btn ghost" onClick={() => act.abrirNotas(s.patientId, s.id)}><I.key /> {(db.notas || []).some(n => n.sid === s.id) ? "Ver a anotação da sessão" : "Anotar sobre a sessão"}</button>}
         {charge && <button className="btn ghost" onClick={() => act.openCharge(charge.id)}><I.receipt /> Ver cobrança</button>}
         {ultima && <ConfirmButton icon={<I.undo />} label="Desfazer registro" titulo="Desfazer este registro?" texto="A sessão volta a ficar como antes de você marcar, e o que foi lançado junto com ela sai." acao="Desfazer" onConfirm={() => act.desfazer(s.id)} />}
         <button className="btn text" onClick={onClose}>Fechar</button>
@@ -2448,6 +2459,7 @@ function PatientSheet({ db, pid, onClose, act }) {
   const feitas = hist.filter(s => s.status === "done");
   const ab = sessoesAbertas(db, pid).length;
   const recebido = soma(db.charges.filter(c => c.patientId === pid && c.paid), c => c.amount);
+  const nNotas = (db.notas || []).filter(n => n.pid === pid).length;
   return (
     <Sheet title={p.name} sub={`${freqNome(p.freq)} · ${DIA_LONGO[fromISO(p.nextDate).getDay()]} às ${p.time}`} onClose={onClose}>
       <div className="kv">
@@ -2462,6 +2474,10 @@ function PatientSheet({ db, pid, onClose, act }) {
       {(p.reajusteEm || p.desde) && diffDias(p.reajusteEm || p.desde, todayISO()) >= 365 && !(p.reajusteAdiado && p.reajusteAdiado > todayISO()) && (
         <div className="note amber"><I.money /><span>Há {Math.floor(diffDias(p.reajusteEm || p.desde, todayISO()) / 30)} meses com o mesmo valor. Quando reajustar, é só editar o cadastro.<br /><button className="bub-act" style={{ marginTop: 8 }} onClick={() => act.adiarReajuste(p.id)}>Lembrar em 6 meses</button></span></div>
       )}
+      <div className="pac-acoes">
+        <button className="pac-acao" onClick={() => act.abrirNotas(p.id)}><Ilustra n="cadeados" /><span><b>Anotações</b><small>{nNotas ? `${nNotas} ${nNotas === 1 ? "anotação" : "anotações"} · trancadas` : "Só você lê"}</small></span></button>
+        <button className="pac-acao" onClick={() => act.abrirRecibo(p.id)}><Ilustra n="arquivo" /><span><b>Recibo</b><small>{recebido > 0 ? "PDF para o reembolso" : "Depois do 1º pagamento"}</small></span></button>
+      </div>
       <button className="btn" onClick={() => act.editPatient(p.id)}>Editar cadastro</button>
       <div className="panel">
         <div className="panel-head"><h3>Histórico</h3></div>
@@ -2479,6 +2495,7 @@ function PatientSheet({ db, pid, onClose, act }) {
   );
 }
 
+const mascaraCPF = s => String(s || "").replace(/\D/g, "").slice(0, 11).replace(/^(\d{3})(\d)/, "$1.$2").replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d{1,2})$/, ".$1-$2");
 function PatientForm({ initial, total = 0, perfil, pre, onSave, onClose }) {
   const pf = perfil || {};
   const [f, setF] = useState(() => initial
@@ -2493,7 +2510,8 @@ function PatientForm({ initial, total = 0, perfil, pre, onSave, onClose }) {
     if (!f.name.trim()) return setErro(`Escreva o nome do ${TERMO.s}.`);
     if (!(price > 0)) return setErro("Falta o valor da sessão.");
     if (liq < 0) return setErro("A sublocação ficou maior que o valor da sessão.");
-    onSave({ ...f, id: f.id || uid(), name: f.name.trim(), price, sublet: sub, packageSize: Number(f.packageSize) || 4, active: true, desde: f.desde || todayISO(), reajusteEm: initial && price !== initial.price ? todayISO() : f.reajusteEm });
+    const { outroPaga, ...semAux } = f;
+    onSave({ ...semAux, pagadorNome: (f.pagadorNome || "").trim(), id: f.id || uid(), name: f.name.trim(), price, sublet: sub, packageSize: Number(f.packageSize) || 4, active: true, desde: f.desde || todayISO(), reajusteEm: initial && price !== initial.price ? todayISO() : f.reajusteEm });
   };
   return (
     <Sheet title={initial ? `Editar ${TERMO.s}` : `Novo ${TERMO.s}`} sub="Preencha uma vez. Datas e contas ficam comigo." onClose={onClose}>
@@ -2501,6 +2519,7 @@ function PatientForm({ initial, total = 0, perfil, pre, onSave, onClose }) {
         <div className="fields">
           <Field label="Nome" icon={<I.user />} htmlFor="f-nome"><input id="f-nome" value={f.name} onChange={e => up("name", e.target.value)} placeholder={`Nome do ${TERMO.s}`} autoComplete="off" /></Field>
           <Field label="WhatsApp (opcional)" icon={<I.phone />} htmlFor="f-tel"><input id="f-tel" inputMode="tel" value={f.phone} onChange={e => up("phone", e.target.value)} placeholder="43 99999-0000" /></Field>
+          <Field label="CPF (opcional, para recibo e imposto)" htmlFor="f-cpf"><input id="f-cpf" inputMode="numeric" value={mascaraCPF(f.cpf)} onChange={e => up("cpf", e.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></Field>
           <Field label={`Cor na agenda · ${corDe(f).nome}`}>
             <div className="swatches" role="radiogroup" aria-label="Cor na agenda">
               {CORES.map(c => (
@@ -2539,6 +2558,11 @@ function PatientForm({ initial, total = 0, perfil, pre, onSave, onClose }) {
             </Field>
           )}
         </div>
+        <Toggle on={!!f.pagadorNome || !!f.outroPaga} onClick={() => setF(x => x.pagadorNome || x.outroPaga ? { ...x, outroPaga: false, pagadorNome: "", pagadorCpf: "" } : { ...x, outroPaga: true })}>Quem paga é outra pessoa (pai, mãe, responsável)</Toggle>
+        {(!!f.pagadorNome || !!f.outroPaga) && <div className="fields">
+          <Field label="Nome de quem paga" htmlFor="f-pn"><input id="f-pn" value={f.pagadorNome || ""} onChange={e => up("pagadorNome", e.target.value)} placeholder="Nome completo" /></Field>
+          <Field label="CPF de quem paga" htmlFor="f-pc"><input id="f-pc" inputMode="numeric" value={mascaraCPF(f.pagadorCpf)} onChange={e => up("pagadorCpf", e.target.value.replace(/\D/g, "").slice(0, 11))} placeholder="000.000.000-00" /></Field>
+        </div>}
         {erro && <div className="error" role="alert">{erro}</div>}
         <button className="btn" type="submit">{initial ? "Salvar alterações" : `Cadastrar ${TERMO.s}`}</button>
       </form>
@@ -2721,6 +2745,7 @@ function ChargeSheet({ db, cid, fresh, nomeProf, onClose, act }) {
         <a className="btn ghost" href={wa} target="_blank" rel="noopener noreferrer"><I.send /> WhatsApp</a>
       </div>
       <Toggle on={c.paid} onClick={() => act.setPago(c.id, !c.paid)}>{c.paid ? `Pago em ${dm(c.paidAt)}` : "Já pagou? Marque aqui"}</Toggle>
+      {c.paid && p && <button className="btn ghost" onClick={() => act.abrirRecibo(p.id, c.id)}><I.receipt /> {c.reciboEm ? "Recibo de novo" : "Fazer recibo em PDF"}</button>}
     </Sheet>
   );
 }
@@ -3259,6 +3284,10 @@ const TetoSheet = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default:
 const TransporteTab = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.TransporteTab })));
 const GastoTransporteSheet = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.GastoTransporteSheet })));
 const VeiculoSheet = lazy(() => import("./telas/transporte.jsx").then(m => ({ default: m.VeiculoSheet })));
+// Recibo em PDF, relatório do imposto e anotações trancadas (carregam só quando abrem)
+const ReciboSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.ReciboSheet })));
+const ImpostoSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.ImpostoSheet })));
+const NotasSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.NotasSheet })));
 const BoletoSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.BoletoSheet })));
 const ImportarSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.ImportarSheet })));
 const ParceladoSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ParceladoSheet })));
@@ -3872,8 +3901,23 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     abrirClima: () => setSheet({ type: "clima" }),
     // Transporte é uma aba do modo Pessoal; os painéis dela abrem como os outros
     abrirTransporte: () => { if (sheet) close(); if (modo !== "pessoal") { setModoSt("pessoal"); gravar(K.modo(conta.email), "pessoal"); } setTab("p-transp"); rolarTopo(); },
-    abrirGastoTransp: ({ sub, inicial } = {}) => setSheet({ type: "transp-gasto", sub, inicial, n: Date.now() }),
+    abrirGastoTransp: ({ sub, inicial, manut } = {}) => setSheet({ type: "transp-gasto", sub, inicial, manut, n: Date.now() }),
     abrirVeiculo: () => setSheet({ type: "veiculo" }),
+    atualizarVeiculo: patch => setP(P => ({ ...P, veiculo: { ...(P.veiculo || {}), ...patch } })),
+    // Consultório: recibo, imposto e anotações
+    abrirRecibo: (pid, cid) => setSheet({ type: "recibo", pid, cid }),
+    abrirImposto: () => setSheet({ type: "imposto" }),
+    abrirNotas: (pid, sid) => setSheet({ type: "notas", pid, sid }),
+    atualizarPaciente: (pid, campos) => setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, ...campos } : p) })),
+    salvarDocProf: doc => onAtualizar({ perfil: { ...(conta.perfil || {}), doc } }),
+    marcarRecibo: ids => { const s = new Set(ids), h = todayISO(); setDb(d => ({ ...d, charges: d.charges.map(c => s.has(c.id) ? { ...c, reciboEm: h } : c) })); },
+    marcarReceitaSaude: cid => { vibrar("toque"); setDb(d => ({ ...d, charges: d.charges.map(c => c.id === cid ? { ...c, rsaude: !c.rsaude } : c) })); },
+    salvarCofre: cofre => setDb(d => ({ ...d, cofre })),
+    trocarCofre: (cofre, notas) => { setDb(d => { const n = { ...d, notas }; if (cofre) n.cofre = cofre; else delete n.cofre; return n; }); notify(cofre ? "Senha trocada" : "Anotações apagadas. Crie uma senha nova."); },
+    // anotar uma sessão também conta como "registro feito"
+    salvarNota: n => setDb(d => ({ ...d, notas: (d.notas || []).some(x => x.id === n.id) ? d.notas.map(x => x.id === n.id ? n : x) : [...(d.notas || []), n],
+      sessions: n.sid ? d.sessions.map(s => s.id === n.sid ? { ...s, registro: true } : s) : d.sessions })),
+    apagarNota: id => { setDb(d => ({ ...d, notas: (d.notas || []).filter(x => x.id !== id) })); notify("Anotação apagada"); },
     salvarVeiculo: v => { setP(P => ({ ...P, veiculo: v })); close(); vibrar("ok"); notify(v.tipo === "nenhum" ? "Pronto: sem veículo, foco nos apps e no transporte público" : `${v.nome || "Veículo"} salvo`); },
     abrirChat: () => { if (sheet) close(); vozApi.current.chat && vozApi.current.chat(); },
     recarregarClima: () => carregarClima(true),
@@ -4129,7 +4173,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
       {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
-      {sheet && sheet.type === "transp-gasto" && <Suspense fallback={null}><GastoTransporteSheet key={sheet.n} sub0={sheet.sub} inicial={sheet.inicial} veiculo={db.pessoal.veiculo || null} precos={precosGuardados()} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "transp-gasto" && <Suspense fallback={null}><GastoTransporteSheet key={sheet.n} sub0={sheet.sub} manut0={sheet.manut} inicial={sheet.inicial} veiculo={db.pessoal.veiculo || null} precos={precosGuardados()} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "recibo" && <Suspense fallback={null}><ReciboSheet key={sheet.pid + (sheet.cid || "")} db={db} conta={conta} pid={sheet.pid} cid={sheet.cid} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "imposto" && <Suspense fallback={null}><ImpostoSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "notas" && <Suspense fallback={null}><NotasSheet key={sheet.pid + (sheet.sid || "")} db={db} pid={sheet.pid} sid={sheet.sid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "veiculo" && <Suspense fallback={null}><VeiculoSheet veiculo={db.pessoal.veiculo || null} db={db} onSave={act.salvarVeiculo} onClose={close} /></Suspense>}
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}

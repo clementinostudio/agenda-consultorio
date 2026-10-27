@@ -1,7 +1,7 @@
 // Parte do app carregada sob demanda: aba "Transporte" do modo Pessoal (também abre ao tocar em Transporte, em Gastos).
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar } from "../App.jsx";
-import { SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
+import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar, ProximaConquista } from "../App.jsx";
+import { SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
 
 /* ---------- ícones ---------- */
 const Svg = ({ children }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
@@ -78,6 +78,24 @@ export function TransporteTab({ db, act, tema, perfil }) {
   const lista = g.itens.filter(i => !filtro || i.sub === filtro);
   const delta = ant.total > 0 ? (g.total - ant.total) / ant.total : null;
   const nome = (v && v.nome) || (v && v.fipe && v.fipe.modelo) || (v && v.tipo === "nenhum" ? "Apps e transporte público" : "Seu veículo");
+  const rodizio = proximoRodizio(db, v, hoje);
+  const docs = docsVeiculo(v, hoje);
+  const custo = useMemo(() => temCarro && v ? custoReal(db, v, hoje) : null, [db, v, hoje]);
+  // FIPE do mês: uma vez por mês busca o valor de novo e guarda o histórico (mostra quanto o carro desvalorizou)
+  useEffect(() => {
+    if (!v || !v.fipe || !v.fipe.ids) return;
+    const mesAtual = hoje.slice(0, 7), hist = v.fipeHist || [];
+    if (hist.length && hist[hist.length - 1].quando === mesAtual) return;
+    const { tipo, marca, modelo, ano } = v.fipe.ids;
+    fipe.valor(tipo, marca, modelo, ano).then(r => {
+      const val = valorFipe(r.Valor); if (!val) return;
+      act.atualizarVeiculo({ fipe: { ...v.fipe, valor: r.Valor, mes: r.MesReferencia }, fipeHist: [...hist.filter(h => h.quando !== mesAtual), { quando: mesAtual, valor: val }].slice(-36) });
+    }).catch(() => {});
+  }, [v && v.fipe && v.fipe.codigo, hoje.slice(0, 7)]);
+  const pagarDoc = d => {
+    act.salvarLanc({ id: uid(), tipo: "saida", cat: "transporte", sub: "documentos", valor: d.valor, data: hoje, desc: `${d.nome} ${d.data.slice(0, 4)}` });
+    act.atualizarVeiculo({ docs: { ...(v.docs || {}), [d.k]: { ...(v.docs || {})[d.k], data: umAnoDepois(d.data) } } });
+  };
 
   return (
     <div className="page transp">
@@ -117,8 +135,8 @@ export function TransporteTab({ db, act, tema, perfil }) {
         </section>
 
         <div className="transp-acoes">
-          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "combustivel" })}><span className="ic" style={{ "--c": subInfo("combustivel").cor }}><Ic.combustivel /></span>Abastecer</button>}
-          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "manutencao" })}><span className="ic" style={{ "--c": subInfo("manutencao").cor }}><Ic.manutencao /></span>Manutenção</button>}
+          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "combustivel" })}><span className="ic ilu"><Ilustra n="bomba" /></span>Abastecer</button>}
+          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "manutencao" })}><span className="ic ilu"><Ilustra n="ferramentas" /></span>Manutenção</button>}
           <button onClick={() => act.abrirGastoTransp({ sub: temCarro ? "estacionamento" : "app" })}><span className="ic" style={{ "--c": "var(--mode)" }}><I.plus /></span>Outro gasto</button>
         </div>
 
@@ -133,11 +151,29 @@ export function TransporteTab({ db, act, tema, perfil }) {
           </section>
         )}
 
+        {custo && (
+          <section className="transp-card transp-custo">
+            <div className="transp-card-cab"><h3>Quanto o carro custa de verdade</h3><small>últimos {custo.nMeses === 1 ? "30 dias" : `${custo.nMeses} meses`}</small></div>
+            <div className="transp-custo-nums">
+              <div><b><Money v={custo.porMes} /></b><small>por mês</small></div>
+              <div><b>{brlReal(custo.porDia)}</b><small>por dia</small></div>
+              <div><b>{custo.porKm ? brlReal(custo.porKm) : "—"}</b><small>por km rodado</small></div>
+            </div>
+            <div className="transp-custo-barra" aria-hidden="true">{SUBS.filter(s => custo.porSub[s.id]).map(s => <i key={s.id} style={{ width: `${custo.porSub[s.id] / custo.total * 100}%`, background: s.cor }} />)}</div>
+            <div className="transp-custo-leg">{SUBS.filter(s => custo.porSub[s.id]).map(s => <span key={s.id}><i style={{ background: s.cor }} />{s.nome} {Math.round(custo.porSub[s.id] / custo.total * 100)}%</span>)}</div>
+            {custo.perdeu && <p className="hint">Pela FIPE, o carro perdeu <b>{brl(custo.perdeu.valor)}</b> de valor desde {MES_LONGO[Number(custo.perdeu.desde.slice(5)) - 1]} de {custo.perdeu.desde.slice(0, 4)}. Isso também é custo, só que invisível.</p>}
+            {!custo.porKm && <p className="hint">Anotando a km do painel ao abastecer, eu mostro o custo de cada km rodado (dá para comparar com uma corrida de app).</p>}
+          </section>
+        )}
+
+        <ProximaConquista act={act} trilhas={["estrada"]} />
+
         </div>
         <div className="col">
         {temCarro && (
-          <section className="transp-card">
-            <div className="transp-card-cab"><span className="ic" style={{ "--c": subInfo("combustivel").cor }}><Ic.combustivel /></span><h3>Combustível</h3></div>
+          <section className="transp-card com-bomba">
+            <Ilustra n="bomba" className="transp-bomba" />
+            <div className="transp-card-cab"><h3>Combustível</h3></div>
             {anp.st === "carregando" && <p className="hint">Buscando o preço da semana na ANP…</p>}
             {anp.st === "sem-cidade" && <p className="hint">Coloque a sua cidade em Perfil → Dados pessoais para ver o preço da semana.</p>}
             {anp.st === "erro" && <p className="hint">Não consegui buscar o preço da ANP agora.</p>}
@@ -162,13 +198,20 @@ export function TransporteTab({ db, act, tema, perfil }) {
 
         {temCarro && (
           <section className="transp-card">
-            <div className="transp-card-cab"><span className="ic" style={{ "--c": subInfo("manutencao").cor }}><Ic.manutencao /></span><h3>Manutenção</h3>{manutAno > 0 && <small>{brl(manutAno)} em {hoje.slice(0, 4)}</small>}</div>
+            <div className="transp-card-cab"><Ilustra n="ferramentas" className="transp-cab-ilu" /><h3>Manutenção</h3>{manutAno > 0 && <small>{brl(manutAno)} em {hoje.slice(0, 4)}</small>}</div>
             {oleo ? (
               <div className={"transp-oleo" + (oleo.urgente ? " urgente" : "")}>
                 <b>Próxima troca de óleo</b>
                 <span>{oleo.faltamKm != null ? (oleo.faltamKm > 0 ? `em ${oleo.faltamKm.toLocaleString("pt-BR")} km` : `passou ${Math.abs(oleo.faltamKm).toLocaleString("pt-BR")} km`) + " ou " : ""}{oleo.faltamDias >= 0 ? `até ${dataCurta(oleo.ate)}` : `venceu em ${dataCurta(oleo.ate)}`}</span>
               </div>
             ) : <p className="hint">Anote a última troca de óleo (em Manutenção) e eu aviso quando chegar a próxima.</p>}
+            <div className={"transp-pneu" + (rodizio && rodizio.urgente ? " urgente" : "")}>
+              <Ilustra n="pneu" />
+              <span><b>Pneus</b>{rodizio
+                ? <small>Rodízio e alinhamento {rodizio.faltamKm != null ? (rodizio.faltamKm > 0 ? `em ${rodizio.faltamKm.toLocaleString("pt-BR")} km ou ` : `atrasado ${Math.abs(rodizio.faltamKm).toLocaleString("pt-BR")} km · `) : ""}{rodizio.faltamDias >= 0 ? `até ${dataCurta(rodizio.ate)}` : `venceu em ${dataCurta(rodizio.ate)}`}</small>
+                : <small>Calibre a cada 15 dias. Anote o rodízio e o alinhamento (a cada 10.000 km) e eu lembro do próximo.</small>}</span>
+              <button className="bub-act" onClick={() => act.abrirGastoTransp({ sub: "manutencao", manut: "alinhamento" })}>Anotar rodízio</button>
+            </div>
             {manut.slice(0, 4).map(l => (
               <button key={l.id} className="transp-item" onClick={() => act.abrirGastoTransp({ inicial: l })}>
                 <span className="ic" style={{ "--c": subInfo(subDe(l)).cor }}><IconeSub id={subDe(l)} /></span>
@@ -176,6 +219,19 @@ export function TransporteTab({ db, act, tema, perfil }) {
                 <span className="amt">−<Money v={l.valor} /></span>
               </button>
             ))}
+          </section>
+        )}
+
+        {temCarro && v && (
+          <section className="transp-card">
+            <div className="transp-card-cab"><span className="ic" style={{ "--c": subInfo("documentos").cor }}><Ic.documentos /></span><h3>IPVA, licenciamento e seguro</h3></div>
+            {docs.length === 0 ? <p className="hint">Coloque as datas de vencimento (no lápis, lá em cima) e eu aviso uma semana antes e no dia.</p> : docs.map(d => (
+              <div key={d.k} className={"transp-doc" + (d.dias < 0 ? " atrasado" : d.dias <= 15 ? " perto" : "")}>
+                <span className="mid"><b>{d.nome}</b><small>{d.dias < 0 ? `Venceu há ${-d.dias} ${d.dias === -1 ? "dia" : "dias"}` : d.dias === 0 ? "Vence hoje" : d.dias <= 60 ? `Vence em ${d.dias} ${d.dias === 1 ? "dia" : "dias"} · ${dataCurta(d.data)}` : `Vence em ${dataCurta(d.data)}`}{d.valor ? ` · ${brl(d.valor)}` : ""}</small></span>
+                {d.dias <= 60 && <button className="bub-act" onClick={() => pagarDoc(d)}>Paguei</button>}
+              </div>
+            ))}
+            {docs.length > 0 && docs.length < 3 && <button className="link" onClick={() => act.abrirVeiculo()}>+ Colocar {DOCS_VEICULO.filter(([k]) => !docs.some(d => d.k === k)).map(x => x[1]).join(" ou ")}</button>}
           </section>
         )}
 
@@ -211,7 +267,7 @@ export function TransporteTab({ db, act, tema, perfil }) {
 }
 
 /* ---------- Abastecer, manutenção e outros gastos ---------- */
-export function GastoTransporteSheet({ sub0, inicial, veiculo, precos, onSave, onDelete, onClose }) {
+export function GastoTransporteSheet({ sub0, manut0, inicial, veiculo, precos, onSave, onDelete, onClose }) {
   const [sub, setSub] = useState(inicial ? subDe(inicial) : sub0 || "combustivel");
   const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : "");
   const [litros, setLitros] = useState(inicial && inicial.litros ? fmtNum(inicial.litros) : "");
@@ -219,7 +275,7 @@ export function GastoTransporteSheet({ sub0, inicial, veiculo, precos, onSave, o
   const comb0 = inicial && inicial.combustivel ? inicial.combustivel : veiculo && ["gasolina", "etanol", "diesel", "gnv"].includes(veiculo.combustivel) ? veiculo.combustivel : "gasolina";
   const [combustivel, setCombustivel] = useState(comb0);
   const [km, setKm] = useState(inicial && inicial.km ? String(inicial.km) : "");
-  const [manut, setManut] = useState(inicial && inicial.manut ? inicial.manut : "revisao");
+  const [manut, setManut] = useState(inicial && inicial.manut ? inicial.manut : manut0 || "revisao");
   const [desc, setDesc] = useState(inicial ? inicial.desc || "" : "");
   const [data, setData] = useState(inicial ? inicial.data : todayISO());
   const v = num(valor), l = num(litros), p = num(precoL);
@@ -293,6 +349,8 @@ export function VeiculoSheet({ veiculo, db, onSave, onClose }) {
   const [oleoKm, setOleoKm] = useState(v0.oleoKm || 10000);
   const [oleoMeses, setOleoMeses] = useState(v0.oleoMeses || 12);
   const [fipeV, setFipeV] = useState(v0.fipe || null);
+  const [docs, setDocs] = useState(() => Object.fromEntries(DOCS_VEICULO.map(([k]) => [k, { data: (v0.docs && v0.docs[k] && v0.docs[k].data) || "", valor: v0.docs && v0.docs[k] && v0.docs[k].valor ? fmtNum(v0.docs[k].valor) : "" }])));
+  const upDoc = (k, campo, val) => setDocs(d => ({ ...d, [k]: { ...d[k], [campo]: val } }));
   const [erro, setErro] = useState("");
   const arq = useRef(null);
   const escolherFoto = async e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return; try { setFoto(await fotoDoCarro(f)); setErro(""); } catch (x) { setErro("Não consegui abrir essa foto."); } };
@@ -343,9 +401,25 @@ export function VeiculoSheet({ veiculo, db, onSave, onClose }) {
             {[6, 12].map(m => <button key={"m" + m} type="button" className={oleoMeses === m ? "on" : ""} onClick={() => setOleoMeses(m)}>ou {m} meses</button>)}
           </div>
         </Field>
+        <h3 className="section-title">IPVA, licenciamento e seguro</h3>
+        <div className="transp-docs-form">
+          {DOCS_VEICULO.map(([k, n]) => (
+            <div key={k} className="fields duas">
+              <Field label={`${n}: vence em`} htmlFor={`vd-${k}`}><input id={`vd-${k}`} type="date" value={docs[k].data} onChange={e => upDoc(k, "data", e.target.value)} /></Field>
+              <Field label="Valor (R$)" htmlFor={`vv-${k}`}><input id={`vv-${k}`} inputMode="decimal" value={docs[k].valor} onChange={e => upDoc(k, "valor", soNumero(e.target.value))} placeholder="Opcional" /></Field>
+            </div>
+          ))}
+        </div>
         <BuscaFipe tipo={tipo === "moto" ? "motos" : "carros"} valor={fipeV} onEscolher={f => { setFipeV(f); if (!nome.trim() && f) setNome(f.modelo.split(" ").slice(0, 2).join(" ")); if (f && /alcool|etanol|flex/i.test(f.combustivel || "") && combustivel === "flex") setCombustivel(/flex/i.test(f.combustivel) ? "flex" : "etanol"); }} />
       </>}
-      <button className="btn mode" onClick={() => onSave({ tipo, foto: tipo === "nenhum" ? "" : foto, nome: nome.trim(), combustivel: temMotor ? combustivel : "", consumo: num(consumo) || null, km: num(km) || null, oleoKm, oleoMeses, fipe: temMotor ? fipeV : null })}><I.check /> Salvar</button>
+      <button className="btn mode" onClick={() => {
+        const docsOk = temMotor ? Object.fromEntries(DOCS_VEICULO.filter(([k]) => docs[k].data).map(([k]) => [k, { data: docs[k].data, valor: num(docs[k].valor) || 0 }])) : {};
+        // histórico da FIPE: guarda o valor do mês (troca de carro zera o histórico)
+        const mesAtual = todayISO().slice(0, 7), val = fipeV ? valorFipe(fipeV.valor) : 0;
+        const mesmoCarro = fipeV && v0.fipe && v0.fipe.codigo === fipeV.codigo && v0.fipe.ano === fipeV.ano;
+        const hist = !val ? [] : [...(mesmoCarro ? (v0.fipeHist || []).filter(h => h.quando !== mesAtual) : []), { quando: mesAtual, valor: val }];
+        onSave({ ...v0, tipo, foto: tipo === "nenhum" ? "" : foto, nome: nome.trim(), combustivel: temMotor ? combustivel : "", consumo: num(consumo) || null, km: num(km) || null, oleoKm, oleoMeses, fipe: temMotor ? fipeV : null, fipeHist: temMotor ? hist : [], docs: docsOk });
+      }}><I.check /> Salvar</button>
     </Sheet>
   );
 }
@@ -365,7 +439,7 @@ function BuscaFipe({ tipo, valor, onEscolher }) {
   useEffect(() => { if (!aberto || marcas.length) return; setSt("carregando"); fipe.marcas(tipo).then(m => { setMarcas(m); setSt(""); }).catch(() => setSt("erro")); }, [aberto, tipo]);
   const escolherMarca = (id, nome) => { setMarca(id); setMarcaNome(nome || ""); setBusca(""); setModelo(""); setAnos([]); setModelos([]); if (!id) return; setSt("carregando"); fipe.modelos(tipo, id).then(m => { setModelos(m); setSt(""); }).catch(() => setSt("erro")); };
   const escolherModelo = id => { setModelo(id); setAnos([]); if (!id) return; setSt("carregando"); fipe.anos(tipo, marca, id).then(a => { setAnos(a); setSt(""); }).catch(() => setSt("erro")); };
-  const escolherAno = id => { if (!id) return; setSt("carregando"); fipe.valor(tipo, marca, modelo, id).then(r => { onEscolher({ marca: r.Marca, modelo: r.Modelo, ano: r.AnoModelo === 32000 ? "Zero km" : r.AnoModelo, combustivel: r.Combustivel, valor: r.Valor, mes: r.MesReferencia, codigo: r.CodigoFipe }); setSt(""); setAberto(false); vibrar("ok"); }).catch(() => setSt("erro")); };
+  const escolherAno = id => { if (!id) return; setSt("carregando"); fipe.valor(tipo, marca, modelo, id).then(r => { onEscolher({ marca: r.Marca, modelo: r.Modelo, ano: r.AnoModelo === 32000 ? "Zero km" : r.AnoModelo, combustivel: r.Combustivel, valor: r.Valor, mes: r.MesReferencia, codigo: r.CodigoFipe, ids: { tipo, marca, modelo, ano: id } }); setSt(""); setAberto(false); vibrar("ok"); }).catch(() => setSt("erro")); };
   const q = simples(qMarca), qAlvo = APELIDOS_MARCA[q] || q;
   const listaMarcas = q
     ? marcas.filter(m => simples(nomeMarca(m.nome)).includes(qAlvo) || simples(m.nome).includes(q)).slice(0, 14)

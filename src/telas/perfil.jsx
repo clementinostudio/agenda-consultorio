@@ -3,6 +3,7 @@ import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
 import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada } from "../App.jsx";
+import { DadosRecibo } from "./consultorio.jsx";
 import { nivelDe, TRILHAS } from "../conquistas.js";
 
 const TXT_PUSH = {
@@ -158,6 +159,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
     { grupo: "Consultório", itens: [
       { id: "agenda", ic: <I.cal />, t: "Agenda", v: `${hIni}h às ${hFim}h · ${diasTxt || "sem dias"}` },
       { id: "dinheiro", ic: <I.wallet />, t: "Valores e metas", v: meta ? `Meta de ${brl(num(meta))}` : "Sem meta" },
+      { id: "docs", ic: <I.receipt />, t: "Recibos e imposto", v: pf.doc && pf.doc.registro ? "Seus dados prontos para o recibo" : "CPF, registro e assinatura" },
       { id: "avisos", ic: <I.bell />, t: "Avisos", v: !avAtivo ? "Desligados" : pushLigado() ? `Com o app fechado · ${antec} min antes` : `${antec} min antes` },
     ] },
     { grupo: "App", itens: [
@@ -167,7 +169,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
     ] },
   ];
   const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
-  const titulo = { conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Modo Pessoal", app: "Instalar e atalhos" }[aba];
+  const titulo = { conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Modo Pessoal", app: "Instalar e atalhos" }[aba];
 
   return createPortal(
     <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
@@ -278,6 +280,16 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
           </div>
           <div className="hint">Estimativa simples para não levar susto. O valor certo do Carnê-Leão quem calcula é o contador.</div>
           <div className="fields"><Field label="Resumo do Início"><Seg value={estilo} onChange={setEstilo} options={[{ v: "curto", l: "Direto ao ponto" }, { v: "detalhado", l: "Completo" }]} /></Field></div>
+        </div>}
+
+        {aba === "docs" && <div className="stack">
+          <button className="perfil-conq" onClick={act.abrirImposto}>
+            <Ilustra n="arquivo" />
+            <span><b>Imposto de Renda</b><small>O que você recebeu mês a mês, com os CPFs para o Receita Saúde</small></span>
+            <I.chev />
+          </button>
+          <div className="hint">Seus dados abaixo entram nos recibos em PDF (no paciente ou na cobrança paga).</div>
+          <DadosRecibo conta={conta} act={act} />
         </div>}
 
         {aba === "avisos" && <div className="stack">

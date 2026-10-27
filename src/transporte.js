@@ -22,7 +22,7 @@ export const subInfo = id => SUBS.find(s => s.id === id) || SUBS[SUBS.length - 1
 export const MANUTENCOES = [
   ["revisao", "Revisão"], ["oleo", "Troca de óleo"], ["pneus", "Pneus"], ["freios", "Freios"], ["bateria", "Bateria"],
   ["conserto", "Conserto / mecânico"], ["funilaria", "Funilaria e pintura"], ["lavagem", "Lavagem"],
-  ["pecas", "Peças"], ["acessorios", "Acessórios e melhorias"],
+  ["pecas", "Peças"], ["acessorios", "Acessórios e melhorias"], ["alinhamento", "Alinhamento e rodízio"],
 ];
 // Tipos de carro, cada um com o seu desenho (todos no mesmo ângulo): [chave, nome, arquivo, o que é, exemplos]
 export const FOTOS = [
@@ -139,6 +139,49 @@ export function proximaTrocaOleo(db, veiculo, hojeISO) {
   const faltamDias = Math.round((new Date(ate + "T12:00:00") - new Date(hojeISO + "T12:00:00")) / 864e5);
   return { ultima: ult, ate, proxKm, faltamKm, faltamDias, urgente: (faltamKm != null && faltamKm <= 500) || faltamDias <= 15 };
 }
+
+// Rodízio e alinhamento dos pneus: a cada 10.000 km ou 12 meses, contando do último anotado
+export function proximoRodizio(db, veiculo, hojeISO) {
+  const feitos = (db.pessoal ? db.pessoal.lanc : []).filter(l => l.cat === "transporte" && (["alinhamento", "pneus"].includes(l.manut) || /\b(rodizio|alinhamento|balanceamento)\b/.test(semAcento(l.desc)))).sort((a, b) => b.data.localeCompare(a.data));
+  const ult = feitos[0]; if (!ult) return null;
+  const d = new Date(ult.data + "T12:00:00"); d.setMonth(d.getMonth() + 12);
+  const ate = d.toISOString().slice(0, 10), km = kmAtual(db, veiculo);
+  const proxKm = ult.km > 0 ? ult.km + 10000 : null;
+  const faltamKm = proxKm && km ? proxKm - km : null;
+  const faltamDias = Math.round((new Date(ate + "T12:00:00") - new Date(hojeISO + "T12:00:00")) / 864e5);
+  return { ultima: ult, ate, proxKm, faltamKm, faltamDias, urgente: (faltamKm != null && faltamKm <= 500) || faltamDias <= 15 };
+}
+
+// IPVA, licenciamento e seguro: a pessoa informa a data e o valor; o app lembra e, ao pagar, joga para o ano seguinte
+export const DOCS_VEICULO = [["ipva", "IPVA"], ["licenc", "Licenciamento"], ["seguro", "Seguro"]];
+export function docsVeiculo(veiculo, hojeISO) {
+  const d = (veiculo && veiculo.docs) || {};
+  return DOCS_VEICULO.filter(([k]) => d[k] && d[k].data).map(([k, nome]) => ({
+    k, nome, data: d[k].data, valor: d[k].valor || 0,
+    dias: Math.round((new Date(d[k].data + "T12:00:00") - new Date(hojeISO + "T12:00:00")) / 864e5),
+  })).sort((a, b) => a.data.localeCompare(b.data));
+}
+export const umAnoDepois = iso => { const d = new Date(iso + "T12:00:00"); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0, 10); };
+
+// Quanto o carro custa de verdade: tudo o que é do carro nos últimos 12 meses (sem apps e ônibus),
+// dividido pelos meses e pelos km rodados; e quanto ele perdeu de valor pela FIPE, se houver histórico
+const DO_CARRO = ["combustivel", "manutencao", "melhorias", "estacionamento", "documentos"];
+export function custoReal(db, veiculo, hojeISO) {
+  const fim = new Date(hojeISO + "T12:00:00"), meses = [];
+  for (let i = 0; i < 12; i++) { const m = new Date(fim.getFullYear(), fim.getMonth() - i, 1); meses.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`); }
+  const itens = meses.flatMap(ch => gastosTransporte(db, ch).itens).filter(i => DO_CARRO.includes(i.sub));
+  if (!itens.length) return null;
+  const primeiro = itens.reduce((m, i) => typeof i.data === "string" && i.data < m ? i.data : m, hojeISO);
+  const nMeses = Math.max(1, Math.min(12, (fim.getFullYear() - Number(primeiro.slice(0, 4))) * 12 + fim.getMonth() + 1 - Number(primeiro.slice(5, 7))));
+  const total = itens.reduce((s, i) => s + i.valor, 0);
+  const porSub = {}; itens.forEach(i => { porSub[i.sub] = (porSub[i.sub] || 0) + i.valor; });
+  const kms = itens.filter(i => i.km > 0).map(i => i.km);
+  const rodados = kms.length >= 2 ? Math.max(...kms) - Math.min(...kms) : 0;
+  const hist = (veiculo && veiculo.fipeHist) || [];
+  const perdeu = hist.length >= 2 && hist[0].valor > hist[hist.length - 1].valor ? { valor: hist[0].valor - hist[hist.length - 1].valor, desde: hist[0].quando } : null;
+  return { total, porMes: total / nMeses, porDia: total / (nMeses * 30.4), nMeses, porSub, rodados, porKm: rodados >= 300 ? total / rodados : null, perdeu };
+}
+export const valorFipe = s => Number(String(s || "").replace(/[^\d,]/g, "").replace(",", ".")) || 0;
 
 /* ---------- Preço do combustível (ANP, levantamento semanal oficial) ----------
    O servidor só busca a planilha da semana (o plano grátis da Cloudflare não aguenta ler o arquivo);

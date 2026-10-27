@@ -222,6 +222,47 @@ function PessoalHome({ db, conta, now, act, tema }) {
   );
 }
 
+// Para onde foi o dinheiro: compara com o mês anterior (no mês corrente, só até o mesmo dia, para ser justo)
+function ParaOndeFoi({ db, chave, act }) {
+  const hoje = todayISO(), corrente = chave === hoje.slice(0, 7);
+  const [a, m] = chave.split("-").map(Number), pd = new Date(a, m - 2, 1);
+  const ant = `${pd.getFullYear()}-${pad(pd.getMonth() + 1)}`;
+  const dia = corrente ? Number(hoje.slice(8, 10)) : 31;
+  const ate = iso => typeof iso !== "string" || Number(iso.slice(8, 10)) <= dia;
+  const porCat = ch => {
+    const out = {};
+    db.pessoal.lanc.forEach(l => { if (l.tipo === "saida" && l.data.startsWith(ch) && ate(l.data)) out[l.cat] = (out[l.cat] || 0) + l.valor; });
+    db.pessoal.contas.forEach(c => { const pg = c.pagas && c.pagas[ch]; if (pg && ate(pg)) out[c.cat] = (out[c.cat] || 0) + c.valor; });
+    return out;
+  };
+  const agora = porCat(chave), antes = porCat(ant);
+  const tA = Object.values(agora).reduce((s, v) => s + v, 0), tB = Object.values(antes).reduce((s, v) => s + v, 0);
+  if (tB < 1 || tA < 1) return null;
+  const difs = [...new Set([...Object.keys(agora), ...Object.keys(antes)])].map(id => ({ id, a: agora[id] || 0, b: antes[id] || 0, d: (agora[id] || 0) - (antes[id] || 0) }));
+  const subiu = difs.filter(x => x.d >= 20 && x.d >= x.b * .15).sort((x, y) => y.d - x.d).slice(0, 3);
+  const caiu = difs.filter(x => x.d <= -20).sort((x, y) => x.d - y.d)[0];
+  const delta = tA - tB, pct = Math.round(delta / tB * 100);
+  const nomeAnt = MES_LONGO[pd.getMonth()];
+  return (
+    <section className="panel pof">
+      <div className="panel-head"><h3>Para onde foi o dinheiro</h3></div>
+      <p className={"pof-resumo " + (delta > 0 ? "mais" : "menos")}>
+        {Math.abs(delta) < 10 ? <>Quase igual a {nomeAnt}{corrente ? ` até o dia ${dia}` : ""}.</>
+          : <><b>{brl(Math.abs(delta))} {delta > 0 ? "a mais" : "a menos"}</b> que em {nomeAnt}{corrente ? ` até o dia ${dia}` : ""} ({delta > 0 ? "+" : "−"}{Math.abs(pct)}%).</>}
+      </p>
+      {subiu.map(x => { const cat = catDe(x.id); return (
+        <button key={x.id} className="pof-linha" style={catVars(cat)} onClick={() => x.id === "transporte" ? act.abrirTransporte() : act.abrirTeto(x.id)}>
+          <span className="ci"><CatIcon cat={cat} /></span>
+          <span className="mid"><b>{cat.nome}</b><small>{x.b > 0 ? `de ${brl(x.b)} para ${brl(x.a)}` : `${brl(x.a)}, nada em ${nomeAnt}`}</small></span>
+          <b className="pof-up">+{brl(x.d)}</b>
+        </button>
+      ); })}
+      {caiu && <div className="pof-caiu"><I.check /><span>Economizou <b>{brl(-caiu.d)}</b> em {catDe(caiu.id).nome.toLowerCase()}.</span></div>}
+      {!subiu.length && !caiu && <div className="hint">Nenhuma categoria mudou muito. Ritmo parecido com {nomeAnt}.</div>}
+    </section>
+  );
+}
+
 function GastosTab({ db, act, tema }) {
   const [off, setOff] = useState(0);
   const [filtro, setFiltro] = useState("tudo");
@@ -271,6 +312,7 @@ function GastosTab({ db, act, tema }) {
             })}
             <button className="link teto-link" onClick={() => act.abrirTeto()}><I.gauge /> {Object.values(tetos).some(v => v > 0) ? "Mudar tetos do mês" : "Definir um teto por categoria"}</button>
           </section>
+          <ParaOndeFoi db={db} chave={chave} act={act} />
         </div>
         <div className="col">
           <div className="panel">

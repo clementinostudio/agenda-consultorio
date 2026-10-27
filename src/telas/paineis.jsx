@@ -39,7 +39,7 @@ function FecharDia({ db, conta, onClose, act }) {
             </div>))}</div>)}
       {e === "registros" && (regs.length === 0
         ? <div className="note mint"><I.check /><span>Nenhum registro pendente.</span></div>
-        : <><div className="hint">Toque para marcar o que você já registrou. Eu guardo só o "feito", nunca o conteúdo.</div>
+        : <><div className="hint">Toque para marcar o que você já registrou. Aqui fica só o "feito". Para escrever, use as Anotações do paciente: trancadas com a sua senha.</div>
           <div className="panel">{regs.map(s => (
             <button className="txn" key={s.id} onClick={() => act.toggleRegistro(s.id)}>
               <span className="txn-av">{iniciais(pac(s.patientId).name)}</span>
@@ -193,7 +193,7 @@ function RegistrosSheet({ db, onClose, act }) {
   const regs = db.sessions.filter(s => s.status === "done" && s.date >= addDays(todayISO(), -7)).sort((a, b) => b.date.localeCompare(a.date));
   const pac = id => db.patients.find(p => p.id === id) || { name: "Removido" };
   return (
-    <Sheet title="Registros das sessões" sub="Últimos 7 dias. Eu guardo só o “feito”, nunca o conteúdo." onClose={onClose}>
+    <Sheet title="Registros das sessões" sub="Últimos 7 dias. Aqui fica só o “feito”. Para escrever, use as Anotações do paciente: trancadas com a sua senha." onClose={onClose}>
       <div className="panel">
         {regs.length === 0 && <div className="empty">Nenhuma sessão nos últimos 7 dias.</div>}
         {regs.map(s => (

@@ -41,7 +41,7 @@ export const cliente = () => _cliente || (_cliente = import("@supabase/supabase-
 /* ---------- db <-> itens ---------- */
 // Listas em que cada elemento (com id) vira uma linha. O resto do db (ajustes, dias fechados, modo viagem...)
 // vira uma linha "doc" por chave.
-const LISTAS = ["patients", "sessions", "charges", "espera", "pessoal.lanc", "pessoal.contas", "pessoal.caixinhas"];
+const LISTAS = ["patients", "sessions", "charges", "espera", "notas", "pessoal.lanc", "pessoal.contas", "pessoal.caixinhas"];
 const chave = (colecao, id) => `${colecao}|${id}`;
 const partir = k => { const i = k.indexOf("|"); return [k.slice(0, i), k.slice(i + 1)]; };
 
