@@ -1771,3 +1771,9 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .fipe-marcas button:active { transform: scale(.96); }
 .fipe-escolhida { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 2px; }
 .fipe-escolhida b { font-size: 16px; }
+/* Desenhos de veículo: o van e o compacto vieram de imagens menores (não esticam); o caminhão e o ônibus são mais altos */
+.transp-foto.grande.f-van { width: min(200px, 64%); }
+.transp-palco.mini .transp-foto.grande.f-van { width: min(170px, 56%); }
+.transp-fotos button.auto small { color: var(--mode-text); }
+.transp-tipo-info { display: grid; gap: 3px; padding: 12px 14px; border-radius: 16px; background: var(--surface-2); font-size: 13.5px; line-height: 1.4; color: var(--muted); }
+.transp-tipo-info b { color: var(--fg); font-size: 14.5px; }

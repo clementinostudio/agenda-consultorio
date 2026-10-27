@@ -24,7 +24,55 @@ export const MANUTENCOES = [
   ["conserto", "Conserto / mecânico"], ["funilaria", "Funilaria e pintura"], ["lavagem", "Lavagem"],
   ["pecas", "Peças"], ["acessorios", "Acessórios e melhorias"],
 ];
-export const FOTOS = [["sedan", "Sedã", "carro-sedan"], ["compacto", "Compacto", "carro-compacto"]];
+// Tipos de carro, cada um com o seu desenho (todos no mesmo ângulo): [chave, nome, arquivo, o que é, exemplos]
+export const FOTOS = [
+  ["hatch", "Hatch", "carro-hatch", "Carro comum, com a traseira curta (sem porta-malas saliente).", "Onix, HB20, Polo, Argo, Gol"],
+  ["compacto", "Compacto", "carro-compacto", "Os bem pequenos, de cidade.", "Mobi, Kwid, Up!, Uno, Celta"],
+  ["sedan", "Sedã", "carro-sedan", "Carro com o porta-malas separado, saliente atrás.", "Corolla, Virtus, Onix Plus, Civic, Cronos"],
+  ["suv-compacto", "SUV compacto", "carro-suv-compacto", "Mais alto que um carro comum, mas de porte pequeno.", "Tracker, Creta, Kicks, T-Cross, Pulse"],
+  ["suv", "SUV", "carro-suv", "Alto e espaçoso, de porte médio ou grande.", "Compass, Corolla Cross, Tiguan, SW4"],
+  ["jipe", "Jipe / 4x4", "carro-jipe", "Feito para terra e trilha, quadradão.", "Jimny, Wrangler, Troller, Defender"],
+  ["minivan", "Minivan", "carro-minivan", "Carro de família, alto, muitas vezes com 7 lugares.", "Spin, Livina, Zafira, Doblò"],
+  ["van", "Van / furgão", "carro-van", "Para carga ou muita gente.", "Kombi, Fiorino, Sprinter, Master"],
+  ["caminhao", "Caminhão", "carro-caminhao", "Caminhão leve ou de carga.", "Accelo, Delivery, HR, Bongo"],
+];
+export const FOTO_MOTO = ["moto", "Moto", "moto"];
+export const FOTO_ONIBUS = ["onibus", "Transporte público", "onibus"];
+
+// Descobre o tipo de carro pelo nome do modelo (da FIPE ou do apelido). A ordem importa: "Corolla Cross" é SUV antes de ser Corolla.
+const CARROCERIAS = [
+  ["caminhao", /\b(accelo|atego|axor|actros|constellation|delivery|worker|cargo \d|tector|stralis|vm \d|fh ?\d|fm ?\d|bongo|hr 2|hd ?\d|f-?4000|f-?350|caminh)/],
+  ["van", /\b(kombi|fiorino|sprinter|master|ducato|daily|transit|boxer|jumper|trafic|kangoo|partner|berlingo|expert|express|vito|besta|topic|towner|scudo|jumpy|h-?100|e-?delivery|furg[aã]o|van)\b/],
+  ["minivan", /\b(spin|livina|zafira|meriva|idea|dobl[oò]|picasso|scenic|sc[eé]nic|touran|carens|sharan|freemont|journey|odyssey|sienna|carnival|caravan|minivan)\b/],
+  ["jipe", /\b(jimny|wrangler|troller|defender|pajero|tr4|niva|bandeirante|land cruiser|gladiator|cherokee|bronco|classe g|g ?63|samurai|vitara|jipe)\b/],
+  ["suv", /\b(compass|commander|corolla cross|sw4|tiguan|taos|cr-?v|rav ?4|tucson|ix35|santa fe|sorento|sportage|outlander|equinox|trailblazer|territory|edge|explorer|discovery|evoque|velar|range rover|x[3-7]|q[3-8]|glc|gle|glk|xc ?[69]0|model y|tang|song|haval|h6|tiggo ?[5-9]|3008|5008|c5 aircross|koleos|captiva|eclipse cross|forester|4runner|mach-?e|id\.?4|ioniq 5|ev9|suv)\b/],
+  ["picape", /\b(strada|toro|saveiro|montana|s-?10|hilux|ranger|amarok|frontier|l200|triton|oroch|rampage|maverick|ram|f-?250|f-?150|f-?1000|titano|d-?20|silverado|hoggar|courier|tacoma|tundra|colorado|shark|pick-?up|picape|cabine dupla|cab\. ?dupla)\b/],
+  ["suv-compacto", /\b(tracker|creta|kicks|t-?cross|nivus|pulse|fastback|renegade|duster|captur|2008|cactus|ecosport|hr-?v|wr-?v|kona|seltos|stonic|tiggo ?[2-4]|jolion|yuan|ex30|xc ?40|aircross|basalt|kardian|bz4x|yaris cross|ix25|soul|tera|gla|glb|x1|q2|asx|crossfox)\b/],
+  ["hatch", /\bhatch/],
+  ["sedan", /\b(corolla|civic|cruze|onix plus|prisma|cobalt|virtus|voyage|jetta|passat|city|sentra|versa|hb20s|cronos|siena|logan|fluence|408|c4 lounge|accord|camry|fusion|elantra|azera|cerato|optima|linea|vectra|classic|a[4-8]|s[eé]rie [3-7]|3[12]\di|5[23]\di|classe [ce]|c ?[1-3]\d\d|model [3s]|seal|bora|santana|sonata|altima|premio|monza|omega|sed[aã]n?)\b/],
+  ["compacto", /\b(mobi|kwid|up|uno|picanto|i10|smart|fusca|147|celta|ka|march|qq|e-?js1|mini|500|twingo|clio|dolphin mini|spark)\b/],
+];
+// por enquanto ainda não há desenho de picape: usa o do SUV
+const SEM_DESENHO = { picape: "suv" };
+export function carroceria(texto) {
+  const t = String(texto || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (!t.trim()) return null;
+  const achou = CARROCERIAS.find(([, re]) => re.test(t));
+  return achou ? achou[0] : null;
+}
+// O desenho que aparece para o veículo: o que a pessoa escolheu ou, no automático, pelo modelo
+export function fotoDoVeiculo(v) {
+  if (!v) return FOTOS.find(f => f[0] === "sedan");
+  if (v.tipo === "moto") return FOTO_MOTO;
+  if (v.tipo === "nenhum") return FOTO_ONIBUS;
+  if (v.tipo && v.tipo !== "carro") return null;
+  const escolhida = FOTOS.find(f => f[0] === v.foto);
+  if (escolhida) return escolhida;
+  const k = carroceria(v.fipe && v.fipe.modelo) || carroceria(v.nome) || "hatch";
+  return FOTOS.find(f => f[0] === (SEM_DESENHO[k] || k));
+}
+// Para mostrar na escolha: "SUV compacto" (ou "Picape", que ainda usa outro desenho)
+export const NOME_CARROCERIA = { picape: "Picape" };
 export const COMBUSTIVEIS = [["flex", "Flex"], ["gasolina", "Gasolina"], ["etanol", "Etanol"], ["diesel", "Diesel"], ["gnv", "GNV"], ["eletrico", "Elétrico"]];
 
 // Descobre a subcategoria de um gasto de transporte pela loja e pela descrição

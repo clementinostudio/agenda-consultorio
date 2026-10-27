@@ -1,7 +1,7 @@
 // Parte do app carregada sob demanda: aba "Transporte" do modo Pessoal (também abre ao tocar em Transporte, em Gastos).
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar } from "../App.jsx";
-import { SUBS, subInfo, subDe, MANUTENCOES, FOTOS, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
+import { SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
 
 /* ---------- ícones ---------- */
 const Svg = ({ children }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
@@ -37,7 +37,7 @@ const mesDe = off => { const d = new Date(); const m = new Date(d.getFullYear(),
 function FotoVeiculo({ v, grande }) {
   const cls = "transp-foto" + (grande ? " grande" : "");
   if (v && v.foto && v.foto.startsWith("data:")) return <img className={cls + " propria"} src={v.foto} alt="Seu veículo" />;
-  const f = FOTOS.find(x => x[0] === (v && v.foto)) || (!v || v.tipo === "carro" || !v.tipo ? FOTOS[0] : null);
+  const f = fotoDoVeiculo(v);
   if (f) return <Ilustra n={f[2]} className={cls + " f-" + f[0]} alt={f[1]} />;
   return <span className={cls + " emoji"} aria-hidden="true">{EMOJI[v.tipo] || "🚗"}</span>;
 }
@@ -285,7 +285,7 @@ export function VeiculoSheet({ veiculo, db, onSave, onClose }) {
   const km0 = kmAtual(db, veiculo);
   const v0 = veiculo || {};
   const [tipo, setTipo] = useState(v0.tipo || "carro");
-  const [foto, setFoto] = useState(v0.foto || "sedan");
+  const [foto, setFoto] = useState(v0.foto || "auto");
   const [nome, setNome] = useState(v0.nome || "");
   const [combustivel, setCombustivel] = useState(v0.combustivel || "flex");
   const [consumo, setConsumo] = useState(v0.consumo ? fmtNum(v0.consumo) : "");
@@ -296,22 +296,35 @@ export function VeiculoSheet({ veiculo, db, onSave, onClose }) {
   const [erro, setErro] = useState("");
   const arq = useRef(null);
   const escolherFoto = async e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return; try { setFoto(await fotoDoCarro(f)); setErro(""); } catch (x) { setErro("Não consegui abrir essa foto."); } };
-  const veiculoTela = { tipo, foto };
+  const veiculoTela = { tipo, foto, nome, fipe: fipeV };
   const temMotor = tipo === "carro" || tipo === "moto";
+  const propria = String(foto).startsWith("data:");
+  // o tipo de carro que o automático achou, para explicar em palavras simples
+  const desenhoAuto = fotoDoVeiculo({ tipo: "carro", foto: "auto", nome, fipe: fipeV });
+  const achado = carroceria(fipeV && fipeV.modelo) || carroceria(nome);
+  const info = tipo !== "carro" || propria ? null : foto === "auto" ? (achado ? FOTOS.find(f => f[0] === achado) || [achado, NOME_CARROCERIA[achado] || achado] : null) : FOTOS.find(f => f[0] === foto);
   return (
     <Sheet title={veiculo ? "Seu veículo" : "Escolha o seu veículo"} sub="Fica só com você, para deixar a tela com a sua cara." onClose={onClose}>
       <div className="transp-palco mini"><FotoVeiculo v={veiculoTela} grande /><i className="transp-chao" aria-hidden="true" /></div>
-      <Seg value={tipo} onChange={t => { setTipo(t); if (t !== "carro" && !String(foto).startsWith("data:")) setFoto(t === "carro" ? "sedan" : ""); }} options={[{ v: "carro", l: "Carro" }, { v: "moto", l: "Moto" }, { v: "bike", l: "Bike" }, { v: "nenhum", l: "Sem veículo" }]} />
+      <Seg value={tipo} onChange={t => { setTipo(t); if (!propria) setFoto("auto"); }} options={[{ v: "carro", l: "Carro" }, { v: "moto", l: "Moto" }, { v: "bike", l: "Bike" }, { v: "nenhum", l: "Sem veículo" }]} />
       <div className="transp-fotos" role="radiogroup" aria-label="Foto do veículo">
+        {tipo === "carro" && <button type="button" role="radio" aria-checked={foto === "auto"} className={"auto" + (foto === "auto" ? " on" : "")} onClick={() => setFoto("auto")}><Ilustra n={desenhoAuto[2]} /><small>Automático</small></button>}
         {tipo === "carro" && FOTOS.map(([k, n, arquivo]) => (
           <button key={k} type="button" role="radio" aria-checked={foto === k} className={foto === k ? "on" : ""} onClick={() => setFoto(k)}><Ilustra n={arquivo} /><small>{n}</small></button>
         ))}
-        {tipo !== "carro" && tipo !== "nenhum" && <button type="button" role="radio" aria-checked={!String(foto).startsWith("data:")} className={!String(foto).startsWith("data:") ? "on" : ""} onClick={() => setFoto("")}><span className="emoji">{EMOJI[tipo]}</span><small>Ícone</small></button>}
+        {tipo === "moto" && <button type="button" role="radio" aria-checked={!propria} className={!propria ? "on" : ""} onClick={() => setFoto("auto")}><Ilustra n={FOTO_MOTO[2]} /><small>Desenho</small></button>}
+        {tipo === "bike" && <button type="button" role="radio" aria-checked={!propria} className={!propria ? "on" : ""} onClick={() => setFoto("auto")}><span className="emoji">{EMOJI[tipo]}</span><small>Ícone</small></button>}
         {tipo !== "nenhum" && <button type="button" role="radio" aria-checked={String(foto).startsWith("data:")} className={String(foto).startsWith("data:") ? "on" : ""} onClick={() => arq.current && arq.current.click()}>
           {String(foto).startsWith("data:") ? <img src={foto} alt="" /> : <span className="emoji"><I.camera /></span>}<small>Foto minha</small>
         </button>}
         <input ref={arq} type="file" accept="image/*" hidden onChange={escolherFoto} />
       </div>
+      {tipo === "carro" && !propria && <div className="transp-tipo-info" aria-live="polite">
+        {info ? <>
+          <b>{foto === "auto" ? "Pelo modelo, o seu é: " : ""}{info[1]}</b>
+          {info[3] ? <span>{info[3]} Ex.: {info[4]}.</span> : <span>Ainda não tenho o desenho desse tipo, então uso o mais parecido.</span>}
+        </> : <span>No automático, eu descubro o tipo do carro pelo modelo da FIPE (ou pelo apelido). Se preferir, toque no desenho que mais parece com o seu.</span>}
+      </div>}
       {erro && <div className="error">{erro}</div>}
       <div className="fields">
         <Field label="Apelido" htmlFor="v-nome"><input id="v-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder={tipo === "nenhum" ? "Ex.: Uber e metrô" : "Ex.: Meu Onix, Bolinha azul"} autoComplete="off" /></Field>
