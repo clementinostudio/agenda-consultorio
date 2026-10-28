@@ -170,11 +170,11 @@ export default {
       } catch (e) { return json({ erro: "ANP fora do ar" }, 502); }
     }
 
+    // Link de agendamento (a página do paciente usa GET para ver os horários): veja src/link.js
+    if (url.pathname.startsWith("/link/")) return rotaLink(req, env, url, json, ctx, async (id, aviso) => { const d = (await ler(env))[id]; if (d && valido(d.sub)) await enviar(env, d.sub, aviso); });
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     // Assinatura pelo Asaas (cobrança do app): veja src/asaas.js
     if (url.pathname.startsWith("/assinatura/") || url.pathname === "/asaas/webhook") return rotaAsaas(req, env, url, json, permitida);
-    // Link de agendamento: o paciente pede um horário; o aviso vai para o celular do profissional
-    if (url.pathname.startsWith("/link/")) return rotaLink(req, env, url, json, ctx, async (id, aviso) => { const d = (await ler(env))[id]; if (d && valido(d.sub)) await enviar(env, d.sub, aviso); });
 
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
 

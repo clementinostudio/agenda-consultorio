@@ -20,11 +20,19 @@ export function livresParaLink(db, cfg, horariosLivres, hoje) {
     .filter(d => d.h.length);
 }
 
-async function chamar(servidor, rota, corpo) {
-  const { data } = await (await cliente()).auth.getSession();
-  if (!data.session) throw new Error("Entre de novo na sua conta para continuar");
+// no computador (npm run dev), localStorage "avina-asaas-teste" = 1 testa sem login (o servidor de teste aceita o e-mail)
+const semLogin = conta => import.meta.env.DEV && !conta.uid && !!lerLocal("avina-asaas-teste", false);
+
+async function chamar(servidor, conta, rota, corpo) {
+  const headers = { "Content-Type": "application/json" };
+  if (semLogin(conta)) headers["X-Teste-Uid"] = conta.email;
+  else {
+    const { data } = await (await cliente()).auth.getSession();
+    if (!data.session) throw new Error("Entre de novo na sua conta para continuar");
+    headers.Authorization = `Bearer ${data.session.access_token}`;
+  }
   let r;
-  try { r = await fetch(`${servidor}/link/${rota}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` }, body: JSON.stringify(corpo) }); }
+  try { r = await fetch(`${servidor}/link/${rota}`, { method: "POST", headers, body: JSON.stringify(corpo) }); }
   catch (e) { throw new Error("Sem internet agora. Tente de novo em instantes."); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j.erro) throw new Error(j.erro || (r.status === 404 ? "O servidor ainda não tem o link de agendamento." : "O servidor não respondeu. Tente de novo."));
@@ -35,7 +43,7 @@ async function chamar(servidor, rota, corpo) {
 // "Link de agendamento" no Perfil (aí ganha o endereço); depois disso, cada mudança na agenda é publicada sozinha.
 export function useLinkAgendamento({ conta, db, setDb, servidor, horariosLivres, hoje, pushId, onEndereco, onPedidos }) {
   const pf = conta.perfil || {}, cfg = linkDo(pf);
-  const pode = !!(conta.uid && servidor) && pf.consultorio !== false;
+  const pode = !!((conta.uid || semLogin(conta)) && servidor) && pf.consultorio !== false;
   const kPub = `avina-link:${conta.email}`;
   const [erro, setErro] = useState("");
   const dados = pode ? {
@@ -51,7 +59,7 @@ export function useLinkAgendamento({ conta, db, setDb, servidor, horariosLivres,
     const d = ultimo.current; if (!d) return null;
     const txt = JSON.stringify(d), feito = lerLocal(kPub, {});
     if (!forcar && feito.txt === txt && feito.endereco) return feito.endereco;
-    const j = await chamar(servidor, "publicar", d);
+    const j = await chamar(servidor, conta, "publicar", d);
     gravarLocal(kPub, { txt, endereco: j.endereco, em: Date.now() });
     if (j.endereco && j.endereco !== cfg.endereco) onEndereco(j.endereco);
     setErro("");
@@ -71,7 +79,7 @@ export function useLinkAgendamento({ conta, db, setDb, servidor, horariosLivres,
     if (!pode || !cfg.endereco || buscando.current) return;
     buscando.current = true;
     try {
-      const { pedidos = [] } = await chamar(servidor, "pedidos", {});
+      const { pedidos = [] } = await chamar(servidor, conta, "pedidos", {});
       if (!pedidos.length) return;
       const vistos = lerLocal(kVistos, []);
       const novos = pedidos.filter(p => !vistos.includes(p.id));
@@ -88,7 +96,7 @@ export function useLinkAgendamento({ conta, db, setDb, servidor, horariosLivres,
         onPedidos(novos.length);
       }
       // já está guardado no app (e na nuvem): sai do servidor
-      await chamar(servidor, "pedidos", { recebi: pedidos.map(p => p.id) });
+      await chamar(servidor, conta, "pedidos", { recebi: pedidos.map(p => p.id) });
     } catch (e) { /* sem internet: tenta na próxima */ }
     finally { buscando.current = false; }
   };
