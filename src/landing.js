@@ -56,13 +56,23 @@ document.querySelectorAll("[data-cadastro]").forEach(f => f.addEventListener("su
 // 5. Demonstração da fala: escreve a frase, mostra o que o app entendeu e passa para a próxima
 const conversa = document.querySelector("[data-conversa]");
 if (conversa) {
-  const ex = [
-    // a logo da empresa vem do ícone do próprio site, como no app
-    { f: "gastei 30 reais no uber", t: "Uber", s: "Transporte · Hoje", v: "R$ 30,00", logo: "uber.com" },
-    { f: "Gustavo veio e pagou", t: "Gustavo Andrade", s: "Sessão marcada · pago", v: "✓", ic: "GA", cor: "#4A62FF" },
-    { f: "paguei 120 de luz ontem", t: "Luz", s: "Casa · Ontem", v: "R$ 120,00", ic: "⌂", cor: "#2F4AD9" },
-    { f: "remarca a Júlia pra quinta às 15h", t: "Júlia Prado", s: "Remarcada · qui às 15:00", v: "↻", ic: "JP", cor: "#8B6CFF" },
-  ];
+  // cada página tem os seus exemplos: data-conversa="pessoal" (Para você) ou "consultorio" (Para profissionais).
+  // A logo da empresa vem do ícone do próprio site, como no app
+  const EXEMPLOS = {
+    pessoal: [
+      { f: "gastei 30 reais no uber", t: "Uber", s: "Transporte · Hoje", v: "R$ 30,00", logo: "uber.com" },
+      { f: "paguei 120 de luz ontem", t: "Luz", s: "Casa · Ontem", v: "R$ 120,00", ic: "⌂", cor: "#2F4AD9" },
+      { f: "comprei 54,90 no ifood", t: "iFood", s: "Comida fora · Hoje", v: "R$ 54,90", logo: "ifood.com.br" },
+      { f: "recebi 200 de pix do Rafa", t: "Pix do Rafa", s: "Entrada · Hoje", v: "+R$ 200,00", ic: "R", cor: "#10A56F" },
+    ],
+    consultorio: [
+      { f: "Gustavo veio e pagou", t: "Gustavo Andrade", s: "Sessão marcada · pago", v: "✓", ic: "GA", cor: "#4A62FF" },
+      { f: "a Ana faltou", t: "Ana Souza", s: "Falta marcada · hoje", v: "✕", ic: "AS", cor: "#E0577A" },
+      { f: "remarca a Júlia pra quinta às 15h", t: "Júlia Prado", s: "Remarcada · qui às 15:00", v: "↻", ic: "JP", cor: "#8B6CFF" },
+      { f: "gastei 30 reais no uber", t: "Uber", s: "Transporte · Hoje", v: "R$ 30,00", logo: "uber.com" },
+    ],
+  };
+  const ex = EXEMPLOS[conversa.dataset.conversa] || EXEMPLOS.pessoal;
   const dito = conversa.querySelector("[data-dito]"), res = conversa.querySelector("[data-resultado]"), est = conversa.querySelector("[data-estado]");
   const $ = s => conversa.querySelector(s);
   let i = 0, rodando = false;
