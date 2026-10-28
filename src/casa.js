@@ -115,6 +115,15 @@ export function useCasa(conta, db, setDb) {
     if (!nuvem) { setLocal(() => null); return; }
     await rpc("sair_da_casa", {}); guardar(null); setSt("sem");
   };
+  // só quem criou a casa muda o nome (a regra da nuvem confere)
+  const renomear = async nome => {
+    const n = String(nome || "").trim().slice(0, 60); if (!n) return;
+    if (!nuvem) { setLocal(c => ({ ...c, nome: n })); return; }
+    const sb = sbRef.current || (sbRef.current = await cliente());
+    const { error } = await sb.from("casas").update({ nome: n }).eq("id", dados.casa.id);
+    if (error) throw error;
+    guardar({ ...dados, casa: { ...dados.casa, nome: n } });
+  };
   const tirar = async uid => {
     if (!nuvem) { setLocal(c => ({ ...c, membros: c.membros.filter(m => m.id !== uid) })); return; }
     await rpc("tirar_da_casa", { p_user: uid }); await carregar();
@@ -127,6 +136,6 @@ export function useCasa(conta, db, setDb) {
     casa: atual && atual.casa, membros: (atual && atual.membros) || [],
     lanc: lista("lanc"), acertos: lista("acerto"), contas: lista("conta"), compras: lista("compra"),
     config: lista("config").find(x => x.id === "divisao") || { id: "divisao", modo: "igual" },
-    salvar, apagar, criar, convidar, verConvite, entrar, sair, tirar, simularEntrada, recarregar: () => nuvem && carregar().catch(() => {}),
+    salvar, apagar, criar, convidar, verConvite, entrar, sair, tirar, renomear, simularEntrada, recarregar: () => nuvem && carregar().catch(() => {}),
   };
 }

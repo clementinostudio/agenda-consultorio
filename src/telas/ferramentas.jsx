@@ -40,13 +40,14 @@ async function leitorNativoQR() {
   catch (e) { NATIVO_QR = null; }
   return NATIVO_QR;
 }
-// fonte: canvas (quadro da câmera) ou arquivo de foto
+// fonte: canvas (quadro da câmera) ou arquivo de foto. Devolve todos os QR codes achados
+// (o cupom às vezes tem outro QR além do da nota: Pix, promoção, Instagram da loja).
 export async function lerQRs(fonte) {
   const nat = await leitorNativoQR();
   if (nat) { try { const r = await nat.detect(fonte instanceof Blob ? await createImageBitmap(fonte) : fonte); if (r.length) return r.map(x => x.rawValue); } catch (e) {} }
   const zx = await leitorZxing();
   const img = fonte instanceof HTMLCanvasElement ? fonte.getContext("2d").getImageData(0, 0, fonte.width, fonte.height) : fonte;
-  const r = await zx.readBarcodes(img, { formats: ["QRCode"], tryHarder: true, maxNumberOfSymbols: 1 });
+  const r = await zx.readBarcodes(img, { formats: ["QRCode"], tryHarder: true, tryInvert: true, tryDownscale: true, maxNumberOfSymbols: 4 });
   return r.filter(x => x.isValid !== false).map(x => x.text);
 }
 

@@ -21,7 +21,9 @@ function Onboarding({ conta, onDone, onSair }) {
   const [nome, setNome] = useState(conta.nome || "");
   const [foto, setFoto] = useState(conta.foto || null);
   const [nasc, setNasc] = useState(p0.nascimento || "");
-  const [uso, setUso] = useState(p0.consultorio === false ? "pessoal" : p0.pessoal === false ? "consultorio" : p0.pessoal ? "tudo" : "");
+  // veio por um convite para a casa? A casa fica no lado pessoal, então ele já vem escolhido
+  const [convidado] = useState(() => { try { return !!localStorage.getItem("agenda-convite-casa"); } catch (e) { return false; } });
+  const [uso, setUso] = useState(p0.consultorio === false ? "pessoal" : p0.pessoal === false ? "consultorio" : p0.pessoal ? "tudo" : convidado ? "pessoal" : "");
   const [prof, setProf] = useState(p0.profissao ? (PROFISSOES.some(x => x.id === p0.profissao) ? p0.profissao : "Outra") : "");
   const [outra, setOutra] = useState(p0.profissao && !PROFISSOES.some(x => x.id === p0.profissao) ? p0.profissao : "");
   const [termo, setTermo] = useState(p0.termo || "");
@@ -58,11 +60,12 @@ function Onboarding({ conta, onDone, onSair }) {
         <div className="hint">No dia do seu aniversário o app fica mais leve com você.</div></> },
     { id: "uso", q: "Como você vai usar o Avina?", why: "Assim eu mostro só o que faz sentido pra você. Dá pra mudar depois no Perfil.",
       valida: () => uso ? "" : "Escolha uma opção.",
-      body: <div className="ob-usos">{USOS.map(([k, t, s, ilu]) => (
+      body: <><div className="ob-usos">{USOS.map(([k, t, s, ilu]) => (
         <button key={k} type="button" className={"ob-uso" + (uso === k ? " on" : "")} aria-pressed={uso === k} onClick={() => { setUso(k); vibrar("toque"); }}>
           <Ilustra n={ilu} /><span><b>{t}</b><small>{s}</small></span>{uso === k && <i><I.check /></i>}
         </button>
-      ))}</div> },
+      ))}</div>
+        {convidado && <div className="hint">Você veio por um convite: a casa fica na parte de <b>vida pessoal</b>, e entrar nela é grátis. Se também atende, escolha “Consultório e vida pessoal”.</div>}</> },
     ...(consult ? [
       { id: "area", q: "Qual é a sua área?", why: "Assim eu uso as palavras certas da sua profissão.",
         valida: () => !profissao ? (prof === "Outra" ? "Escreva sua área." : "Escolha uma opção.") : !termo ? "Diga como chama quem você atende." : "",

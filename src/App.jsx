@@ -2148,7 +2148,9 @@ function AreaChart({ serie, cor }) {
    Com a nuvem ligada (src/nuvem.js), o login é de verdade (Supabase Auth). Sem ela, fica só no aparelho.
    ========================================================= */
 function Auth({ onLogin, emailInicial, aviso }) {
-  const [modo, setModo] = useState(() => location.hash === "#criar" ? "criar" : "entrar"); // entrar | criar | esqueci
+  // chegou por um convite para a casa (#casa=...): o convite fica guardado e abre depois de entrar
+  const [convite] = useState(() => { try { return !!localStorage.getItem("agenda-convite-casa"); } catch (e) { return false; } });
+  const [modo, setModo] = useState(() => location.hash === "#criar" || (convite && !emailInicial) ? "criar" : "entrar"); // entrar | criar | esqueci
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState(() => { if (emailInicial) return emailInicial; const daApresentacao = new URLSearchParams(location.search).get("email"); if (daApresentacao) return daApresentacao; try { const e = sessionStorage.getItem("agenda-email") || ""; sessionStorage.removeItem("agenda-email"); return e; } catch (x) { return ""; } });
   const [senha, setSenha] = useState("");
@@ -2212,7 +2214,7 @@ function Auth({ onLogin, emailInicial, aviso }) {
       <div className="auth-h">
         <div className="hi">{criar ? "Vamos começar!" : esqueci ? "Acontece!" : "Que bom te ver!"}</div>
         <h1>{criar ? "Criar conta" : esqueci ? "Nova senha" : "Entrar"}</h1>
-        <p>{criar ? "Leva menos de um minuto." : esqueci ? "Coloque seu e-mail e eu mando um link para criar outra senha." : aviso || "Sua agenda, seus pagamentos e suas contas num lugar só."}</p>
+        <p>{convite && !esqueci ? "Você foi convidado(a) para dividir as contas de uma casa no Avina." : criar ? "Leva menos de um minuto." : esqueci ? "Coloque seu e-mail e eu mando um link para criar outra senha." : aviso || "Sua agenda, seus pagamentos e suas contas num lugar só."}</p>
       </div>
       <form className="stack" onSubmit={enviar} noValidate>
         <div className="fields">
@@ -2222,6 +2224,7 @@ function Auth({ onLogin, emailInicial, aviso }) {
         </div>
         {erro && <div className="error" role="alert">{erro.t} {erro.b && <button type="button" onClick={erro.fn} style={{ color: "var(--accent-ink)", fontWeight: 800, textDecoration: "underline" }}>{erro.b}</button>}</div>}
         {ok && <div className="auth-ok" role="status"><I.mail /> {ok}</div>}
+        {convite && !esqueci && !ok && <div className="auth-ok auth-convite" role="status"><I.users /> <span>{criar ? "Crie sua conta (é grátis) e o convite abre em seguida. Quem entra numa casa não paga nada para usar a casa." : "Entre com a sua conta e o convite abre em seguida."}</span></div>}
         <button className="btn" type="submit" disabled={indo}>{indo ? "Um instante…" : criar ? "Criar minha conta" : esqueci ? "Mandar o link" : "Entrar"}</button>
         {criar && <div className="hint auth-termos">Ao criar a conta, você concorda com os <a href={`${BASE}termos/`} target="_blank" rel="noopener">Termos de uso</a> e a <a href={`${BASE}privacidade/`} target="_blank" rel="noopener">Política de privacidade</a>.</div>}
         {esqueci ? <button className="btn ghost" type="button" onClick={() => trocar("entrar")}>Voltar para entrar</button>
@@ -4618,7 +4621,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "casa-nota-ver" && <Suspense fallback={null}><NotaVerSheet key={sheet.n} lanc={sheet.lanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "casa-conta" && <Suspense fallback={null}><ContaCasaSheet key={sheet.n} casa={casa} inicial={sheet.inicial} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "casa-trazer" && <Suspense fallback={null}><TrazerGastosSheet key={sheet.n} casa={casa} db={db} ids0={sheet.ids} onClose={close} act={act} /></Suspense>}
-      {sheet && sheet.type === "convite-casa" && <Suspense fallback={null}><ConviteCasaSheet casa={casa} token={sheet.token} onClose={close} onEntrou={() => { notify("Você entrou na casa!"); act.abrirCasa(); }} /></Suspense>}
+      {sheet && sheet.type === "convite-casa" && <Suspense fallback={null}><ConviteCasaSheet casa={casa} token={sheet.token} onClose={close} onEntrou={() => {
+        // a casa fica no lado pessoal: quem só usava o consultório passa a ver os dois
+        if (!usaPessoal) onAtualizar({ perfil: { ...perfil, pessoal: true } });
+        notify("Você entrou na casa!"); act.abrirCasa();
+      }} /></Suspense>}
       {sheet && sheet.type === "veiculo" && <Suspense fallback={null}><VeiculoSheet key={sheet.id || "novo"} veiculo={sheet.id && sheet.id !== "novo" ? veiculosDe(db).find(x => x.id === sheet.id) || null : sheet.id === "novo" ? null : veiculosDe(db)[0] || null} db={db} onSave={act.salvarVeiculo} onDelete={act.removerVeiculo} onClose={close} /></Suspense>}
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}

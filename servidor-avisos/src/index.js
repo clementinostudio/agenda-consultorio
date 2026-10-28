@@ -16,6 +16,7 @@
   a IA só para de responder até o dia seguinte (nunca gera cobrança). Nada fica guardado.
 */
 import { rotaAsaas, usarCotaIA } from "./asaas.js";
+import { rotaLink } from "./link.js";
 
 const CHAVE = "dados"; // tudo fica numa chave só do KV (um app pessoal, poucos aparelhos)
 const enc = new TextEncoder();
@@ -172,20 +173,60 @@ export default {
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     // Assinatura pelo Asaas (cobrança do app): veja src/asaas.js
     if (url.pathname.startsWith("/assinatura/") || url.pathname === "/asaas/webhook") return rotaAsaas(req, env, url, json, permitida);
+    // Link de agendamento: o paciente pede um horário; o aviso vai para o celular do profissional
+    if (url.pathname.startsWith("/link/")) return rotaLink(req, env, url, json, ctx, async (id, aviso) => { const d = (await ler(env))[id]; if (d && valido(d.sub)) await enviar(env, d.sub, aviso); });
 
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
 
     // Nota fiscal do mercado (NFC-e): o QR code aponta para a página da Sefaz com os itens e os preços.
     // O servidor só busca a página (o navegador não pode, por CORS) e devolve como veio; quem lê é o aparelho.
-    // Só aceita endereços da Sefaz (.gov.br), para não virar uma porta aberta para qualquer site.
+    // Só aceita endereços do governo (.gov.br) com a chave da nota (44 números), para não virar uma porta aberta.
+    // Cada estado faz de um jeito: redireciona guardando cookie de sessão, abre a nota dentro de um iframe,
+    // ou tem certificado que falha em https. Por isso segue tudo isso aqui (até 6 passos), sempre dentro do .gov.br.
     if (url.pathname === "/nfce") {
       if (!permitida) return json({ erro: "Origem não permitida" }, 403);
       let alvo; try { alvo = new URL(limpar(b.url, 1500)); } catch (e) { return json({ erro: "Endereço inválido" }, 400); }
-      if (!/^https?:$/.test(alvo.protocol) || !/\.gov\.br$/i.test(alvo.hostname) || !/(fazenda|sefaz|nfce|nfe|sped|sef)/i.test(alvo.hostname)) return json({ erro: "Esse QR code não é de uma nota da Sefaz" }, 400);
+      const doGoverno = u => /^https?:$/.test(u.protocol) && /\.gov\.br$/i.test(u.hostname);
+      if (!doGoverno(alvo) || !/\d{44}/.test(decodeURIComponent(alvo.search))) return json({ erro: "Esse QR code não é de uma nota da Sefaz" }, 400);
+      const cab = { "User-Agent": "Mozilla/5.0 (Linux; Android 14; SM-A546E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36", Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.5" };
+      const biscoitos = {}, prazo = Date.now() + 20000; // 20 s no total: Sefaz lenta vira "tire uma foto"
+      const pedir = async u => {
+        const h = { ...cab }; const bc = Object.entries(biscoitos).map(([k, v]) => `${k}=${v}`).join("; "); if (bc) h.Cookie = bc;
+        const sinal = () => AbortSignal.timeout(Math.max(500, prazo - Date.now()));
+        let r;
+        try { r = await fetch(u.toString(), { redirect: "manual", headers: h, signal: sinal() }); }
+        catch (e) { // certificado ou conexão falhou (não demora): tenta pelo outro protocolo
+          if (Date.now() >= prazo - 1000) throw e;
+          const outro = new URL(u.toString()); outro.protocol = u.protocol === "https:" ? "http:" : "https:";
+          r = await fetch(outro.toString(), { redirect: "manual", headers: h, signal: sinal() }); u = outro;
+        }
+        const sc = r.headers.getSetCookie ? r.headers.getSetCookie() : (r.headers.get("set-cookie") || "").split(/,(?=\s*[\w.-]+=)/);
+        sc.forEach(c => { const m = String(c).match(/^\s*([^=;\s]+)=([^;]*)/); if (m) biscoitos[m[1]] = m[2]; });
+        return { r, u };
+      };
       try {
-        const pag = await fetch(alvo.toString(), { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36", Accept: "text/html,application/xhtml+xml" } });
-        if (!pag.ok) return json({ erro: "A Sefaz não respondeu" }, 502);
-        return new Response(pag.body, { headers: { ...cors, "Content-Type": pag.headers.get("content-type") || "text/html", "Cache-Control": "private, max-age=600" } });
+        let atual = alvo, buf = null, tipo = "text/html";
+        for (let passo = 0; passo < 6; passo++) {
+          const { r, u } = await pedir(atual); atual = u;
+          const loc = r.headers.get("location");
+          if (r.status >= 300 && r.status < 400 && loc) { const prox = new URL(loc, atual); if (!doGoverno(prox)) break; atual = prox; continue; }
+          if (!r.ok) return json({ erro: "A Sefaz não respondeu" }, 502);
+          tipo = r.headers.get("content-type") || "text/html";
+          buf = await r.arrayBuffer();
+          // só para procurar links (são ASCII): quem decodifica de verdade é o aparelho, que conhece todas as codificações
+          const html = new TextDecoder("utf-8").decode(buf).replace(/<!--[\s\S]*?-->/g, "");
+          if (/txtTit|C[óo]digo:|Vl\.?\s*Unit|Valor total/i.test(html)) break; // a nota já está aqui
+          // a nota está dentro de um iframe/frame, num "meta refresh" ou num location.href do JavaScript?
+          const dentro = [...html.matchAll(/<i?frame[^>]+src=["']?([^"'\s>]+)/gi)].map(m => m[1]).find(s => /\d{44}|qrcode|nfce|danfe|consulta/i.test(s))
+            || (html.match(/http-equiv=["']?refresh["']?[^>]*url=([^"'>\s]+)/i) || [])[1]
+            || (html.length < 4000 ? (html.match(/(?:window\.|document\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/i) || [])[1] : "");
+          if (!dentro) break;
+          let prox; try { prox = new URL(dentro.replace(/&amp;/g, "&"), atual); } catch (e) { break; }
+          if (!doGoverno(prox) || prox.toString() === atual.toString()) break;
+          atual = prox;
+        }
+        if (!buf) return json({ erro: "A Sefaz não respondeu" }, 502);
+        return new Response(buf, { headers: { ...cors, "Content-Type": tipo, "X-Nfce-Url": atual.toString(), "Access-Control-Expose-Headers": "X-Nfce-Url", "Cache-Control": "private, max-age=600" } });
       } catch (e) { return json({ erro: "A Sefaz não respondeu" }, 502); }
     }
 

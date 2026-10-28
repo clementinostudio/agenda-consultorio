@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, ConfirmButton, iniciais, CATEGORIAS, catDe, catVars, CatIcon, TopBar, useCamada } from "../App.jsx";
 import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
-import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja } from "../nota.js";
+import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja } from "../nota.js";
 import { lerQRs } from "./ferramentas.jsx";
 
 const VAGAS = ["Parceiro(a)", "Mãe ou pai", "Filho(a)", "Amigo(a)"];
@@ -22,6 +22,7 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
   const [link, setLink] = useState("");
   const [off, setOff] = useState(0);
   const [ocupado, setOcupado] = useState(""), [erro, setErro] = useState("");
+  const [novoNome, setNovoNome] = useState(null); // null = não está mudando o nome
   const faz = async (k, fn) => { setOcupado(k); setErro(""); try { await fn(); } catch (e) { setErro(erroDe(e)); vibrar("erro"); } setOcupado(""); };
 
   if (!C.casa) return (
@@ -37,6 +38,7 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
                 <li><b>O app divide</b>, igual ou pela renda de cada um, e mostra quem deve quanto.</li>
                 <li><b>Contas, lista de compras e gráficos</b> da casa num lugar só.</li>
                 <li><b>Você escolhe</b> quais gastos seus vão para a casa. O resto continua só seu.</li>
+                <li><b>De graça para todos:</b> quem você convidar não paga nada para usar a casa.</li>
               </ul>
             </div>
             <div className="fields"><Field label="Nome da casa" htmlFor="c-nome"><input id="c-nome" value={nomeCasa} onChange={e => setNomeCasa(e.target.value)} placeholder="Ex.: Nossa casa, Apê" maxLength={60} /></Field></div>
@@ -57,9 +59,11 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
   const sozinho = C.membros.length < 2;
   const convidar = () => faz("convite", async () => {
     const url = await C.convidar(); setLink(url);
-    const texto = `${conta.nome} te chamou para dividir as contas da casa "${C.casa.nome}" no Avina:`;
-    if (navigator.share && C.nuvem) { try { await navigator.share({ title: "Convite para a casa", text: texto, url }); } catch (e) {} }
+    if (navigator.share && C.nuvem) { try { await navigator.share({ title: "Convite para a casa", text: textoConvite(), url }); } catch (e) {} }
   });
+  const textoConvite = () => `${conta.nome} te chamou para dividir as contas da casa "${C.casa.nome}" no Avina. É grátis: abra o link, crie sua conta e você entra na casa.`;
+  const mandarZap = () => window.open(`https://wa.me/?text=${encodeURIComponent(`${textoConvite()}
+${link}`)}`, "_blank", "noopener");
   const acertar = d => faz("acerto", async () => { await C.salvar("acerto", { de: d.de, para: d.para, valor: d.valor, data: todayISO(), criado: Date.now(), autor: C.eu }); vibrar("ok"); act.toast(`Acertado: ${brlReal(d.valor)}`); });
   // lembrete educado pelo WhatsApp (abre o WhatsApp com a mensagem pronta; a pessoa escolhe o contato)
   const lembrar = d => {
@@ -90,11 +94,11 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
             {C.membros.length < MAX_PESSOAS && (
               <button className="casa-convite" onClick={convidar} disabled={ocupado === "convite"}>
                 <span className="ic"><I.share /></span>
-                <span className="tx"><b>{ocupado === "convite" ? "Criando o link…" : "Convidar por link"}</b><small>Mande pelo WhatsApp. Quem abrir entra na casa (vale 7 dias).</small></span>
+                <span className="tx"><b>{ocupado === "convite" ? "Criando o link…" : "Convidar por link"}</b><small>Mande pelo WhatsApp. Quem abrir entra na casa, de graça (o link vale 7 dias).</small></span>
                 <I.chev />
               </button>
             )}
-            {link && <div className="casa-link"><span>{link}</span><button className="bub-act" onClick={() => { try { navigator.clipboard.writeText(link); act.toast("Link copiado"); } catch (e) {} }}>Copiar</button></div>}
+            {link && <div className="casa-link"><span>{link}</span><button className="bub-act" onClick={() => { try { navigator.clipboard.writeText(link); act.toast("Link copiado"); } catch (e) {} }}>Copiar</button>{C.nuvem && <button className="bub-act" onClick={mandarZap}>WhatsApp</button>}</div>}
             {!C.nuvem && link && C.membros.length < MAX_PESSOAS && <button className="link" onClick={C.simularEntrada}>Demonstração: simular alguém aceitando o convite</button>}
             {erro && <div className="error">{erro}</div>}
           </section>
@@ -153,6 +157,13 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
           {!sozinho && <ComoDividem C={C} />}
 
           <div className="casa-fim">
+            {souDono && (novoNome === null
+              ? <button className="link" onClick={() => setNovoNome(C.casa.nome)}>Mudar o nome da casa</button>
+              : <form className="nota-link" onSubmit={e => { e.preventDefault(); faz("nome", async () => { await C.renomear(novoNome); setNovoNome(null); act.toast("Nome da casa mudado"); }); }}>
+                  <input value={novoNome} onChange={e => setNovoNome(e.target.value)} maxLength={60} aria-label="Nome da casa" autoFocus />
+                  <button type="submit" className="bub-act" disabled={!novoNome.trim() || ocupado === "nome"}>Salvar</button>
+                  <button type="button" className="bub-act" onClick={() => setNovoNome(null)}>Cancelar</button>
+                </form>)}
             {souDono && C.membros.filter(m => m.id !== C.eu).map(m => <ConfirmButton key={m.id} label={`Tirar ${m.nome} da casa`} titulo={`Tirar ${m.nome}?`} texto="A pessoa deixa de ver os gastos da casa. O que ela anotou continua." acao="Tirar" onConfirm={() => faz("tirar", () => C.tirar(m.id))} />)}
             <ConfirmButton label="Sair da casa" titulo="Sair da casa?" texto={sozinho ? "A casa e os gastos dela somem." : souDono ? "Você deixa de ver os gastos da casa. Quem entrou primeiro passa a cuidar dela." : "Você deixa de ver os gastos da casa."} acao="Sair" onConfirm={() => faz("sair", () => C.sair())} />
           </div>
@@ -370,70 +381,114 @@ function MercadoCasa({ C, act }) {
   );
 }
 
-/* ---------- ler a nota do mercado: QR code (mais preciso), foto (a IA lê) ou o link ---------- */
+/* ---------- ler a nota do mercado: QR code (mais preciso), foto (a IA lê), link ou chave de acesso ---------- */
+// Por que nem toda nota lê pelo QR: cada estado tem a sua página na Sefaz. Algumas pedem "não sou robô" ou só
+// abrem no navegador; aí nenhum app consegue ler sozinho. Nesses casos a foto da nota (a IA lê) é o caminho.
+const MOTIVOS = {
+  captcha: uf => `A Sefaz${uf ? ` de ${uf}` : ""} pede “não sou robô” e não deixa nenhum app ler a nota sozinho. Pela foto eu leio.`,
+  js: uf => `A página da Sefaz${uf ? ` de ${uf}` : ""} só abre no navegador, e eu não consigo ler os itens dela. Pela foto eu leio.`,
+  "ainda-nao": () => "Essa nota ainda não chegou na Sefaz (acontece logo depois da compra, ou quando o caixa estava sem internet). Tente pelo QR mais tarde, ou leia pela foto agora.",
+};
 export function NotaSheet({ casa: C, servidor, onClose, act }) {
   const [etapa, setEtapa] = useState("escolher"); // escolher | camera | lendo | revisar
-  const [nota, setNota] = useState(null), [erro, setErro] = useState(""), [link, setLink] = useState("");
+  const [nota, setNota] = useState(null), [erro, setErro] = useState(null), [link, setLink] = useState(""), [lendo, setLendo] = useState("");
+  const [dica, setDica] = useState(""), [luz, setLuz] = useState(null); // luz: null = aparelho sem lanterna
   const [pagou, setPagou] = useState(C.eu), [modo, setModo] = useState("dividir");
   const video = React.useRef(null), stream = React.useRef(null), vivo = React.useRef(true), fotoRef = React.useRef(null);
-  const parar = () => { if (stream.current) stream.current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} }); stream.current = null; };
-  useEffect(() => () => { vivo.current = false; parar(); }, []);
-  const falhou = m => { setErro(m); setEtapa("escolher"); vibrar("erro"); };
-  const pronto = n => { if (!n.itens.length) return falhou("Não achei os itens dessa nota. Tente pela foto, com a nota inteira e reta."); setNota(n); setEtapa("revisar"); vibrar("ok"); };
-  // QR code: o servidor busca a página da Sefaz e o aparelho lê os itens
-  const buscar = async url => {
-    if (!servidor) return falhou("Para ler a nota, ligue o servidor de avisos (Perfil → Avisos).");
-    if (!ehLinkNfce(url)) return falhou("Esse QR code não é de uma nota fiscal. Procure o QR code no fim da nota.");
-    setEtapa("lendo"); setErro("");
+  const parar = () => { if (stream.current) stream.current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} }); stream.current = null; setLuz(null); };
+  useEffect(() => { vivo.current = true; return () => { vivo.current = false; parar(); }; }, []);
+  // erro: { t: texto, foto: mostra o botão de tirar foto, sefaz: link para abrir a nota no site da Sefaz }
+  const falhou = (t, extra = {}) => { if (!vivo.current) return; setErro({ t, ...extra }); setEtapa("escolher"); vibrar("erro"); };
+  const pronto = n => { if (!n.itens.length) return falhou("Não achei os itens dessa nota. Tire a foto de perto, com a nota inteira e reta.", { foto: true }); setNota(n); setEtapa("revisar"); vibrar("ok"); };
+
+  // foto: a IA lê a nota inteira (motivo: por que caiu aqui em vez do QR)
+  const pelaIA = async (f, motivo) => {
+    if (!servidor) return falhou("Para ler a foto da nota, ligue o servidor de avisos (Perfil → Avisos).");
+    setEtapa("lendo"); setLendo(motivo || "");
     try {
-      const r = await fetch(`${servidor}/nfce`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); return falhou(j.erro ? `${j.erro}. Tente pela foto da nota.` : "A Sefaz não respondeu. Tente pela foto da nota."); }
-      const buf = await r.arrayBuffer(), ct = r.headers.get("content-type") || "";
-      let cs = (ct.match(/charset=([\w-]+)/i) || [])[1];
-      let html = new TextDecoder(cs || "utf-8").decode(buf);
-      if (!cs) { const m = html.match(/<meta[^>]+charset=["']?([\w-]+)/i); if (m && !/utf-?8/i.test(m[1])) html = new TextDecoder(m[1]).decode(buf); }
-      const n = lerPaginaNfce(html);
-      if (!n.itens.length) return falhou(n.recusa ? `A Sefaz respondeu: “${n.recusa}”. Confira se o QR code está inteiro, ou tire uma foto da nota que a IA lê.` : "Esse estado mostra a nota de um jeito que eu ainda não leio. Tire uma foto da nota que a IA lê.");
-      pronto({ ...n, fonte: "qr", url });
-    } catch (e) { falhou("Não consegui buscar a nota. Confira a internet ou tente pela foto."); }
+      const imagem = await reduzirFoto(f, 1400, 0.72);
+      const r = await fetch(`${servidor}/ler-nota`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imagem, hoje: todayISO() }), signal: AbortSignal.timeout(60000) });
+      const j = await r.json().catch(() => ({}));
+      if (j.erro === "limite") return falhou(j.nivel === "pro" ? "Você usou bastante a leitura por foto hoje. Amanhã renova. Pelo QR code continua funcionando." : "As leituras por foto de hoje acabaram (no Avina Pro é à vontade). Pelo QR code continua funcionando, ou anote só o total.");
+      if (!r.ok || !j.nota) return falhou("Não consegui ler a foto. Tire de perto, com boa luz e a nota inteira e reta.", { foto: true });
+      pronto({ ...arrumarNotaIA(j.nota), fonte: "foto", foto: await reduzirFoto(f, 800, 0.55) });
+    } catch (e) { falhou("Não consegui ler a foto. Confira a internet e tente de novo.", { foto: true }); }
   };
+
+  // QR code: o servidor busca a página da Sefaz e o aparelho lê os itens.
+  // Se a Sefaz não deixar e houver uma foto (o QR veio de uma foto), a IA lê a mesma foto, sem pedir de novo.
+  const buscar = async (texto, arquivo) => {
+    const q = lerTextoNota(texto);
+    if (q.erro) return falhou(q.erro === "chave" ? "O QR code saiu cortado ou borrado (a chave da nota não confere). Tente de novo, mais de perto e com a nota esticada." : "Esse QR code não é o da nota fiscal. Procure o do fim do cupom, perto de “Consulte pela chave de acesso”.");
+    if (!servidor) return falhou("Para ler a nota, ligue o servidor de avisos (Perfil → Avisos).");
+    const uf = ufDaChave(q.chave);
+    setEtapa("lendo"); setLendo(""); setErro(null);
+    let motivo = "", extra = { foto: true };
+    try {
+      const r = await fetch(`${servidor}/nfce`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: q.url }), signal: AbortSignal.timeout(30000) });
+      if (r.ok) {
+        const buf = await r.arrayBuffer(), ct = r.headers.get("content-type") || "";
+        const cs = (ct.match(/charset=([\w-]+)/i) || [])[1];
+        let html; try { html = new TextDecoder(cs || "utf-8").decode(buf); } catch (e) { html = new TextDecoder("utf-8").decode(buf); }
+        if (!cs) { const m = html.match(/<meta[^>]+charset=["']?([\w-]+)/i); if (m && !/utf-?8/i.test(m[1])) { try { html = new TextDecoder(m[1]).decode(buf); } catch (e) {} } }
+        const n = lerPaginaNfce(html);
+        if (n.itens.length) return pronto({ ...n, fonte: "qr", url: q.url });
+        motivo = MOTIVOS[n.bloqueio] ? MOTIVOS[n.bloqueio](uf) : n.recusa ? `A Sefaz${uf ? ` de ${uf}` : ""} respondeu: “${n.recusa}”.` : `Não reconheci a página da Sefaz${uf ? ` de ${uf}` : ""}. Pela foto eu leio.`;
+        if (n.bloqueio === "js" || n.bloqueio === "captcha") extra.sefaz = q.url;
+      } else motivo = `A Sefaz${uf ? ` de ${uf}` : ""} não respondeu agora. Pela foto eu leio.`;
+    } catch (e) { motivo = "Não consegui falar com a Sefaz. Confira a internet, ou leia pela foto."; }
+    if (arquivo) return pelaIA(arquivo, motivo.replace(/ Pela foto eu leio\.$/, "") + " Lendo pela foto…");
+    falhou(motivo, extra);
+  };
+
   const abrirCamera = async () => {
-    setErro(""); setEtapa("camera");
+    setErro(null); setDica(""); setEtapa("camera");
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
       if (!vivo.current) { s.getTracks().forEach(t => t.stop()); return; }
       stream.current = s; const v = video.current; v.srcObject = s; v.setAttribute("playsinline", ""); await v.play().catch(() => {});
+      try { const cap = s.getVideoTracks()[0].getCapabilities(); if (cap && cap.torch) setLuz(false); } catch (e) {}
       const tela = document.createElement("canvas");
+      let n = 0, ruins = 0, outros = 0;
       const passo = async () => {
         if (!vivo.current || !stream.current) return;
         try {
-          if (v.videoWidth) { tela.width = v.videoWidth; tela.height = v.videoHeight; tela.getContext("2d", { willReadFrequently: true }).drawImage(v, 0, 0); const t = (await lerQRs(tela)).find(ehLinkNfce); if (t) { parar(); return buscar(t); } }
+          if (v.videoWidth) {
+            // um quadro inteiro, outro só o meio (o QR do cupom é pequeno e denso: recortado, o leitor enxerga melhor)
+            const W = v.videoWidth, H = v.videoHeight, meio = n++ % 2 === 1, lado = Math.round(Math.min(W, H) * 0.7);
+            const ctx = tela.getContext("2d", { willReadFrequently: true });
+            if (meio) { tela.width = lado; tela.height = lado; ctx.drawImage(v, (W - lado) / 2, (H - lado) / 2, lado, lado, 0, 0, lado, lado); }
+            else { tela.width = W; tela.height = H; ctx.drawImage(v, 0, 0); }
+            const lidos = (await lerQRs(tela)).map(t => ({ t, q: lerTextoNota(t) }));
+            const bom = lidos.find(x => x.q.url);
+            if (bom) { parar(); vibrar("toque"); return buscar(bom.t); }
+            // leu algo, mas não serve: avisa o porquê (sem parar a câmera)
+            if (lidos.some(x => x.q.erro === "chave") && ++ruins >= 2) setDica("Quase! Chegue um pouco mais perto e segure firme");
+            else if (lidos.length && ++outros >= 3) setDica("Esse é outro QR code. Procure o do fim da nota");
+          }
         } catch (e) {}
-        setTimeout(passo, 220);
+        setTimeout(passo, 200);
       };
       passo();
-    } catch (e) { parar(); falhou(e && e.name === "NotAllowedError" ? "A câmera não foi liberada. Use a foto da nota." : "Não consegui abrir a câmera. Use a foto da nota."); }
+    } catch (e) { parar(); falhou(e && e.name === "NotAllowedError" ? "A câmera não foi liberada. Use a foto da nota." : "Não consegui abrir a câmera. Use a foto da nota.", { foto: true }); }
   };
-  // foto: primeiro procura o QR code nela; se não tiver, a IA lê a nota inteira
+  const lanterna = async () => { const t = stream.current && stream.current.getVideoTracks()[0]; if (!t) return; try { await t.applyConstraints({ advanced: [{ torch: !luz }] }); setLuz(!luz); } catch (e) {} };
+  // foto: primeiro procura o QR code nela (mais preciso); se não tiver, ou a Sefaz não deixar, a IA lê a nota inteira
   const daFoto = async e => {
     const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return;
-    setErro(""); setEtapa("lendo");
-    try { const t = (await lerQRs(f)).find(ehLinkNfce); if (t) return buscar(t); } catch (e2) {}
-    if (!servidor) return falhou("Para ler a foto da nota, ligue o servidor de avisos (Perfil → Avisos).");
-    try {
-      const imagem = await reduzirFoto(f, 1400, 0.72);
-      const r = await fetch(`${servidor}/ler-nota`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imagem, hoje: todayISO() }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.nota) return falhou((j.erro || "Não consegui ler a nota") + ". Tire de perto, com boa luz e a nota inteira.");
-      pronto({ ...arrumarNotaIA(j.nota), fonte: "foto", foto: await reduzirFoto(f, 800, 0.55) });
-    } catch (e2) { falhou("Não consegui ler a foto. Tente de novo, com boa luz."); }
+    parar(); setErro(null); setEtapa("lendo"); setLendo("");
+    let t = null; try { t = (await lerQRs(f)).find(ehLinkNfce); } catch (e2) {}
+    if (t) return buscar(t, f);
+    pelaIA(f);
   };
+  const tirarFoto = () => fotoRef.current && fotoRef.current.click();
+  const tirar = i => setNota(n => { const it = n.itens[i]; return { ...n, itens: n.itens.filter((_, k) => k !== i), total: Math.max(0, Math.round((n.total - it.valor) * 100) / 100) }; });
   const lista = C.compras;
   const naNota = nota ? lista.filter(x => nota.itens.some(i => combina(x.texto, i.nome))) : [];
   const ficou = nota ? lista.filter(x => !x.feito && !naNota.includes(x)) : [];
   const salvar = async () => {
     const parts = modo === "dividir" ? C.membros.map(m => m.id) : [pagou];
-    const { _tr, ...n } = nota;
+    const { _tr, recusa, bloqueio, ...n } = nota;
     await C.salvar("lanc", { valor: n.total, desc: nomeLoja(n.loja) || "Mercado", cat: "mercado", data: n.data || todayISO(), pagou, participantes: parts, pesos: modo === "dividir" ? pesosDe(C.config, parts) : undefined, nota: n, criado: Date.now(), autor: C.eu });
     naNota.forEach(x => C.apagar("compra", x.id));
     vibrar("ok"); act.toast(naNota.length ? `Compra salva · ${naNota.length} ${naNota.length === 1 ? "item da lista riscado" : "itens da lista riscados"}` : "Compra salva com a nota");
@@ -442,24 +497,31 @@ export function NotaSheet({ casa: C, servidor, onClose, act }) {
   return (
     <Sheet title="Nota do mercado" sub={etapa === "revisar" ? "Confira e salve" : "Os itens e os preços ficam guardados"} onClose={onClose}>
       {(etapa === "escolher" || etapa === "camera") && <>
+        {erro && <div className="nota-erro" role="alert">
+          <span>{erro.t}</span>
+          {(erro.foto || erro.sefaz) && <div className="btn-row">
+            {erro.foto && <button type="button" className="btn mode" onClick={tirarFoto}><I.camera /> Tirar foto da nota</button>}
+            {erro.sefaz && <a className="btn ghost" href={erro.sefaz} target="_blank" rel="noopener noreferrer">Ver no site da Sefaz</a>}
+          </div>}
+        </div>}
         <div className={"boleto-cam nota-cam" + (etapa === "camera" ? " on" : "")}>
           <video ref={video} muted playsInline aria-label="Câmera" />
-          {etapa === "camera" ? <><i className="nota-guia" aria-hidden="true" /><span className="boleto-dica">Aponte para o QR code no fim da nota</span></>
+          {etapa === "camera" ? <><i className="nota-guia" aria-hidden="true" /><span className="boleto-dica">{dica || "Aponte para o QR code no fim da nota"}</span></>
             : <button type="button" className="boleto-abrir" onClick={abrirCamera}><I.camera /><b>Apontar para o QR code</b><small>o jeito mais preciso: vêm todos os itens e preços</small></button>}
         </div>
         <div className="acts-linha">
-          <button type="button" className="pill-btn" onClick={() => fotoRef.current && fotoRef.current.click()}><I.upload /> Foto da nota</button>
+          <button type="button" className="pill-btn" onClick={tirarFoto}><I.upload /> Foto da nota</button>
+          {etapa === "camera" && luz !== null && <button type="button" className={"pill-btn" + (luz ? " on" : "")} onClick={lanterna} aria-pressed={luz}>{luz ? "Apagar luz" : "Acender luz"}</button>}
           {etapa === "camera" && <button type="button" className="pill-btn" onClick={() => { parar(); setEtapa("escolher"); }}>Parar câmera</button>}
         </div>
         <input ref={fotoRef} type="file" accept="image/*" capture="environment" hidden onChange={daFoto} />
         <form className="nota-link" onSubmit={e => { e.preventDefault(); if (link.trim()) buscar(link.trim()); }}>
-          <input value={link} onChange={e => setLink(e.target.value)} placeholder="Ou cole o link do QR code" aria-label="Link do QR code da nota" inputMode="url" />
+          <input value={link} onChange={e => setLink(e.target.value)} placeholder="Ou cole o link, ou digite a chave (44 números)" aria-label="Link do QR code ou chave de acesso da nota" autoComplete="off" />
           <button type="submit" className="bub-act" disabled={!link.trim()}>Buscar</button>
         </form>
-        {erro && <div className="error" role="alert">{erro}</div>}
         <button className="btn text" onClick={() => act.abrirGastoCasa(null, { desc: "Mercado", cat: "mercado" })}>Sem nota? Anotar só o total</button>
       </>}
-      {etapa === "lendo" && <div className="nota-lendo"><Ilustra n="carrinho" /><b>Lendo a nota…</b><small>Isso leva alguns segundos.</small></div>}
+      {etapa === "lendo" && <div className="nota-lendo"><Ilustra n="carrinho" /><b>Lendo a nota…</b><small>{lendo || "Isso leva alguns segundos."}</small></div>}
       {etapa === "revisar" && nota && <>
         <div className="nota-topo">
           <span><b>{nomeLoja(nota.loja) || "Mercado"}</b><small>{nota.data ? dm(nota.data) : "Hoje"} · {nota.itens.length} itens · {nota.fonte === "qr" ? "lida pelo QR code" : "lida pela foto (confira os valores)"}</small></span>
@@ -473,9 +535,11 @@ export function NotaSheet({ casa: C, servidor, onClose, act }) {
             <div key={i} className={"nota-item" + (ok ? " da-lista" : "")}>
               <span className="mid"><b>{x.nome}</b><small>{x.qtd !== 1 ? `${String(x.qtd).replace(".", ",")} ${x.un || "un"} × ${brlReal(x.unit)}` : brlReal(x.unit)}{ok ? " · da lista" : ""}</small></span>
               <b className="num">{brlReal(x.valor)}</b>
+              {nota.fonte === "foto" && <button type="button" className="casa-item-x" onClick={() => tirar(i)} aria-label={`Tirar ${x.nome}`}><I.x /></button>}
             </div>
           ); })}
         </div>
+        {nota.fonte === "foto" && <div className="hint">A foto pode trocar um número ou outro: toque no × para tirar o que a IA leu errado.</div>}
         {C.membros.length > 1 && <>
           <div className="hint">Quem pagou</div>
           <div className="casa-chips" role="radiogroup" aria-label="Quem pagou">{C.membros.map(m => <button key={m.id} type="button" className={pagou === m.id ? "on" : ""} onClick={() => setPagou(m.id)}><Pessoa m={m} />{m.id === C.eu ? "Você" : m.nome}</button>)}</div>
@@ -619,7 +683,7 @@ export function ConviteCasaSheet({ casa: C, token, onClose, onEntrou }) {
   return (
     <Sheet title="Convite para a casa" onClose={onClose}>
       <div className="casa-intro"><Ilustra n="dinheiro" />
-        {info ? <p><b>{info.convidou || "Alguém"}</b> te chamou para dividir as contas da casa <b>“{info.casa}”</b> ({info.pessoas} {info.pessoas === 1 ? "pessoa" : "pessoas"}).<br /><br />Vocês vão ver os gastos da casa e quem deve quanto. <b>Seus gastos pessoais continuam só seus</b>, a não ser os que você escolher levar.</p>
+        {info ? <p><b>{info.convidou || "Alguém"}</b> te chamou para dividir as contas da casa <b>“{info.casa}”</b> ({info.pessoas} {info.pessoas === 1 ? "pessoa" : "pessoas"}).<br /><br />Vocês vão ver os gastos da casa e quem deve quanto. <b>Seus gastos pessoais continuam só seus</b>, a não ser os que você escolher levar.<br /><br /><b>Entrar é grátis.</b> A casa (gastos, contas e lista de compras) não tem custo para ninguém.</p>
           : !erro ? <p>Abrindo o convite…</p> : null}
       </div>
       {erro && <div className="error">{erro}</div>}
