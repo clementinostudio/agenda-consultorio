@@ -60,6 +60,7 @@ function useAssinatura(conta, aoMudar) {
     const j = await r.json().catch(() => ({}));
     if (!r.ok || j.erro) throw new Error(j.erro || "O servidor não respondeu. Tente de novo.");
     if (j.estado) setReal(j.estado);
+    if (j.cortesiaAte !== undefined) setCortesiaAte(j.cortesiaAte || null);
     return j;
   };
   useEffect(() => {
@@ -204,6 +205,8 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   const { a, setA, real } = s;
   const sit = situacaoDe(a), hoje = todayISO();
   const [ocupado, setOcupado] = useState(false);
+  const [comAcesso, setComAcesso] = useState(false);
+  const [acesso, setAcesso] = useState("");
   // De verdade: chama o servidor; se der certo, mostra o aviso e volta (o estado novo já veio na resposta)
   const fazer = async (rota, corpo, ok, depois = null) => {
     setOcupado(true);
@@ -371,8 +374,15 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           <b>{sit.s === "acabou" ? "Sua assinatura terminou" : "Escolha seu plano"}</b>
           <p>{sit.s === "acabou" ? "Seus dados continuam guardados. Escolha um plano para continuar anotando." : `A partir de ${porMes(PLANOS.pessoal_anual)} por mês. Garantia de 7 dias: não gostou, devolvemos tudo.`}</p>
           {sit.s === "sem" && <p className="assin-gratis">{GRATIS_TXT}</p>}
-          {s.cortesiaAte && hoje < s.cortesiaAte && <div className="note mint"><I.star /><span>Como você já usava o Avina, o Pro está liberado de presente até {dataLonga(s.cortesiaAte)}.</span></div>}
+          {s.cortesiaAte && hoje < s.cortesiaAte && <div className="note mint"><I.star /><span>O Pro completo está liberado de presente até {dataLonga(s.cortesiaAte)}. Depois, você escolhe se quer assinar.</span></div>}
           <button className="btn mode" onClick={() => setTela("planos")}>Escolher meu plano</button>
+          {/* código de acesso (criado pelo dono do app com criar-codigo.sh): libera o Pro por alguns dias */}
+          {real && (comAcesso
+            ? <div className="assin-acesso">
+              <Field label="Código de acesso" htmlFor="a-acesso"><input id="a-acesso" autoCapitalize="characters" autoComplete="off" value={acesso} onChange={e => setAcesso(e.target.value.toUpperCase())} placeholder="Ex.: BETA30" /></Field>
+              <button className="btn ghost" disabled={acesso.trim().length < 4 || ocupado} onClick={() => fazer("codigo", { codigo: acesso }, j => `Pronto! O Pro está liberado até ${dataLonga(j.cortesiaAte)}.`)}>{ocupado ? "Só um instante…" : "Usar o código"}</button>
+            </div>
+            : <button className="btn text" onClick={() => setComAcesso(true)}>Tenho um código de acesso</button>)}
         </div>
       ) : sit.s === "aguardando" ? (
         <div className="assin-card acabou">

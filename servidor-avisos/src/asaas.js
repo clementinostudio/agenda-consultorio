@@ -149,6 +149,37 @@ export async function usarCotaIA(req, env, rota) {
   return { ok: true, grupo, nivel, max, restam: max - usados - 1 };
 }
 
+// ---------- Cortesia: Pro liberado sem pagar ----------
+// Duas formas: a conta existia antes de começar a cobrança (COBRANCA_INICIO), ou a pessoa usou um código de acesso
+// criado pelo dono do app (criar-codigo.sh). Vale a data mais longe.
+async function cortesiaDe(env, eu) {
+  const inicio = env.COBRANCA_INICIO || "";
+  const antiga = inicio && eu.criado && eu.criado < inicio ? addDias(inicio, CORTESIA_DIAS) : "";
+  const doCodigo = (await env.AVISOS.get(`cort:${eu.id}`)) || "";
+  const ate = antiga > doCodigo ? antiga : doCodigo;
+  return ate || null;
+}
+
+// Código de acesso: KV codigo:<CÓDIGO> = { dias, max, usados, validoAte? }. Cada conta usa um código uma vez só.
+async function usarCodigo(env, eu, bruto) {
+  const cod = String(bruto || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20);
+  // até 10 tentativas por dia por pessoa (para ninguém ficar chutando códigos)
+  const kt = `tent:${hojeBR()}:${eu.id}`, tent = Number(await env.AVISOS.get(kt)) || 0;
+  if (tent >= 10) return { erro: "Muitas tentativas hoje. Tente de novo amanhã." };
+  await env.AVISOS.put(kt, String(tent + 1), { expirationTtl: 2 * 86400 });
+  const c = cod && await env.AVISOS.get(`codigo:${cod}`, "json");
+  if (!c) return { erro: "Código não encontrado. Confira as letras e os números." };
+  if (c.validoAte && hojeBR() > c.validoAte) return { erro: "Esse código já venceu." };
+  if (await env.AVISOS.get(`usou:${cod}:${eu.id}`)) return { erro: "Você já usou esse código." };
+  if ((c.usados || 0) >= (c.max || 0)) return { erro: "Esse código já foi usado por todas as pessoas que podiam." };
+  const hoje = hojeBR(), atual = (await env.AVISOS.get(`cort:${eu.id}`)) || "";
+  const base = atual > hoje ? atual : hoje, ate = addDias(base, Math.min(365, Math.max(1, Number(c.dias) || 30)));
+  await env.AVISOS.put(`cort:${eu.id}`, ate);
+  await env.AVISOS.put(`usou:${cod}:${eu.id}`, hoje);
+  await env.AVISOS.put(`codigo:${cod}`, JSON.stringify({ ...c, usados: (c.usados || 0) + 1 }));
+  return { ok: true, ate, dias: Number(c.dias) || 30 };
+}
+
 export async function rotaAsaas(req, env, url, json, permitida) {
   // Webhook: o Asaas manda o token que combinamos; sem ele, ignora
   if (url.pathname === "/asaas/webhook") {
@@ -175,13 +206,19 @@ export async function rotaAsaas(req, env, url, json, permitida) {
 
   try {
     if (url.pathname === "/assinatura/ver") {
-      const inicio = env.COBRANCA_INICIO || "";
-      const cortesiaAte = inicio && eu.criado && eu.criado < inicio ? addDias(inicio, CORTESIA_DIAS) : null;
+      const cortesiaAte = await cortesiaDe(env, eu);
       const st = await estado(env, eu.id);
       // para a cota da IA: quem paga (ou está na cortesia) usa à vontade
       const pago = st.status === "ativa" || (st.status === "cancelada" && st.ate && hoje < st.ate);
       await marcarPlano(env, eu.id, pago || (cortesiaAte && hoje < cortesiaAte) ? "pro" : "gratis");
       return json({ ok: true, configurado: true, sandbox: !env.ASAAS_URL || /sandbox/.test(env.ASAAS_URL), cortesiaAte, estado: st });
+    }
+
+    if (url.pathname === "/assinatura/codigo") {
+      const r = await usarCodigo(env, eu, b.codigo);
+      if (r.erro) return json({ erro: r.erro }, 400);
+      await marcarPlano(env, eu.id, "pro");
+      return json({ ok: true, cortesiaAte: r.ate, dias: r.dias, estado: await estado(env, eu.id) });
     }
 
     if (url.pathname === "/assinatura/assinar") {

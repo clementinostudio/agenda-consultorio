@@ -2214,6 +2214,11 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .nota-cam .nota-guia { position: absolute; left: 50%; top: 50%; width: 56%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 3px solid rgba(255, 255, 255, .85); border-radius: 18px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .35); }
 .nota-link { display: flex; gap: 8px; align-items: center; padding: 4px 4px 4px 14px; border-radius: 16px; background: var(--surface-2); }
 .nota-link input { flex: 1; min-width: 0; border: 0; background: none; color: var(--fg); font: inherit; font-size: 14px; outline: none; padding: 8px 0; }
+.nota-erro { display: grid; gap: 10px; padding: 12px 14px; border-radius: 16px; background: color-mix(in srgb, var(--rose) 10%, transparent); font-size: 14px; font-weight: 600; line-height: 1.45; }
+.nota-erro .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.nota-erro .btn { flex: 1 1 160px; }
+.nota-item .casa-item-x { margin-right: -8px; flex: none; }
+.pill-btn.on { background: var(--fg); color: var(--bg); }
 .nota-lendo { display: grid; justify-items: center; gap: 6px; padding: 30px 0; text-align: center; }
 .nota-lendo .ilustra { width: 110px; height: auto; animation: carro-anda 2.4s ease-in-out infinite; }
 .nota-lendo small { color: var(--muted); }
@@ -2489,3 +2494,5 @@ a.perfil-row { text-decoration: none; }
 .lanc-faixa b { font-size: 13px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--amber); }
 .lanc-faixa span { font-size: 13.5px; font-weight: 600; }
 .assin-riscado { color: var(--muted); font-weight: 600; font-size: .85em; margin-right: 6px; }
+.assin-acesso { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.assin-card .btn.text { margin-top: 4px; height: 40px; }
