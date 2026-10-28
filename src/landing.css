@@ -112,7 +112,7 @@ section { position: relative; padding: 90px max(20px, env(safe-area-inset-left, 
 .cf-ic img { width: 100%; height: 100%; }
 .cf-ic.verde { background: #E3F6EE; color: var(--verde); }
 .f1 { top: 64px; left: 0; } .f2 { top: 214px; right: 0; animation-delay: -1.7s; } .f3 { top: 350px; left: 14px; animation-delay: -3.4s; }
-.cf-ic.bol { background: none; } .cf-ic.bol .bolinha-mini { width: 36px; height: 36px; }
+.cf-ic.azul-claro { background: #E6EAFF; color: var(--marca); }
 .cf-ic.amarelo { background: #FFF3D6; color: #C27B00; }
 .cartao-flutua strong.saida { color: #D6455D; } .cartao-flutua strong.neutro { color: var(--fg); }
 .cf-avs { display: flex; } .cf-avs i { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 14px; background: #E3F6EE; color: var(--verde); border: 2px solid #fff; }
