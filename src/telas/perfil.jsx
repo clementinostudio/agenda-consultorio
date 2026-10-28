@@ -224,9 +224,6 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
                 <i className="assin-ic"><Marca /></i><span><b>{act.plano && act.plano.pro ? "Avina Pro" : "Avina"}</b><small>{resAssin.texto}</small></span>
                 {resAssin.selo && <em className="assin-selo">{resAssin.selo}</em>}<I.chev />
               </button>
-              {!assin.real && <button className="perfil-row" onClick={() => { setAba("assinatura"); setSub("indicar"); }}>
-                <i><I.users /></i><span><b>Indique um colega</b><small>Vocês dois ganham 1 mês grátis</small></span><I.chev />
-              </button>}
             </div>
           </div>
 

@@ -1,15 +1,13 @@
-// Assinatura do Avina: planos, pagamento, garantia de 7 dias, pausar, cancelar e indicação.
+// Assinatura do Avina: planos, pagamento, garantia de 7 dias, pausar e cancelar.
 // Sem teste grátis: quem quer conhecer usa a demonstração; quem assina tem 7 dias para desistir com o dinheiro de volta.
 // Com login e o servidor ligado ao Asaas, é de verdade: os botões chamam o servidor (servidor-avisos/src/asaas.js),
 // que fala com o Asaas. Sem login (demonstração), nada é cobrado e tudo fica guardado neste aparelho.
 import React, { useState, useEffect } from "react";
 import { I, Marca, Seg, Field, Ilustra, Sheet, BASE, todayISO, addDays, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
-import { normalizar } from "../marcas.js";
-import { ENDERECO_APP, cliente } from "../nuvem.js";
+import { cliente } from "../nuvem.js";
 import { PLANOS, PRODUTOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso } from "../plano.js";
 
 const GARANTIA_DIAS = 7;  // direito de arrependimento (compra pela internet)
-const LIMITE_INDICACOES = 12; // meses ganhos por indicação, por ano
 const INCLUI = {
   completo: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Lançamentos pessoais sem limite: gastos, contas, caixinhas e a casa", "O líquido do consultório entrando no seu dinheiro pessoal", "Avisos no celular, voz e cópia na nuvem"],
   consultorio: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Link de agendamento para o paciente marcar sozinho", "Lembretes de sessão, faltas e reajuste", "Avisos no celular, voz e cópia na nuvem"],
@@ -18,8 +16,7 @@ const INCLUI = {
 const GRATIS_TXT = `Grátis: até ${LIMITE_GRATIS.pacientes} pacientes e ${LIMITE_GRATIS.lancMes} lançamentos por mês.`;
 const nomeCompleto = p => p ? `${p.nome} ${p.meses > 1 ? "anual" : "mensal"}` : "Avina Pro";
 const MOTIVOS = ["Ficou caro", "Não estou usando", "Faltou alguma coisa", "Vou usar outro app", "Outro motivo"];
-const COLEGAS_DEMO = ["Marina Torres", "João Pedro Alves", "Fernanda Lima", "Lucas Barros"];
-const TITULO_ASSIN = { indicar: "Indique um colega", planos: "Escolha seu plano", pagar: "Pagamento", pronto: "Assinatura", forma: "Forma de pagamento", historico: "Pagamentos", pausar: "Pausar assinatura", cancelar: "Cancelar assinatura" };
+const TITULO_ASSIN = { planos: "Escolha seu plano", pagar: "Pagamento", pronto: "Assinatura", forma: "Forma de pagamento", historico: "Pagamentos", pausar: "Pausar assinatura", cancelar: "Cancelar assinatura" };
 // voltar de qualquer tela leva para a tela da assinatura (no pagamento, "Trocar" leva aos planos)
 const voltaAssin = () => null;
 
@@ -29,27 +26,17 @@ const dias = (de, ate) => Math.round((fromISO(ate) - fromISO(de)) / 864e5);
 const dataLonga = iso => { const d = fromISO(iso); return `${d.getDate()} de ${MES_LONGO[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ` de ${d.getFullYear()}` : ""}`; };
 const porMes = p => brlReal(Math.round(p.preco / p.meses * 100) / 100);
 const semPlano = () => ({ status: "sem", historico: [] });
-// Meses grátis para usar ao assinar: o do código de indicação (só na primeira vez) e os guardados por indicar colegas
-const mesesGratis = a => (a.codigoUsado && !a.desde ? 1 : 0) + (a.guardados || 0);
 // Garantia: cancelar até 7 dias depois do primeiro pagamento devolve tudo
 // (de verdade, o servidor já manda a garantia calculada: só o primeiro pagamento da assinatura atual)
 const garantiaDe = a => a.real ? a.garantia || null
   : (a.historico || []).length === 1 && !a.historico[0].devolvido && dias(a.historico[0].data, todayISO()) <= GARANTIA_DIAS ? { valor: a.historico[0].valor, ate: addDays(a.historico[0].data, GARANTIA_DIAS) } : null;
 const naGarantia = a => !!garantiaDe(a);
 
-// Indique um colega: código fixo de cada conta (primeiro nome + 3 números)
-const codigoDe = conta => `${(normalizar(conta.nome).split(" ")[0] || "avina").toUpperCase().slice(0, 8)}-${Math.abs([...String(conta.email)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)) % 900 + 100}`;
-// Mês ganho por indicar: assinando, a próxima cobrança anda um mês; sem assinatura, o mês fica guardado
-function ganharMes(a) {
-  const sit = situacaoDe(a);
-  if (sit.s === "sem" || sit.s === "acabou") return { ...a, guardados: (a.guardados || 0) + 1 };
-  return { ...a, proxima: addMeses(a.proxima, 1), ...(a.status === "cancelada" ? { ate: addMeses(a.ate, 1) } : {}) };
-}
 
 function useAssinatura(conta, aoMudar) {
   const chave = `agenda-assinatura:${conta.email}`;
-  // quem tinha o "teste grátis" da versão antiga começa sem plano (o código e as indicações continuam)
-  const [a, setA] = useState(() => { const v = lerJSON(chave, null); return v && v.status !== "teste" ? v : { ...semPlano(), codigoUsado: v && v.codigoUsado, indicacoes: v && v.indicacoes }; });
+  // quem tinha o "teste grátis" da versão antiga começa sem plano
+  const [a, setA] = useState(() => { const v = lerJSON(chave, null); return v && v.status !== "teste" ? v : semPlano(); });
   useEffect(() => { try { localStorage.setItem(chave, JSON.stringify(a)); } catch (e) {} }, [a]);
   // De verdade: conta com login + servidor com a chave do Asaas. No computador (npm run dev), dá para testar sem login
   // com localStorage "avina-asaas-teste" = 1 (o servidor de teste aceita o e-mail da conta no lugar do login).
@@ -94,7 +81,7 @@ function situacaoDe(a) {
 
 function resumoAssinatura(a) {
   const sit = situacaoDe(a), P = planoDe(a.plano);
-  if (sit.s === "sem") return { texto: mesesGratis(a) ? `Você tem ${mesesGratis(a) === 1 ? "1 mês grátis" : `${mesesGratis(a)} meses grátis`} para usar` : "Escolha um plano · garantia de 7 dias" };
+  if (sit.s === "sem") return { texto: "Escolha um plano · garantia de 7 dias" };
   if (sit.s === "acabou") return { texto: "Escolha um plano para continuar", selo: "Acabou" };
   if (sit.s === "aguardando") return { texto: "Falta pagar para começar", selo: "Pagar" };
   if (sit.s === "ativa" && a.pendente && a.pendente.atrasada) return { texto: `Cobrança de ${dataLonga(a.pendente.vencimento)} em aberto`, selo: "Pagar" };
@@ -224,9 +211,6 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
     catch (e) { act.toast(e.message); }
     finally { setOcupado(false); }
   };
-  const [codigo, setCodigo] = useState("");
-  const [comCodigo, setComCodigo] = useState(false);
-  const meuCodigo = codigoDe(conta);
   // plano escolhido: o atual, ou o pacote que combina com o uso do app (só pessoal ou consultório) no anual
   const [plano, setPlano] = useState(() => a.plano ? idPlano(a.plano) : `${produtoDoUso(conta.perfil)}_anual`);
   const [forma, setForma] = useState(a.forma || "pix");
@@ -236,17 +220,14 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   const [motivo, setMotivo] = useState(null);
   const P = planoDe(plano), atual = planoDe(a.plano) || P, produto = P.produto;
   const produtoPadrao = produtoDoUso(conta.perfil);
-  const gratis = real ? 0 : mesesGratis(a);
   // Quem já assina só troca o plano para a próxima renovação (sem cobrar a diferença)
   const trocando = sit.s === "ativa";
 
   useEffect(() => { setConferindo(false); if (tela === "forma") { setForma(a.forma || "pix"); setCartao(CARTAO_VAZIO); } }, [tela]);
 
   const assinar = () => {
-    // com meses grátis nada é cobrado hoje: a primeira cobrança vem depois deles
-    const proxima = gratis ? addMeses(hoje, gratis) : addMeses(hoje, P.meses);
-    setA({ ...a, status: "ativa", ate: null, plano, forma, final: forma === "cartao" ? cartao.num.slice(-4) : null, desde: a.desde || hoje, proxima, guardados: 0,
-      historico: gratis ? (a.historico || []) : [{ data: hoje, valor: P.preco, plano, forma }, ...(a.historico || [])] });
+    setA({ ...a, status: "ativa", ate: null, plano, forma, final: forma === "cartao" ? cartao.num.slice(-4) : null, desde: a.desde || hoje, proxima: addMeses(hoje, P.meses),
+      historico: [{ data: hoje, valor: P.preco, plano, forma }, ...(a.historico || [])] });
     setCartao(CARTAO_VAZIO); vibrar("ok"); setTela("pronto");
   };
   const pagarPix = () => { setConferindo(true); setTimeout(assinar, 1600); };
@@ -269,7 +250,6 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           );
         })}
       </div>
-      {!trocando && gratis > 0 && <div className="note mint"><I.star /><span>{gratis === 1 ? "Seu primeiro mês é grátis" : `Seus primeiros ${gratis} meses são grátis`}: nada é cobrado hoje.</span></div>}
       {trocando
         ? <>
           <div className="note"><I.repeat /><span>{plano === idPlano(a.plano) ? "Esse já é o seu plano." : `O ${nomeCompleto(P)} começa em ${dataLonga(a.proxima)}, quando o atual terminar. Nada é cobrado agora.`}</span></div>
@@ -281,59 +261,8 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
         </>
         : <button className="btn mode" onClick={() => setTela("pagar")}>Continuar</button>}
       <div className="hint assin-centro">Garantia de 7 dias: não gostou, devolvemos tudo. Depois, cancele quando quiser, sem multa e sem fidelidade. A assinatura se renova sozinha até você cancelar. Ao assinar, você concorda com os <a href={`${BASE}termos/#planos`} target="_blank" rel="noopener">Termos de uso</a>.</div>
-      {!trocando && !a.desde && !real && (a.codigoUsado
-        ? <div className="note mint"><I.check /><span>Código {a.codigoUsado} aplicado.</span></div>
-        : comCodigo
-          ? <div className="assin-codigo">
-            <Field label="Código de indicação" htmlFor="a-cod"><input id="a-cod" autoCapitalize="characters" value={codigo} onChange={e => setCodigo(e.target.value.toUpperCase().replace(/\s/g, ""))} placeholder="Ex.: ANA-123" /></Field>
-            <button className="btn ghost" disabled={!/^[A-Z]{2,8}-\d{3}$/.test(codigo) || codigo === meuCodigo} onClick={() => { setA({ ...a, codigoUsado: codigo }); vibrar("ok"); act.toast("Código aplicado: seu primeiro mês é grátis!"); }}>Aplicar</button>
-          </div>
-          : <button className="btn text" onClick={() => setComCodigo(true)}>Tenho um código de indicação</button>)}
     </div>
   );
-
-  if (tela === "indicar") {
-    const url = `${ENDERECO_APP}?indicacao=${meuCodigo}`;
-    const msg = `Estou usando o Avina para a agenda e as cobranças do consultório e tem me poupado muito tempo. Com o meu código ${meuCodigo}, seu primeiro mês é grátis: ${url}`;
-    const ind = a.indicacoes || [];
-    const noAno = ind.filter(x => dias(x.data, hoje) < 365).length;
-    return (
-      <div className="stack">
-        <div className="indique">
-          <Ilustra n="dinheiro" className="perfil-ilustra" />
-          <h2>Vocês dois ganham 1 mês grátis</h2>
-          <p>Quando um colega assina com o seu código, o primeiro mês dele é grátis, e você também ganha 1 mês.</p>
-          <button className="indique-cod" onClick={() => copiarTexto(meuCodigo, act, "Código copiado")}><span><small>Seu código</small><b>{meuCodigo}</b></span><I.copy /></button>
-          <a className="btn mode" href={`https://wa.me/?text=${encodeURIComponent(msg)}`} target="_blank" rel="noopener"><I.send /> Enviar no WhatsApp</a>
-          <button className="btn ghost" onClick={() => copiarTexto(msg, act, "Convite copiado")}><I.copy /> Copiar o convite</button>
-        </div>
-        <ul className="indique-regras">
-          <li>Vale para contas novas, de quem nunca assinou o Avina.</li>
-          <li>Seu mês entra 7 dias depois do primeiro pagamento do colega.</li>
-          <li>Se você ainda não assina, o mês fica guardado para quando assinar.</li>
-          <li>Até {LIMITE_INDICACOES} meses grátis por ano.</li>
-        </ul>
-        {ind.length ? (
-          <div className="perfil-grupo">
-            <h3>Quem assinou · {ind.length} {ind.length === 1 ? "mês ganho" : "meses ganhos"}</h3>
-            <div className="perfil-lista">
-              {ind.map((x, i) => <div key={i} className="perfil-row"><i><I.user /></i><span><b>{x.nome}</b><small>{dataLonga(x.data)} · {x.fora ? "passou do limite do ano" : "+1 mês para você"}</small></span></div>)}
-            </div>
-          </div>
-        ) : <div className="hint assin-centro">Ninguém assinou com o seu código ainda.</div>}
-        <div className="assin-demo">
-          <b>Só na demonstração</b>
-          <small>Na versão de verdade, o mês entra sozinho 7 dias depois do primeiro pagamento do colega.</small>
-          <button className="btn ghost" onClick={() => {
-            const novo = { nome: COLEGAS_DEMO[ind.length % COLEGAS_DEMO.length], data: hoje, fora: noAno >= LIMITE_INDICACOES };
-            const b = { ...a, indicacoes: [novo, ...ind] };
-            setA(novo.fora ? b : ganharMes(b)); vibrar("ok");
-            act.toast(novo.fora ? "Você já ganhou os 12 meses deste ano" : sit.s === "sem" || sit.s === "acabou" ? "Um colega assinou: 1 mês grátis guardado para você!" : "Um colega assinou: você ganhou 1 mês grátis!");
-          }}>Simular um colega assinando</button>
-        </div>
-      </div>
-    );
-  }
 
   if (tela === "pagar" && real) return <PagarReal s={s} plano={plano} forma={forma} setForma={setForma} act={act} setTela={setTela} voltar={() => setTela(null)} />;
 
@@ -342,12 +271,8 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
       <button className="assin-resumo" onClick={() => setTela("planos")}>
         <span><small>{nomeCompleto(P)}</small><b>{brlReal(P.preco)} <small>por {P.ciclo}</small></b></span><em>Trocar</em>
       </button>
-      {gratis > 0 && <div className="note mint"><I.star /><span>Hoje: <b>R$ 0,00</b>. A primeira cobrança é em {dataLonga(addMeses(hoje, gratis))}.</span></div>}
       <Field label="Como quer pagar"><Seg value={forma} onChange={setForma} options={[{ v: "pix", l: "Pix" }, { v: "cartao", l: "Cartão" }]} /></Field>
-      {forma === "pix" && gratis > 0 ? <>
-        <div className="hint">Três dias antes da primeira cobrança, chega um aviso com o Pix pronto para pagar.</div>
-        <button className="btn mode" onClick={assinar}><I.check /> Começar {gratis === 1 ? "meu mês grátis" : "meus meses grátis"}</button>
-      </> : forma === "pix" ? <>
+      {forma === "pix" ? <>
         <div className="assin-pix">
           <QrFalso />
           <small>Abra o app do seu banco, escolha <b>Pix</b> e leia o código. Ou copie e cole.</small>
@@ -357,8 +282,8 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
         <div className="hint assin-centro">Na versão de verdade, o app percebe o pagamento sozinho em alguns segundos.</div>
       </> : <>
         <CamposCartao c={cartao} setC={setCartao} />
-        <button className="btn mode" disabled={!cartaoOk(cartao)} onClick={assinar}><I.lock /> {gratis ? (gratis === 1 ? "Começar meu mês grátis" : "Começar meus meses grátis") : `Assinar por ${brlReal(P.preco)}`}</button>
-        <div className="hint assin-centro">{gratis ? `O cartão só é cobrado em ${dataLonga(addMeses(hoje, gratis))}, e depois` : "A cobrança se repete"} a cada {P.ciclo}. Demonstração: nada é cobrado e o cartão não é guardado.</div>
+        <button className="btn mode" disabled={!cartaoOk(cartao)} onClick={assinar}><I.lock /> Assinar por {brlReal(P.preco)}</button>
+        <div className="hint assin-centro">A cobrança se repete a cada {P.ciclo}. Demonstração: nada é cobrado e o cartão não é guardado.</div>
       </>}
     </div>
   );
@@ -446,7 +371,6 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           <p>{sit.s === "acabou" ? "Seus dados continuam guardados. Escolha um plano para continuar anotando." : `A partir de ${porMes(PLANOS.pessoal_anual)} por mês. Garantia de 7 dias: não gostou, devolvemos tudo.`}</p>
           {sit.s === "sem" && <p className="assin-gratis">{GRATIS_TXT}</p>}
           {s.cortesiaAte && hoje < s.cortesiaAte && <div className="note mint"><I.star /><span>Como você já usava o Avina, o Pro está liberado de presente até {dataLonga(s.cortesiaAte)}.</span></div>}
-          {gratis > 0 && <div className="note mint"><I.star /><span>Você tem {gratis === 1 ? "1 mês grátis" : `${gratis} meses grátis`} para usar: nada é cobrado no começo.</span></div>}
           <button className="btn mode" onClick={() => setTela("planos")}>Escolher meu plano</button>
         </div>
       ) : sit.s === "aguardando" ? (
@@ -488,10 +412,6 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           {sit.s === "ativa" && <button className="perfil-row" onClick={() => { setPlano(idPlano(a.plano)); setTela("planos"); }}><i><I.repeat /></i><span><b>Trocar de plano</b><small>Anual ou mensal, um pacote ou os dois</small></span><I.chev /></button>}
         </div>
       )}
-
-      {!real && <div className="perfil-lista">
-        <button className="perfil-row" onClick={() => setTela("indicar")}><i><I.users /></i><span><b>Indique um colega</b><small>{(a.indicacoes || []).length ? `${a.indicacoes.length} ${a.indicacoes.length === 1 ? "mês ganho" : "meses ganhos"} · ganhe mais` : "Vocês dois ganham 1 mês grátis"}</small></span><I.chev /></button>
-      </div>}
 
       {sit.s === "ativa" && <>
         <button className="assin-pausar" onClick={() => setTela("pausar")}><I.clock /> Pausar assinatura</button>

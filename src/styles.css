@@ -2330,19 +2330,7 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .assin-achada-bts { display: flex; gap: 6px; flex: none; }
 .chip-btn.on { background: var(--mode); border-color: var(--mode); color: var(--mode-ink); }
 .assin-achadas { border-color: color-mix(in srgb, var(--amber) 45%, var(--line)); }
-/* Indique um colega */
-.indique { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
-.indique h2 { margin: 0; font-family: var(--f-display); font-weight: 600; font-size: 24px; letter-spacing: -.02em; }
-.indique p { margin: 0 0 6px; color: var(--muted); font-weight: 600; line-height: 1.5; }
-.indique .btn { align-self: stretch; }
-.indique-cod { align-self: stretch; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-radius: 20px; border: 1.5px dashed var(--mode); background: color-mix(in srgb, var(--mode) 10%, transparent); color: var(--fg); text-align: left; }
-.indique-cod span { display: flex; flex-direction: column; }
-.indique-cod small { color: var(--muted); font-size: 12.5px; font-weight: 800; }
-.indique-cod b { font-family: var(--f-display); font-weight: 600; font-size: 24px; letter-spacing: .04em; }
-.indique-cod svg { width: 22px; height: 22px; color: var(--mode); }
-.assin-codigo { display: flex; flex-direction: column; gap: 8px; }
 a.chip-btn { text-decoration: none; }
-.indique-regras { margin: 0; padding: 12px 14px 12px 32px; border-radius: 18px; background: var(--surface-2); display: grid; gap: 6px; color: var(--muted); font-size: 13.5px; font-weight: 600; }
 .assin-hist-v small.devolvido { color: var(--amber); }
 .assin-espera { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border-radius: 16px; background: var(--surface-2); color: var(--muted); font-size: 14px; font-weight: 700; }
 .assin-qr-vazio { display: grid; place-items: center; background: var(--surface-2); }
