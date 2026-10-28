@@ -1886,6 +1886,227 @@ function ModeSwitch({ modo, setModo, block }) {
   );
 }
 
+// Barra lateral do computador (a partir de 900px). Aberta mostra o nome "avina" por extenso (o mesmo da abertura);
+// recolhida fica só o "A" do ícone. Recolhida, cada item mostra o nome num balão ao passar o mouse e os Atalhos
+// saem num painel ao lado, com o ícone viajando até o título do painel.
+const K_LATERAL = "agenda-lateral";
+const AvinaNome = () => (
+  <svg className="lt-nome" viewBox="-12 -50 544 162" role="img" aria-label="Avina">
+    <defs><linearGradient id="lt-nvf" x1="-18" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stopOpacity="0" /><stop offset=".45" stopOpacity=".45" /><stop offset="1" /></linearGradient></defs>
+    <g fill="none" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100" stroke="url(#lt-nvf)" />
+      <path d="M136 0L178 100L220 0M256 0V100M256 -37V-35M292 100V46A46 46 0 0 1 384 46V100M520 50A50 50 0 1 1 420 50A50 50 0 1 1 520 50M520 0V100" stroke="currentColor" />
+    </g>
+  </svg>
+);
+const AvinaA = () => (
+  <svg className="lt-a" viewBox="0 0 512 512" aria-hidden="true">
+    <rect width="512" height="512" rx="114" fill="#F7F6F2" />
+    <path transform="translate(256 256) scale(1.04) translate(-247 -257)" d="M338 380V176Q338 128 300 128Q274 128 260 158L196 300Q180 336 152 334Q128 332 134 302Q146 258 214 248Q296 238 338 300" fill="none" stroke="#1F3BEF" strokeWidth="44" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+function BarraLateral({ conta, tema, modo, doisModos, abas, tab, act }) {
+  const pessoal = modo === "pessoal";
+  const [mini, setMini] = useState(() => lerJSON(K_LATERAL, "aberta") === "mini");
+  const [abertos, setAbertos] = useState({});   // submenus abertos (barra aberta)
+  const [rapido, setRapido] = useState(null);   // menu do botão principal: { top, left, width }
+  const [dica, setDica] = useState(null);       // balão com o nome (barra recolhida)
+  const [voo, setVoo] = useState(null);         // painel ao lado com os subitens (barra recolhida)
+  const [icone, setIcone] = useState(null);     // ícone que viaja do item até o título do painel
+  const ladoRef = useRef(null), vooRef = useRef(null), slotRef = useRef(null), rapRef = useRef(null), splitRef = useRef(null);
+  const tempo = useRef({});
+
+  useEffect(() => {
+    const raiz = document.documentElement;
+    raiz.dataset.lateral = mini ? "mini" : "aberta";
+    gravar(K_LATERAL, mini ? "mini" : "aberta");
+    return () => { delete raiz.dataset.lateral; };
+  }, [mini]);
+  useEffect(() => () => { clearTimeout(tempo.current.abre); clearTimeout(tempo.current.fecha); }, []);
+
+  const chat = servidorAvisos() ? [{ id: "chat", l: "Perguntar à Bolinha", ic: <I.chat />, f: act.abrirChat }] : [];
+  const principal = pessoal ? { l: "Anotar gasto", f: () => act.novoLanc("saida") } : { l: `Novo ${TERMO.s}`, f: act.novoPaciente };
+  const rapidas = pessoal
+    ? [{ id: "gasto", l: "Anotar gasto", d: "Saiu dinheiro", ic: <I.minus />, f: () => act.novoLanc("saida") },
+       { id: "entrada", l: "Anotar entrada", d: "Entrou dinheiro", ic: <I.plus />, f: () => act.novoLanc("entrada") },
+       { id: "conta", l: "Nova conta fixa", d: "Luz, aluguel, assinaturas", ic: <I.bill />, f: () => act.novaConta() },
+       { id: "falar", l: "Anotar falando", d: "Diga o gasto em voz alta", ic: <I.mic />, f: act.falarGasto }]
+    : [{ id: "pac", l: `Novo ${TERMO.s}`, d: "Cadastrar e pôr na agenda", ic: <I.users />, f: act.novoPaciente },
+       { id: "espera", l: "Lista de espera", d: "Anotar quem quer um horário", ic: <I.clock />, f: act.novaEspera },
+       { id: "importar", l: "Importar agenda", d: "Trazer de outra agenda", ic: <I.upload />, f: act.importarAgenda }];
+  const atalhos = pessoal
+    ? [...chat, { id: "casa", l: "Nossa casa", ic: <I.home />, tab: "p-casa", f: act.abrirCasa }]
+    : [...chat, { id: "agora", l: "Só o agora", ic: <I.target />, f: act.agora }, { id: "fechar", l: "Fechar o dia", ic: <I.moon />, f: act.fecharDia }, { id: "livres", l: "Horários livres", ic: <I.share />, f: act.livres }];
+  const itens = [...abas.map(a => ({ id: a.id, l: a.l, ic: a.ic, n: a.n, tab: a.id })), { id: "atalhos", l: "Atalhos", ic: <I.grid />, sub: atalhos }];
+
+  const fecharVoo = () => { setVoo(null); setIcone(null); };
+  const abrirVoo = (it, r) => { setVoo({ id: it.id, top: r.top }); setIcone({ id: it.id, ic: it.ic, top: r.top + r.height / 2, left: r.left + r.width / 2 }); };
+  const mostrarDica = (id, l, extra, r) => setDica({ id, l, extra, top: r.top + r.height / 2, left: r.right + 12 });
+  const entra = (it, e) => {
+    if (!mini) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    clearTimeout(tempo.current.abre); clearTimeout(tempo.current.fecha);
+    mostrarDica(it.id, it.l, it.sub ? "Clique para abrir" : "", r);
+    if (it.sub) tempo.current.abre = setTimeout(() => abrirVoo(it, r), 80);
+    else tempo.current.fecha = setTimeout(fecharVoo, 100);
+  };
+  const sai = it => {
+    if (!mini) return;
+    clearTimeout(tempo.current.abre); setDica(null);
+    if (voo && voo.id === it.id) tempo.current.fecha = setTimeout(fecharVoo, 220);
+  };
+
+  // Fecha o painel ao clicar fora (ou com Esc)
+  useEffect(() => {
+    if (!voo) return;
+    const f = e => { if (!(ladoRef.current && ladoRef.current.contains(e.target)) && !(vooRef.current && vooRef.current.contains(e.target))) fecharVoo(); };
+    const k = e => e.key === "Escape" && fecharVoo();
+    document.addEventListener("mousedown", f); document.addEventListener("keydown", k);
+    return () => { document.removeEventListener("mousedown", f); document.removeEventListener("keydown", k); };
+  }, [voo]);
+  // Depois que o painel aparece, manda o ícone para o lugar dele no título
+  const vooId = voo && voo.id;
+  useEffect(() => {
+    if (!vooId) return;
+    let r2;
+    const r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => {
+        if (!slotRef.current) return;
+        const r = slotRef.current.getBoundingClientRect();
+        setIcone(p => p && p.id === vooId ? { ...p, top: r.top + r.height / 2, left: r.left + r.width / 2 } : p);
+      });
+    });
+    return () => { cancelAnimationFrame(r1); cancelAnimationFrame(r2); };
+  }, [vooId]);
+  useEffect(() => { fecharVoo(); setDica(null); setRapido(null); }, [mini]);
+
+  // Menu do botão principal
+  useEffect(() => {
+    if (!rapido) return;
+    const f = e => { if (!(rapRef.current && rapRef.current.contains(e.target)) && !(splitRef.current && splitRef.current.contains(e.target))) setRapido(null); };
+    const k = e => e.key === "Escape" && setRapido(null);
+    document.addEventListener("pointerdown", f); document.addEventListener("keydown", k);
+    return () => { document.removeEventListener("pointerdown", f); document.removeEventListener("keydown", k); };
+  }, [rapido]);
+  const abrirRapido = () => {
+    if (rapido) { setRapido(null); return; }
+    const r = splitRef.current.getBoundingClientRect();
+    setRapido({ top: r.bottom + 8, left: r.left, width: r.width });
+  };
+
+  const alvo = (ladoRef.current && ladoRef.current.parentElement) || document.body;
+  const itemVoo = voo && itens.find(i => i.id === voo.id);
+
+  return (
+    <aside ref={ladoRef} className={"side" + (mini ? " recolhida" : "")} aria-label="Menu">
+      <button type="button" className="lt-recolher" onClick={() => setMini(m => !m)} title={mini ? "Expandir menu" : "Recolher menu"} aria-label={mini ? "Expandir menu" : "Recolher menu"}>
+        {mini ? <I.chev /> : <I.chevL />}
+      </button>
+
+      <div className="lt-marca">
+        {mini
+          ? <button type="button" key="a" onClick={() => setMini(false)} title="Avina" aria-label="Expandir menu"><AvinaA /></button>
+          : <button type="button" key="nome" onClick={() => act.setTab(pessoal ? "p-home" : "home")} aria-label="Avina, início"><AvinaNome /></button>}
+      </div>
+
+      <div className="lt-acao">
+        <div className="lt-split" ref={splitRef} inert={mini ? "" : undefined}>
+          <button type="button" className="lt-split-p" onClick={principal.f}><span>{principal.l}</span></button>
+          <button type="button" className={"lt-split-s" + (rapido ? " on" : "")} onClick={abrirRapido} aria-label="Mais opções" aria-haspopup="menu" aria-expanded={!!rapido}><I.chevD /></button>
+        </div>
+        <div className="lt-mais-w" inert={mini ? undefined : ""}>
+          <button type="button" className="lt-mais" onClick={principal.f} aria-label={principal.l}
+            onMouseEnter={e => mini && mostrarDica("mais", principal.l, "", e.currentTarget.getBoundingClientRect())} onMouseLeave={() => setDica(null)}>
+            <I.plus />
+          </button>
+        </div>
+      </div>
+
+      <div className="lt-lista">
+        {itens.map(it => {
+          const ativo = it.sub ? it.sub.some(s => s.tab && s.tab === tab) : tab === it.tab;
+          const aberto = !!abertos[it.id];
+          return (
+            <div key={it.id} onMouseEnter={e => entra(it, e)} onMouseLeave={() => sai(it)}>
+              <button type="button" className={"lt-item" + (ativo ? " on" : "") + (it.sub ? " tem-sub" : "")} aria-label={it.l}
+                aria-current={!it.sub && ativo ? "page" : undefined} aria-haspopup={it.sub ? "true" : undefined} aria-expanded={it.sub ? (mini ? vooId === it.id : aberto) : undefined}
+                onClick={e => {
+                  if (!it.sub) { act.setTab(it.tab); return; }
+                  if (!mini) { setAbertos(a => ({ [it.id]: !a[it.id] })); return; }
+                  if (vooId === it.id) { fecharVoo(); return; }
+                  abrirVoo(it, e.currentTarget.getBoundingClientRect());
+                }}>
+                <span className={"lt-ic" + (mini && vooId === it.id ? " some" : "")}>{it.ic}</span>
+                <span className="lt-rot">{it.l}</span>
+                {it.n > 0 && <span className="badge">{it.n > 99 ? "99+" : it.n}</span>}
+                {it.sub && <span className="lt-seta"><I.chevD /></span>}
+              </button>
+              {!mini && it.sub && (
+                <div className={"lt-sub" + (aberto ? " on" : "")} inert={aberto ? undefined : ""}>
+                  <i className="lt-sub-linha" />
+                  {it.sub.map((s, k) => (
+                    <button type="button" key={s.id} className={"lt-subi" + (s.tab && s.tab === tab ? " on" : "")} onClick={s.f}
+                      style={{ "--d": aberto ? `${150 + k * 60}ms` : `${(it.sub.length - 1 - k) * 60}ms` }}>
+                      {s.ic}<span>{s.l}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="lt-pe">
+        <button type="button" className="lt-conta" onClick={() => act.openSettings()} title="Sua conta e ajustes">
+          <Avatar conta={conta} />
+          {!mini && <span className="lt-quem"><b>{conta.nome}</b><small>{conta.email}</small></span>}
+        </button>
+        {doisModos && (
+          <button type="button" className="lt-linha" onClick={() => act.setModo(pessoal ? "consultorio" : "pessoal")} title={pessoal ? "Ir para o Consultório" : "Ir para o Pessoal"}>
+            <span><i className="lt-modo" />{!mini && <em>{pessoal ? "Pessoal" : "Consultório"}</em>}</span>
+            {!mini && <small>Trocar</small>}
+          </button>
+        )}
+        <button type="button" className="lt-linha" onClick={act.trocarTema} title={tema.escuro ? "Usar modo claro" : "Usar modo escuro"}>
+          <span>{tema.escuro ? <i className="lt-lua"><I.moon /></i> : <i className="lt-sol"><I.sun /></i>}{!mini && <em>{tema.escuro ? "Tema escuro" : "Tema claro"}</em>}</span>
+          {!mini && <small>Alternar</small>}
+        </button>
+      </div>
+
+      {mini && dica && dica.id !== vooId && createPortal(
+        <div className="lt-dica" style={{ top: dica.top, left: dica.left }}>
+          <div><span>{dica.l}</span>{dica.extra && <small>{dica.extra}</small>}</div>
+        </div>, alvo)}
+
+      {mini && itemVoo && createPortal(
+        <div className="lt-voo" ref={vooRef} style={{ top: voo.top }}
+          onMouseEnter={() => clearTimeout(tempo.current.fecha)} onMouseLeave={() => { tempo.current.fecha = setTimeout(fecharVoo, 220); }}>
+          <svg className="lt-voo-canto em-cima" viewBox="0 0 12 12" aria-hidden="true"><path d="M12 12L0 12L0 0A12 12 0 0 0 12 12Z" /></svg>
+          <svg className="lt-voo-canto embaixo" viewBox="0 0 12 12" aria-hidden="true"><path d="M12 0L0 0L0 12A12 12 0 0 1 12 0Z" /></svg>
+          <div className="lt-voo-h"><span ref={slotRef} className="lt-voo-slot" /><span>{itemVoo.l}</span></div>
+          <div className="lt-voo-l">
+            {itemVoo.sub.map(s => (
+              <button type="button" key={s.id} className={"lt-voo-i" + (s.tab && s.tab === tab ? " on" : "")} onClick={() => { fecharVoo(); s.f(); }}>{s.ic}<span>{s.l}</span></button>
+            ))}
+          </div>
+        </div>, alvo)}
+
+      {mini && icone && icone.id === vooId && createPortal(
+        <div className="lt-viaja" style={{ top: icone.top, left: icone.left }}>{icone.ic}</div>, alvo)}
+
+      {rapido && createPortal(
+        <div className="menu lt-rapido" role="menu" ref={rapRef} style={{ top: rapido.top, left: rapido.left, width: rapido.width }}>
+          {rapidas.map(r => (
+            <button key={r.id} type="button" role="menuitem" className="mi" onClick={() => { setRapido(null); r.f(); }}>
+              {r.ic}<span><b>{r.l}</b><small>{r.d}</small></span>
+            </button>
+          ))}
+        </div>, alvo)}
+    </aside>
+  );
+}
+
 // Gráfico de área (saldo acumulado)
 function AreaChart({ serie, cor }) {
   const gid = useMemo(() => "g" + uid(), []);
@@ -4388,40 +4609,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   return (
     <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " com-foto" + (conta.vidro !== false ? " glass" : "") : "") + (conta.vidro === false ? " solido" : "") + (conta.barra === "botoes" ? " barra-botoes" : "")} data-mode={modoEf}>
       {conta.fundo && imagemFundo(conta.fundo, meusFundos) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo, meusFundos)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
-      <aside className="side" aria-label="Menu">
-        <div className="side-brand"><i><Marca /></i>Avina</div>
-        {doisModos && <ModeSwitch modo={modo} setModo={act.setModo} block />}
-        <nav className="side-nav">
-          {abas.map(a => (
-            <button key={a.id} className={"si" + (tabEf === a.id ? " on" : "")} onClick={() => act.setTab(a.id)} aria-current={tabEf === a.id ? "page" : undefined}>
-              {a.ic}{a.l}{a.n > 0 && <span className="badge">{a.n}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="side-sec">Atalhos</div>
-        <div className="side-nav">
-          {modoEf === "pessoal" ? <>
-            <button className="si" onClick={act.falarGasto}><I.mic />Anotar falando</button>
-            {servidorAvisos() && <button className="si" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
-            <button className="si" onClick={() => act.novoLanc("saida")}><I.minus />Anotar gasto</button>
-            <button className="si" onClick={() => act.novoLanc("entrada")}><I.plus />Anotar entrada</button>
-            <button className="si" onClick={() => act.novaConta()}><I.bill />Nova conta fixa</button>
-          </> : <>
-            {servidorAvisos() && <button className="si" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
-            <button className="si" onClick={act.agora}><I.target />Só o agora</button>
-            <button className="si" onClick={act.fecharDia}><I.moon />Fechar o dia</button>
-            <button className="si" onClick={act.novoPaciente}><I.plus />Novo {TERMO.s}</button>
-            <button className="si" onClick={act.livres}><I.share />Horários livres</button>
-            <button className="si" onClick={() => act.setTab("fin")}><I.send />Cobranças</button>
-          </>}
-        </div>
-        <div className="side-foot">
-          <Avatar conta={conta} onClick={act.openSettings} label="Sua conta" />
-          <div className="who"><b>{conta.nome}</b><span>{conta.email}</span></div>
-          <button className="icon-btn" onClick={act.trocarTema} aria-label={tema.escuro ? "Usar modo claro" : "Usar modo escuro"}>{tema.escuro ? <I.sun /> : <I.moon />}</button>
-          <button className="icon-btn" onClick={act.openSettings} aria-label="Ajustes"><I.gear /></button>
-        </div>
-      </aside>
+      <BarraLateral conta={conta} tema={tema} modo={modoEf} doisModos={doisModos} abas={abas} tab={tabEf} act={act} />
 
       <div className={"puxar" + (recarregando ? " gira" : puxar >= 70 ? " pronto" : "")} aria-hidden="true"
         style={{ transform: `translate(-50%, ${recarregando ? 46 : puxar * .45 + 2}px) rotate(${puxar * 2}deg)`, opacity: recarregando || puxar > 6 ? 1 : 0, transition: puxar ? "opacity .15s" : undefined }}>
