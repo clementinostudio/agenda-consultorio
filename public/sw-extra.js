@@ -4,7 +4,7 @@
 self.addEventListener("push", event => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = { corpo: event.data ? event.data.text() : "" }; }
-  const titulo = d.titulo || "Alvena";
+  const titulo = d.titulo || "Avina";
   const opcoes = {
     body: d.corpo || "Você tem um aviso na agenda.",
     icon: self.registration.scope + "icons/icon-192.png",
@@ -30,7 +30,7 @@ self.addEventListener("notificationclick", event => {
 // Se o aparelho trocar a inscrição sozinho, o app refaz na próxima vez que abrir
 self.addEventListener("pushsubscriptionchange", () => {});
 
-// "Compartilhar com o Alvena" (Android): foto de comprovante, código de boleto ou texto.
+// "Compartilhar com o Avina" (Android): foto de comprovante, código de boleto ou texto.
 // Guarda o que chegou e abre o app, que lê e mostra para você conferir.
 self.addEventListener("fetch", event => {
   const req = event.request;

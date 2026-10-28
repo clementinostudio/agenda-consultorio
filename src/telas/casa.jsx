@@ -57,7 +57,7 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
   const sozinho = C.membros.length < 2;
   const convidar = () => faz("convite", async () => {
     const url = await C.convidar(); setLink(url);
-    const texto = `${conta.nome} te chamou para dividir as contas da casa "${C.casa.nome}" no Alvena:`;
+    const texto = `${conta.nome} te chamou para dividir as contas da casa "${C.casa.nome}" no Avina:`;
     if (navigator.share && C.nuvem) { try { await navigator.share({ title: "Convite para a casa", text: texto, url }); } catch (e) {} }
   });
   const acertar = d => faz("acerto", async () => { await C.salvar("acerto", { de: d.de, para: d.para, valor: d.valor, data: todayISO(), criado: Date.now(), autor: C.eu }); vibrar("ok"); act.toast(`Acertado: ${brlReal(d.valor)}`); });

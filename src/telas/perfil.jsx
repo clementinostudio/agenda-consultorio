@@ -21,8 +21,8 @@ const TXT_PUSH = {
 };
 
 const textoNegado = () => ehIOS()
-  ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Alvena → Permitir Notificações. Depois volte aqui."
-  : "As notificações estão bloqueadas. Libere nas configurações do celular: Apps → Alvena (ou Chrome) → Notificações. Depois volte aqui.";
+  ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Avina → Permitir Notificações. Depois volte aqui."
+  : "As notificações estão bloqueadas. Libere nas configurações do celular: Apps → Avina (ou Chrome) → Notificações. Depois volte aqui.";
 
 function AvisosFechado({ act }) {
   const [ligado, setLigado] = useState(() => pushLigado());
@@ -221,7 +221,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
             <h3>Assinatura</h3>
             <div className="perfil-lista">
               <button className="perfil-row" onClick={() => setAba("assinatura")}>
-                <i className="assin-ic"><Marca /></i><span><b>Alvena</b><small>{resAssin.texto}</small></span>
+                <i className="assin-ic"><Marca /></i><span><b>Avina</b><small>{resAssin.texto}</small></span>
                 {resAssin.selo && <em className="assin-selo">{resAssin.selo}</em>}<I.chev />
               </button>
               <button className="perfil-row" onClick={() => { setAba("assinatura"); setSub("indicar"); }}>

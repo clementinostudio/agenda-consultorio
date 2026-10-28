@@ -99,7 +99,7 @@ Regras:
 - "nada": não dá para entender.
 Não invente valores nem nomes.`;
 
-const PROMPT_PERGUNTAR = `Você é a Bolinha, a assistente do Alvena, um app de agenda e finanças de um profissional de saúde mental.
+const PROMPT_PERGUNTAR = `Você é a Bolinha, a assistente do Avina, um app de agenda e finanças de um profissional de saúde mental.
 É uma conversa FALADA: a resposta vai ser lida em voz alta. Responda em português do Brasil, como quem conversa,
 em 1 a 3 frases curtas e naturais, sem listas, sem markdown, sem emojis. Valores no formato R$ 1.234,56 e datas como 21/10.
 Use SÓ os DADOS abaixo e o que já foi dito na conversa (a pessoa pode fazer perguntas de continuação, como "e em setembro?").
@@ -122,8 +122,9 @@ export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     const origem = req.headers.get("Origin") || "";
-    const permitida = !env.ORIGEM || env.ORIGEM === "*" || origem === env.ORIGEM || origem.startsWith("http://localhost") || origem.startsWith("http://127.0.0.1") || /^http:\/\/192\.168\./.test(origem);
-    const cors = { "Access-Control-Allow-Origin": permitida ? (origem || "*") : env.ORIGEM, "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", Vary: "Origin" };
+    const origens = String(env.ORIGEM || "").split(",").map(o => o.trim()).filter(Boolean); // pode ser mais de um endereço, separados por vírgula
+    const permitida = !origens.length || origens.includes("*") || origens.includes(origem) || origem.startsWith("http://localhost") || origem.startsWith("http://127.0.0.1") || /^http:\/\/192\.168\./.test(origem);
+    const cors = { "Access-Control-Allow-Origin": permitida ? (origem || "*") : origens[0], "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", Vary: "Origin" };
     const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...cors, "Content-Type": "application/json" } });
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -152,7 +153,7 @@ export default {
     // Preço do combustível: acha a planilha semanal mais recente da ANP e repassa ao app (quem lê é o aparelho:
     // o plano grátis só tem 10 ms de processamento por pedido, e baixar/repassar quase não gasta nada)
     if (url.pathname === "/anp") {
-      const UA = { "User-Agent": "Mozilla/5.0 (Alvena; precos de combustivel)" };
+      const UA = { "User-Agent": "Mozilla/5.0 (Avina; precos de combustivel)" };
       try {
         const pag = await fetch("https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos/levantamento-de-precos-de-combustiveis-ultimas-semanas-pesquisadas", { headers: UA });
         const html = await pag.text();

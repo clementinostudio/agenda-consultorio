@@ -1,4 +1,4 @@
-// Assinatura do Alvena: teste grátis, planos, pagamento, pausar e cancelar.
+// Assinatura do Avina: teste grátis, planos, pagamento, pausar e cancelar.
 // Por enquanto é só demonstração: nada é cobrado e tudo fica guardado neste aparelho.
 // Quando ligar o Asaas, quem muda o "status" é o aviso de pagamento do servidor, não estes botões.
 import React, { useState, useEffect } from "react";
@@ -124,7 +124,7 @@ function AssinaturaPagina({ a, setA, tela, setTela, act, conta }) {
   if (tela === "planos") return (
     <div className="stack assin-pay">
       <i className="assin-logo"><Marca /></i>
-      <h2>Continue com o Alvena</h2>
+      <h2>Continue com o Avina</h2>
       <ul className="assin-inclui">{INCLUI.map(t => <li key={t}><I.check />{t}</li>)}</ul>
       <div className="assin-planos" role="radiogroup" aria-label="Plano">
         {Object.entries(PLANOS).map(([id, p]) => (
@@ -156,7 +156,7 @@ function AssinaturaPagina({ a, setA, tela, setTela, act, conta }) {
 
   if (tela === "indicar") {
     const url = `${ENDERECO_APP}?indicacao=${meuCodigo}`;
-    const msg = `Estou usando o Alvena para a agenda e as cobranças do consultório e tem me poupado muito tempo. Com o meu código ${meuCodigo}, você ganha 1 mês grátis: ${url}`;
+    const msg = `Estou usando o Avina para a agenda e as cobranças do consultório e tem me poupado muito tempo. Com o meu código ${meuCodigo}, você ganha 1 mês grátis: ${url}`;
     const ind = a.indicacoes || [];
     return (
       <div className="stack">
@@ -293,7 +293,7 @@ function AssinaturaPagina({ a, setA, tela, setTela, act, conta }) {
 
       {(sit.s === "teste" || sit.s === "acabou") && (
         <div className="perfil-grupo">
-          <h3>O que vem no Alvena</h3>
+          <h3>O que vem no Avina</h3>
           <ul className="assin-inclui">{INCLUI.map(t => <li key={t}><I.check />{t}</li>)}</ul>
         </div>
       )}

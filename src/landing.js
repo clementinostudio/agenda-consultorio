@@ -7,6 +7,9 @@ import "@fontsource/sora/600.css";
 import "@fontsource/sora/700.css";
 import "./landing.css";
 
+// Endereço do app (fica num subdomínio só dele)
+const APP = import.meta.env.VITE_APP_URL || "https://app.avina.com.br/";
+
 const calmo = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // 1. Blocos aparecem suavemente ao entrar na tela
@@ -34,12 +37,11 @@ if (matchMedia("(hover: hover) and (pointer: fine)").matches && !calmo) {
   });
 }
 
-// 4. Cadastro: guarda o e-mail e abre o app já na tela de criar conta
+// 4. Cadastro: abre o app já na tela de criar conta, com o e-mail preenchido (o app é outro endereço, então vai no link)
 document.querySelectorAll("[data-cadastro]").forEach(f => f.addEventListener("submit", e => {
   e.preventDefault();
   const email = (f.querySelector("input").value || "").trim();
-  try { if (email) sessionStorage.setItem("agenda-email", email); } catch (x) {}
-  location.href = "../#criar";
+  location.href = `${APP}${email ? `?email=${encodeURIComponent(email)}` : ""}#criar`;
 }));
 
 // 5. Demonstração da fala: escreve a frase, mostra o que o app entendeu e passa para a próxima

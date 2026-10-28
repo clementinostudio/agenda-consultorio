@@ -1,4 +1,4 @@
-# Alvena
+# Avina
 
 App para profissionais da saúde mental (pensado para quem tem TDAH): agenda que se repete sozinha, cálculo de sublocação, cobrança automática por pacote, lembretes, modo Pessoal para os gastos da casa e muito mais. Feito com **Vite + React** e pronto para virar **PWA** (instala na tela inicial do celular e abre sem internet).
 
@@ -59,6 +59,7 @@ npm run preview  # abre essa versão final para conferir (com o modo offline fun
 3. No GitHub, abra o repositório → **Settings → Pages** → em **Build and deployment**, escolha **Source: GitHub Actions**.
 4. Pronto. A cada `git push` na branch `main`, o arquivo `.github/workflows/deploy.yml` gera e publica o app sozinho. O endereço fica assim:
    `https://SEU-USUARIO.github.io/agenda-consultorio/`
+5. Domínio próprio (o nosso: `app.avina.com.br`): no Cloudflare, um registro **CNAME** `app` → `SEU-USUARIO.github.io` (nuvem cinza, "DNS only"); no GitHub, **Settings → Pages → Custom domain** = `app.avina.com.br` e, quando liberar, **Enforce HTTPS**. Depois rode o workflow de novo (aba **Actions** → *Publicar no GitHub Pages* → **Run workflow**): ele percebe o domínio e gera o app na raiz.
 
 Acompanhe a publicação na aba **Actions** do repositório (leva uns 2 minutos).
 
@@ -130,8 +131,8 @@ Para adicionar um fundo novo: coloque `meu-fundo.jpg` e `meu-fundo-mini.jpg` em 
 - **Teto do mês por categoria** (Gastos → toque numa categoria): aviso no celular em 80% e quando passa do teto.
 - **Ler boleto** (Contas → ícone de código de barras): pela câmera, por foto/print ou colando a linha digitável. Valor e vencimento saem do próprio código (os dígitos verificadores são conferidos), sem internet. Vira conta fixa (com o código guardado para copiar) ou gasto já pago.
 - **Importar extrato** (Gastos → Importar extrato): OFX ou CSV do Nubank, Inter, Itaú, Bradesco, BB, Caixa, C6... O arquivo é lido no aparelho. Reconhece as lojas, aprende as categorias que você já usou e desmarca o que já está no app, pagamento de fatura e aplicações.
-- **Foto do comprovante** (ícone de câmera no novo gasto): a IA lê valor, loja e data. No Android, o Alvena também aparece no **Compartilhar** de outros apps (foto de comprovante ou código de boleto).
-- **Perguntar ao Alvena** pela Bolinha ou pelo teclado: "quanto gastei de Uber em outubro?", "quem está me devendo?", "quem eu atendo amanhã?". Dá para ouvir a resposta.
+- **Foto do comprovante** (ícone de câmera no novo gasto): a IA lê valor, loja e data. No Android, o Avina também aparece no **Compartilhar** de outros apps (foto de comprovante ou código de boleto).
+- **Perguntar ao Avina** pela Bolinha ou pelo teclado: "quanto gastei de Uber em outubro?", "quem está me devendo?", "quem eu atendo amanhã?". Dá para ouvir a resposta.
 - **Resumo da semana** no domingo às 20h (Ajustes → Avisos).
 - **Conversa com a Bolinha:** perguntas viram um chat; ela responde falando (com a voz mais natural do aparelho: Google no Android, "Natural" no Edge, "Melhorada" no iPhone) e, se você perguntou falando, já escuta a próxima pergunta. Lembra do contexto ("e em setembro?"). Toque num balão para ouvir de novo; o botão de som desliga a fala. "Obrigado" ou "tchau" encerram.
 - **Clima de verdade** (Open-Meteo): temperatura de agora, sensação, umidade, chuva hora a hora, mínima e máxima. Toque no clima do Início para ver tudo e, se quiser, usar a localização do aparelho (mais preciso que a cidade). Sem internet, mostra a última previsão real com o horário; nunca números inventados.
@@ -199,7 +200,7 @@ Toque no microfone da barra de baixo e fale. Um degradê colorido sobe do pé da
 - Em Perfil → Aparência e fundo dá para desligar o **Efeito de vidro** (tudo fica sólido, a foto de fundo continua atrás).
 
 ### Página de apresentação (landing page)
-Fica em `sobre/index.html` e é publicada junto com o app: `https://SEU-USUARIO.github.io/agenda-consultorio/sobre/`. Quem abre o endereço do app sem estar logado (pelo navegador) cai primeiro nela; quem já está logado ou abre pelo app instalado vai direto para o app. Os botões dela levam para `#criar` (criar conta), `#entrar` (entrar) e `#demo` (ver a demonstração). Os textos estão direto no HTML; o visual fica em `src/landing.css` e as animações (abas, acordeão, demonstração da fala, iPhone que inclina com o mouse) em `src/landing.js`, sem bibliotecas. As telas do app que aparecem dentro do iPhone ficam em `public/landing/`.
+Fica em `sobre/index.html` e é publicada à parte, em `https://avina.com.br` (Cloudflare Workers, grátis): `npm run publicar:site` gera a pasta `dist-site/` e publica pela pasta `site/` (que também manda o `www` para o endereço sem www). Para ver no computador: `npm run dev:site`. Quem abre o endereço do app sem estar logado (pelo navegador) cai primeiro nela; quem já está logado ou abre pelo app instalado vai direto para o app. Os botões dela levam para `https://app.avina.com.br/` com `#criar` (criar conta, com `?email=` se a pessoa digitou o e-mail), `#entrar` (entrar) e `#demo` (ver a demonstração). Os textos estão direto no HTML; o visual fica em `src/landing.css` e as animações (abas, acordeão, demonstração da fala, iPhone que inclina com o mouse) em `src/landing.js`, sem bibliotecas. As telas do app que aparecem dentro do iPhone ficam em `public/landing/`.
 
 ### Cara de app
 - Bolinha, o mascote do microfone: uma bola minimalista com dois olhinhos que flutua, pisca, olha em volta, faz caras sozinha, reage à sua voz, fica feliz quando entende e confusa quando não entende.

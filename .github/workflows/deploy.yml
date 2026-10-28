@@ -1,5 +1,8 @@
 # Publica o app no GitHub Pages a cada push na branch main.
 # Uma vez só: no GitHub, vá em Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# Domínio: Settings → Pages → Custom domain = app.avina.com.br. O endereço base sai sozinho do Pages
+# ("/" com o domínio, "/agenda-consultorio/" sem ele). Depois de trocar o domínio, rode este workflow de novo.
+# A página de apresentação (avina.com.br) não sai daqui: veja site/.
 name: Publicar no GitHub Pages
 
 on:
@@ -25,10 +28,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - id: pages
+        uses: actions/configure-pages@v5
       - run: npm ci
       - run: npm run build
         env:
-          BASE_PATH: /${{ github.event.repository.name }}/
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
           # Endereço do servidor de avisos (o servidor-avisos/instalar-avisos.sh preenche sozinho)
           VITE_AVISOS_URL: ${{ vars.AVISOS_URL }}
       - uses: actions/upload-pages-artifact@v3

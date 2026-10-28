@@ -2,12 +2,15 @@
   "name": "agenda-consultorio",
   "private": true,
   "version": "1.0.0",
-  "description": "Agenda, cobranças e contas para profissionais da saúde mental. PWA feito com Vite + React.",
+  "description": "Avina: agenda, cobranças e contas para profissionais da saúde mental. PWA feito com Vite + React.",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "dev:site": "vite --config vite.site.config.js --host",
+    "build:site": "vite build --config vite.site.config.js",
+    "publicar:site": "npm run build:site && cd site && npx wrangler deploy"
   },
   "dependencies": {
     "@fontsource/manrope": "5.3.0",

@@ -56,7 +56,7 @@ function Onboarding({ conta, onDone, onSair }) {
           <Field label="Aniversário (opcional)" icon={<I.cal />} htmlFor="o-nasc"><input id="o-nasc" type="date" value={nasc} max={todayISO()} onChange={e => setNasc(e.target.value)} /></Field>
         </div>
         <div className="hint">No dia do seu aniversário o app fica mais leve com você.</div></> },
-    { id: "uso", q: "Como você vai usar o Alvena?", why: "Assim eu mostro só o que faz sentido pra você. Dá pra mudar depois no Perfil.",
+    { id: "uso", q: "Como você vai usar o Avina?", why: "Assim eu mostro só o que faz sentido pra você. Dá pra mudar depois no Perfil.",
       valida: () => uso ? "" : "Escolha uma opção.",
       body: <div className="ob-usos">{USOS.map(([k, t, s, ilu]) => (
         <button key={k} type="button" className={"ob-uso" + (uso === k ? " on" : "")} aria-pressed={uso === k} onClick={() => { setUso(k); vibrar("toque"); }}>

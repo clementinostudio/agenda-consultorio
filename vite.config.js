@@ -1,23 +1,17 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
-import { fileURLToPath } from "node:url";
 
-// BASE_PATH: no GitHub Pages o app fica em /nome-do-repositorio/ (o workflow já preenche isso).
-// Na Vercel, Netlify ou rodando local, fica "/".
+// BASE_PATH: o workflow preenche sozinho ("/" com o domínio app.avina.com.br, /nome-do-repositorio/ sem domínio próprio).
+// Rodando local, fica "/". A página de apresentação (avina.com.br) tem o build dela: vite.site.config.js.
 const base = process.env.BASE_PATH || "/";
 
 export default defineConfig({
   base,
-  // Duas páginas: o app (index.html) e a página de apresentação (sobre/index.html)
   build: {
     rollupOptions: {
       // O React fica num arquivo separado: quase nunca muda, então o celular não precisa baixar de novo a cada atualização
       output: { manualChunks: id => (/node_modules\/(react|react-dom|scheduler)\//.test(id) ? "react" : undefined) },
-      input: {
-        app: fileURLToPath(new URL("./index.html", import.meta.url)),
-        sobre: fileURLToPath(new URL("./sobre/index.html", import.meta.url)),
-      },
     },
   },
   plugins: [
@@ -27,8 +21,8 @@ export default defineConfig({
       includeAssets: ["icons/favicon.svg", "icons/apple-touch-icon.png", "fundos/*.jpg"],
       manifest: {
         id: "agenda-do-consultorio",
-        name: "Alvena",
-        short_name: "Alvena",
+        name: "Avina",
+        short_name: "Avina",
         description: "Sua agenda, seus pagamentos e suas contas num lugar só.",
         lang: "pt-BR",
         start_url: ".",
@@ -39,7 +33,7 @@ export default defineConfig({
         categories: ["productivity", "medical", "finance"],
         prefer_related_applications: false,
         launch_handler: { client_mode: ["focus-existing", "auto"] },
-        // Android: o Alvena aparece no "Compartilhar" (foto de comprovante, código de boleto, texto)
+        // Android: o Avina aparece no "Compartilhar" (foto de comprovante, código de boleto, texto)
         share_target: {
           action: "./compartilhar", method: "POST", enctype: "multipart/form-data",
           params: { title: "title", text: "text", url: "url", files: [{ name: "arquivo", accept: ["image/*"] }] },
@@ -70,7 +64,6 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,webp,woff2}"],
         globIgnores: ["**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/splash/**", "**/screenshots/**", "**/landing/**"],
         navigateFallback: "index.html",
-        navigateFallbackDenylist: [/\/sobre\//], // a página de apresentação não é o app
         importScripts: ["sw-extra.js"], // abre o app ao tocar numa notificação
         runtimeCaching: [
           { // Leitor de código de barras (boleto): baixa só quando usado e fica guardado para funcionar offline

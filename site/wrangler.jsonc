@@ -1,0 +1,13 @@
+{
+  // Página de apresentação (avina.com.br) na Cloudflare, de graça (Workers Free: arquivos estáticos ilimitados).
+  // Publicar: npm run publicar:site (na pasta de cima). O app fica no GitHub Pages, em app.avina.com.br.
+  "name": "avina-site",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "assets": { "directory": "../dist-site", "binding": "ASSETS", "run_worker_first": true },
+  "routes": [
+    { "pattern": "avina.com.br", "custom_domain": true },
+    { "pattern": "www.avina.com.br", "custom_domain": true }
+  ],
+  "workers_dev": false
+}

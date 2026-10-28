@@ -1,5 +1,5 @@
 /*
-  Alvena (antes: Agenda do Consultório)
+  Avina (antes: Agenda do Consultório)
   -------------------------------------
   Quase todo o app está neste arquivo, separado em seções numeradas (procure por "====").
   Telas pouco usadas (perfil, painéis, cadastro inicial, recorte de foto e o modo Pessoal) ficam em src/telas/
@@ -1433,7 +1433,7 @@ const vazio = () => ({ settings: { pix: "" }, patients: [], sessions: [], charge
    6. ÍCONES
    ========================================================= */
 const Svg = ({ children, sw = 1.8 }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{children}</svg>;
-// Logo da Alvena: um A de fita só (sobe, curva no topo, desce a haste; a travessa é um laço pela esquerda)
+// Logo da Avina: um A de fita só (sobe, curva no topo, desce a haste; a travessa é um laço pela esquerda)
 const Marca = () => (
   <svg viewBox="97 105 300 300" aria-hidden="true">
     <path d="M338 380V176Q338 128 300 128Q274 128 260 158L196 300Q180 336 152 334Q128 332 134 302Q146 258 214 248Q296 238 338 300" fill="none" stroke="#fff" strokeWidth="44" strokeLinecap="round" strokeLinejoin="round" />
@@ -1914,7 +1914,7 @@ function AreaChart({ serie, cor }) {
 function Auth({ onLogin, emailInicial, aviso }) {
   const [modo, setModo] = useState(() => location.hash === "#criar" ? "criar" : "entrar"); // entrar | criar | esqueci
   const [nome, setNome] = useState("");
-  const [email, setEmail] = useState(() => { if (emailInicial) return emailInicial; try { const e = sessionStorage.getItem("agenda-email") || ""; sessionStorage.removeItem("agenda-email"); return e; } catch (x) { return ""; } });
+  const [email, setEmail] = useState(() => { if (emailInicial) return emailInicial; const daApresentacao = new URLSearchParams(location.search).get("email"); if (daApresentacao) return daApresentacao; try { const e = sessionStorage.getItem("agenda-email") || ""; sessionStorage.removeItem("agenda-email"); return e; } catch (x) { return ""; } });
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState(null);
   const [ok, setOk] = useState(null);
@@ -1972,7 +1972,7 @@ function Auth({ onLogin, emailInicial, aviso }) {
   };
   return (
     <main className="auth">
-      <div className="brand"><i><Marca /></i>Alvena</div>
+      <div className="brand"><i><Marca /></i>Avina</div>
       <div className="auth-h">
         <div className="hi">{criar ? "Vamos começar!" : esqueci ? "Acontece!" : "Que bom te ver!"}</div>
         <h1>{criar ? "Criar conta" : esqueci ? "Nova senha" : "Entrar"}</h1>
@@ -2016,7 +2016,7 @@ function NovaSenha({ onPronto }) {
   };
   return (
     <main className="auth">
-      <div className="brand"><i><Marca /></i>Alvena</div>
+      <div className="brand"><i><Marca /></i>Avina</div>
       <div className="auth-h"><div className="hi">Quase lá!</div><h1>Senha nova</h1><p>Escolha a senha que você vai usar daqui para frente.</p></div>
       <form className="stack" onSubmit={enviar} noValidate>
         <div className="fields"><Field label="Senha nova" icon={<I.lock />} htmlFor="n-senha"><input id="n-senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" autoComplete="new-password" autoFocus /></Field></div>
@@ -4333,7 +4333,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " com-foto" + (conta.vidro !== false ? " glass" : "") : "") + (conta.vidro === false ? " solido" : "") + (conta.barra === "botoes" ? " barra-botoes" : "")} data-mode={modoEf}>
       {conta.fundo && imagemFundo(conta.fundo, meusFundos) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo, meusFundos)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
       <aside className="side" aria-label="Menu">
-        <div className="side-brand"><i><Marca /></i>Alvena</div>
+        <div className="side-brand"><i><Marca /></i>Avina</div>
         {doisModos && <ModeSwitch modo={modo} setModo={act.setModo} block />}
         <nav className="side-nav">
           {abas.map(a => (
@@ -4465,7 +4465,7 @@ function App() {
   useEffect(() => {
     const h = location.hash;
     if (h === "#demo" && !sessao) entrar(CONTA_DEMO, false);
-    if (h === "#demo" || h === "#entrar" || h === "#criar") history.replaceState(null, "", location.pathname + location.search);
+    if (h === "#demo" || h === "#entrar" || h === "#criar") { const q = new URLSearchParams(location.search); q.delete("email"); history.replaceState(null, "", location.pathname + (q.size ? `?${q}` : "")); }
   }, []);
   // Nuvem: confere se o login ainda vale e escuta os links dos e-mails (confirmar conta, senha nova)
   const daNuvem = !!(sessao && sessao.conta && sessao.conta.uid);

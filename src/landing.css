@@ -174,6 +174,7 @@ section { position: relative; padding: 90px max(20px, env(safe-area-inset-left, 
 .pil-ic { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: rgba(61, 214, 140, .14); color: #7CF0BF; font-size: 19px; font-weight: 800; }
 .pilares h3 { font-size: 21px; margin: 18px 0 8px; } .pilares p { margin: 0; color: var(--muted); font-size: 16px; }
 .passos b { font-family: var(--f-display); font-size: 21px; }
+.passos li a { color: inherit; text-decoration: underline; text-decoration-color: rgba(255, 255, 255, .35); text-underline-offset: 3px; }
 .passos ol { margin: 12px 0 10px; padding-left: 20px; color: #C9CEDA; } .passos li { margin: 4px 0; }
 .passos small { color: var(--dim); font-size: 13px; font-weight: 600; }
 
