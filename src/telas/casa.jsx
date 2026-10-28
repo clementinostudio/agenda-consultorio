@@ -4,6 +4,8 @@ import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, today
 import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
 import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja } from "../nota.js";
 import { lerQRs } from "./ferramentas.jsx";
+// gerador de QR code (zxing, o mesmo do leitor): só carrega quando alguém pede o QR do convite
+import wasmEscritor from "zxing-wasm/writer/zxing_writer.wasm?url";
 
 const VAGAS = ["Parceiro(a)", "Mãe ou pai", "Filho(a)", "Amigo(a)"];
 const Pessoa = ({ m, grande }) => <span className={"casa-av" + (grande ? " grande" : "")}>{m.foto ? <img src={m.foto} alt="" /> : iniciais(m.nome || "?")}</span>;
@@ -23,6 +25,7 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
   const [off, setOff] = useState(0);
   const [ocupado, setOcupado] = useState(""), [erro, setErro] = useState("");
   const [novoNome, setNovoNome] = useState(null); // null = não está mudando o nome
+  const [verQR, setVerQR] = useState(false);
   const faz = async (k, fn) => { setOcupado(k); setErro(""); try { await fn(); } catch (e) { setErro(erroDe(e)); vibrar("erro"); } setOcupado(""); };
 
   if (!C.casa) return (
@@ -58,9 +61,11 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
   const { dividas } = saldos(C.lanc, C.acertos, C.membros);
   const sozinho = C.membros.length < 2;
   const convidar = () => faz("convite", async () => {
-    const url = await C.convidar(); setLink(url);
+    const url = await C.convidar(); setLink(url); setVerQR(false);
     if (navigator.share && C.nuvem) { try { await navigator.share({ title: "Convite para a casa", text: textoConvite(), url }); } catch (e) {} }
   });
+  // QR code: para convidar pessoalmente (a pessoa aponta a câmera) ou mandar como imagem
+  const mostrarQR = () => { if (verQR) return setVerQR(false); if (link) return setVerQR(true); faz("convite", async () => { setLink(await C.convidar()); setVerQR(true); }); };
   const textoConvite = () => `${conta.nome} te chamou para dividir as contas da casa "${C.casa.nome}" no Avina. É grátis: abra o link, crie sua conta e você entra na casa.`;
   const mandarZap = () => window.open(`https://wa.me/?text=${encodeURIComponent(`${textoConvite()}
 ${link}`)}`, "_blank", "noopener");
@@ -98,6 +103,14 @@ ${link}`)}`, "_blank", "noopener");
                 <I.chev />
               </button>
             )}
+            {C.membros.length < MAX_PESSOAS && (
+              <button className="casa-convite" onClick={mostrarQR} disabled={ocupado === "convite"} aria-expanded={verQR}>
+                <span className="ic"><I.scan /></span>
+                <span className="tx"><b>{verQR ? "Esconder o QR code" : "Mostrar QR code"}</b><small>Sem link: a pessoa aponta a câmera do celular e entra na casa.</small></span>
+                <I.chev />
+              </button>
+            )}
+            {verQR && link && <QRConvite link={link} casa={C.casa.nome} quem={conta.nome} act={act} />}
             {link && <div className="casa-link"><span>{link}</span><button className="bub-act" onClick={() => { try { navigator.clipboard.writeText(link); act.toast("Link copiado"); } catch (e) {} }}>Copiar</button>{C.nuvem && <button className="bub-act" onClick={mandarZap}>WhatsApp</button>}</div>}
             {!C.nuvem && link && C.membros.length < MAX_PESSOAS && <button className="link" onClick={C.simularEntrada}>Demonstração: simular alguém aceitando o convite</button>}
             {erro && <div className="error">{erro}</div>}
@@ -169,6 +182,51 @@ ${link}`)}`, "_blank", "noopener");
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---------- QR code do convite ---------- */
+let ESCRITOR = null;
+const escritorQR = () => ESCRITOR || (ESCRITOR = import("zxing-wasm/writer").then(m => { m.prepareZXingModule({ overrides: { locateFile: (p, prefix) => (p.endsWith(".wasm") ? wasmEscritor : prefix + p) } }); return m; }));
+// A imagem para mandar: fundo branco, o QR grande e o convite escrito embaixo (assim faz sentido sozinha no WhatsApp)
+async function imagemConvite(svg, casa, quem) {
+  const img = await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
+  const L = 720, c = document.createElement("canvas"); c.width = L; c.height = L + 190;
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+  g.imageSmoothingEnabled = false; g.drawImage(img, 60, 50, L - 120, L - 120);
+  g.fillStyle = "#14161c"; g.textAlign = "center";
+  g.font = "700 34px system-ui, sans-serif"; g.fillText(`Convite para a casa “${casa}”`.slice(0, 44), L / 2, L - 10);
+  g.font = "500 26px system-ui, sans-serif"; g.fillStyle = "#555b66";
+  g.fillText(`${quem} te chamou no Avina. É grátis.`.slice(0, 52), L / 2, L + 40);
+  g.fillText("Aponte a câmera do celular para entrar.", L / 2, L + 80);
+  g.font = "500 22px system-ui, sans-serif"; g.fillText("O convite vale 7 dias.", L / 2, L + 130);
+  return new Promise(ok => c.toBlob(ok, "image/png"));
+}
+function QRConvite({ link, casa, quem, act }) {
+  const [svg, setSvg] = useState(null), [falhou, setFalhou] = useState(false);
+  useEffect(() => {
+    let vivo = true; setSvg(null); setFalhou(false);
+    escritorQR().then(m => m.writeBarcode(link, { format: "QRCode", ecLevel: "M", withQuietZones: true }))
+      .then(r => { if (vivo) r && r.svg ? setSvg(r.svg) : setFalhou(true); }).catch(() => { if (vivo) setFalhou(true); });
+    return () => { vivo = false; };
+  }, [link]);
+  const mandar = async () => {
+    try {
+      const blob = await imagemConvite(svg, casa, quem), arq = new File([blob], "convite-avina.png", { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [arq] })) { try { await navigator.share({ files: [arq], title: "Convite para a casa" }); } catch (e) {} return; }
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = arq.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      act.toast("Imagem do convite salva");
+    } catch (e) { act.toast("Não consegui gerar a imagem"); }
+  };
+  if (falhou) return <div className="hint">Não consegui gerar o QR code. Use o link.</div>;
+  return (
+    <div style={{ display: "grid", justifyItems: "center", gap: 10, padding: "18px 16px 14px", borderRadius: 20, background: "#fff", color: "#14161c", textAlign: "center" }}>
+      {svg ? <img src={"data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg)} alt={`QR code do convite para a casa ${casa}`} style={{ width: "min(230px, 70vw)", height: "auto", aspectRatio: "1", imageRendering: "pixelated" }} />
+        : <div style={{ width: "min(230px, 70vw)", aspectRatio: "1", display: "grid", placeItems: "center", color: "#555b66", fontSize: 13 }}>Gerando o QR code…</div>}
+      <b style={{ fontSize: 15 }}>Aponte a câmera do celular</b>
+      <small style={{ color: "#555b66", fontSize: 12.5, lineHeight: 1.4 }}>Abre o convite para a casa “{casa}”. É grátis, e vale 7 dias.</small>
+      {svg && <button type="button" className="bub-act" onClick={mandar}>Mandar como imagem</button>}
     </div>
   );
 }
