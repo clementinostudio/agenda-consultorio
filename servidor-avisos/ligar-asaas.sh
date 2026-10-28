@@ -24,7 +24,10 @@ verde "1/5 Chave de API $ONDE"
 echo "No Asaas ($PAINEL): menu do seu nome → Integrações → Chaves de API → Gerar chave. Copie e cole aqui."
 echo "(a chave não aparece enquanto você cola: é normal)"
 read -rs CHAVE; echo
+# tira espaços, aspas, quebras de linha e o caractere invisível que o Windows às vezes cola no começo
+CHAVE=$(printf "%s" "$CHAVE" | sed 's/^\xEF\xBB\xBF//' | tr -d '\r\n\t "'"'")
 [ -n "$CHAVE" ] || erro "Não veio nenhuma chave."
+case "$CHAVE" in \$aact_*) ;; *) echo "Atenção: as chaves do Asaas costumam começar com \$aact_. Vou testar mesmo assim." ;; esac
 OK=$(ASAAS_URL="$ASAAS_URL" CHAVE="$CHAVE" node -e '
   fetch(process.env.ASAAS_URL + "/customers?limit=1", { headers: { access_token: process.env.CHAVE, "User-Agent": "Avina" } })
     .then(r => process.stdout.write(r.ok ? "ok" : "erro " + r.status)).catch(e => process.stdout.write("erro " + e.message));')
