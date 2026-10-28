@@ -1451,7 +1451,7 @@ const Svg = ({ children, sw = 1.8 }) => <svg viewBox="0 0 24 24" fill="none" str
 // Logo da Avina: um A de fita só (sobe, curva no topo, desce a haste; a travessa é um laço pela esquerda)
 const Marca = () => (
   <svg viewBox="97 105 300 300" aria-hidden="true">
-    <path d="M338 380V176Q338 128 300 128Q274 128 260 158L196 300Q180 336 152 334Q128 332 134 302Q146 258 214 248Q296 238 338 300" fill="none" stroke="#fff" strokeWidth="44" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M338 380V176Q338 128 300 128Q274 128 260 158L196 300Q180 336 152 334Q128 332 134 302Q146 258 214 248Q296 238 338 300" fill="none" stroke="#1F3BEF" strokeWidth="44" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 const I = {

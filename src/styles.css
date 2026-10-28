@@ -449,7 +449,7 @@ button:disabled{cursor:default}
 /* Login */
 .auth{max-width:440px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;justify-content:center;gap:22px;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));padding-block:32px}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-weight:700;font-size:17px;justify-content:center}
-.brand i{width:34px;height:34px;border-radius:11px;background:radial-gradient(circle at 50% 18%,rgba(233,251,255,.6),transparent 50%),linear-gradient(#06CFFF,#0AA6FF 33%,#1167F6 68%,#2B2CF0);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);display:grid;place-items:center;color:#fff}
+.brand i{width:34px;height:34px;border-radius:11px;background:#F7F6F2;box-shadow:inset 0 0 0 1px rgba(18,20,40,.08);display:grid;place-items:center;color:#fff}
 .brand svg{width:24px;height:24px}
 .auth-h{text-align:center}
 .auth-h .hi{font-family:var(--f-display);font-weight:600;font-size:22px}
@@ -2029,7 +2029,7 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .posto .preco { display: grid; text-align: right; }
 .posto.barato .mid b, .posto.barato .preco b { color: var(--mint); }
 /* Assinatura */
-.perfil-row > i.assin-ic { background: radial-gradient(circle at 50% 18%, rgba(233, 251, 255, .6), transparent 50%), linear-gradient(#06CFFF, #0AA6FF 33%, #1167F6 68%, #2B2CF0); }
+.perfil-row > i.assin-ic { background: #F7F6F2; box-shadow: inset 0 0 0 1px rgba(18, 20, 40, .08); }
 .perfil-row > i.assin-ic svg { width: 24px; height: 24px; }
 .assin-selo { flex: none; font-style: normal; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 99px; background: var(--amber-soft); color: var(--amber); }
 .assin-card { display: flex; flex-direction: column; gap: 4px; padding: 20px; border-radius: 28px; border: 1px solid var(--line); background: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--mode) 24%, transparent), transparent 65%), var(--card); }
@@ -2048,7 +2048,7 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .assin-inclui { list-style: none; margin: 0; padding: 0 6px; display: grid; gap: 10px; }
 .assin-inclui li { display: flex; gap: 10px; align-items: flex-start; font-weight: 700; font-size: 15px; }
 .assin-inclui svg { width: 18px; height: 18px; flex: none; margin-top: 2px; color: var(--mode); }
-.assin-logo { align-self: center; width: 64px; height: 64px; margin-top: 8px; border-radius: 20px; display: grid; place-items: center; background: radial-gradient(circle at 50% 18%, rgba(233, 251, 255, .6), transparent 50%), linear-gradient(#06CFFF, #0AA6FF 33%, #1167F6 68%, #2B2CF0); box-shadow: 0 12px 30px rgba(17, 103, 246, .35); }
+.assin-logo { align-self: center; width: 64px; height: 64px; margin-top: 8px; border-radius: 20px; display: grid; place-items: center; background: #F7F6F2; box-shadow: inset 0 0 0 1px rgba(18, 20, 40, .08), 0 10px 26px rgba(18, 20, 40, .14); }
 .assin-logo svg { width: 44px; height: 44px; }
 .assin-pay h2, .assin-pronto h2 { margin: 0; text-align: center; font-family: var(--f-display); font-weight: 600; font-size: 26px; letter-spacing: -.02em; }
 .assin-pay .assin-inclui { padding: 4px 10px 8px; }
