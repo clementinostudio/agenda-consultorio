@@ -33,7 +33,9 @@ export function lerPaginaNfce(html) {
   const loja = txt(doc.querySelector("#u20, .txtTopo")) || "";
   const cnpj = (corpo.match(/CNPJ:?\s*([\d./-]{14,18})/i) || [])[1] || "";
   const data = dataBR((corpo.match(/emiss[aã]o:?\s*(\d{2}\/\d{2}\/\d{4})/i) || [])[1]) || dataBR(corpo);
-  return { loja, cnpj, data, total, itens };
+  // quando a Sefaz recusa ("Não foi possível executar a operação: Url do QRCode mal formatado"), guarda o motivo
+  const recusa = itens.length ? "" : ((corpo.match(/n[aã]o foi poss[ií]vel[^:]*:\s*([^.<]{4,120})/i) || [])[1] || "").replace(/[\s>-]+$/, "").trim();
+  return { loja, cnpj, data, total, itens, recusa };
 }
 
 // Nota lida pela IA (foto): arruma os números e tira o que não faz sentido

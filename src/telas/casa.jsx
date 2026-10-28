@@ -393,7 +393,7 @@ export function NotaSheet({ casa: C, servidor, onClose, act }) {
       let html = new TextDecoder(cs || "utf-8").decode(buf);
       if (!cs) { const m = html.match(/<meta[^>]+charset=["']?([\w-]+)/i); if (m && !/utf-?8/i.test(m[1])) html = new TextDecoder(m[1]).decode(buf); }
       const n = lerPaginaNfce(html);
-      if (!n.itens.length) return falhou("Esse estado mostra a nota de um jeito que eu ainda não leio. Tire uma foto da nota que a IA lê.");
+      if (!n.itens.length) return falhou(n.recusa ? `A Sefaz respondeu: “${n.recusa}”. Confira se o QR code está inteiro, ou tire uma foto da nota que a IA lê.` : "Esse estado mostra a nota de um jeito que eu ainda não leio. Tire uma foto da nota que a IA lê.");
       pronto({ ...n, fonte: "qr", url });
     } catch (e) { falhou("Não consegui buscar a nota. Confira a internet ou tente pela foto."); }
   };
