@@ -74,8 +74,11 @@ node -e '
   t = t.replace(/"ASAAS_URL": "[^"]*"/, `"ASAAS_URL": "${url}"`);
   if (producao === "1" && /"COBRANCA_INICIO": ""/.test(t)) t = t.replace(/"COBRANCA_INICIO": ""/, `"COBRANCA_INICIO": "${hoje}"`);
   fs.writeFileSync("wrangler.jsonc", t);' "$ASAAS_URL" "$([ "$1" = "producao" ] && echo 1 || echo 0)" "$HOJE"
-# cópia para testar no computador (fica fora do GitHub)
-printf 'ASAAS_KEY=%s\nASAAS_URL=%s\nASAAS_WEBHOOK_TOKEN=%s\nMODO_TESTE=1\n' "$CHAVE" "$ASAAS_URL" "$TOKEN" > .dev.vars
+# cópia para testar no computador (fica fora do GitHub). Só a do sandbox: a chave de produção nunca vai para o .dev.vars,
+# porque ali o servidor de teste aceita qualquer usuário (MODO_TESTE) e poderia criar cobranças de verdade.
+if [ "$1" != "producao" ]; then
+  printf 'ASAAS_KEY=%s\nASAAS_URL=%s\nASAAS_WEBHOOK_TOKEN=%s\nMODO_TESTE=1\n' "$CHAVE" "$ASAAS_URL" "$TOKEN" > .dev.vars
+fi
 
 verde "4/5 Publicando o servidor"
 npx wrangler deploy
