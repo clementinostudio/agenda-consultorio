@@ -1,5 +1,6 @@
-// Página de apresentação (landing page). Fonte Jost: o mesmo desenho geométrico do nome "avina"; tudo em JavaScript simples, sem bibliotecas.
+// Página de apresentação (landing page). Títulos em Jost (o mesmo desenho geométrico do nome "avina") e texto em Inter; tudo em JavaScript simples, sem bibliotecas.
 import "@fontsource-variable/jost/wght.css";
+import "@fontsource-variable/inter/wght.css";
 import "./landing.css";
 import { PLANOS, LANCAMENTO_ATE, emLancamento } from "./plano.js";
 
@@ -115,16 +116,16 @@ if (ac) {
   if (auto && "IntersectionObserver" in window) new IntersectionObserver((es, o) => { if (es[0].isIntersecting) { ac.classList.add("auto"); abrir(0); o.disconnect(); } }).observe(ac);
 }
 
-// Planos: os preços vêm de src/plano.js (os mesmos do app). O botão Anual/Mensal troca os valores.
+// Planos: os preços vêm de src/plano.js (os mesmos do app). O botão Anual/Mensal troca os valores (o anual aparece dividido por 12).
 const secPlanos = document.querySelector(".planos");
 if (secPlanos) {
   const real = v => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/,00$/, "");
   const pintar = ciclo => {
     secPlanos.querySelectorAll("[data-produto]").forEach(c => {
       const p = PLANOS[`${c.dataset.produto}_${ciclo}`]; if (!p) return;
-      c.querySelector("[data-preco]").textContent = real(p.preco);
-      c.querySelector("[data-por]").textContent = ciclo === "anual" ? "por ano" : "por mês";
-      c.querySelector("[data-mes]").textContent = ciclo === "anual" ? `${real(Math.round(p.preco / 12 * 100) / 100)} por mês` : "cobrado todo mês";
+      // no anual o número grande é quanto dá por mês; o total do ano fica logo abaixo, à vista
+      c.querySelector("[data-preco]").textContent = real(ciclo === "anual" ? Math.round(p.preco / 12 * 100) / 100 : p.preco);
+      c.querySelector("[data-mes]").textContent = ciclo === "anual" ? `${real(p.preco)} por ano, em uma cobrança` : "cobrado todo mês";
     });
     secPlanos.querySelectorAll("[data-ciclo]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.ciclo === ciclo)));
   };
