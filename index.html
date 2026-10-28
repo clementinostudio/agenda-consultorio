@@ -15,50 +15,50 @@
     <meta name="apple-mobile-web-app-title" content="Avina" />
     <link rel="icon" href="icons/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-    <!-- Tela de abertura do iPhone (em vez de um flash branco) -->
-    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1320x2868.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1290x2796.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1260x2736.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1206x2622.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1179x2556.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1170x2532.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1284x2778.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1242x2688.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/828x1792.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1125x2436.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1242x2208.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/750x1334.jpg" />
-    <link rel="apple-touch-startup-image" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/640x1136.jpg" />
+    <!-- Tela de abertura do iPhone: off-white liso, igual ao fundo da animação (endereço novo para o celular não usar as escuras antigas) -->
+    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1320x2868.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1290x2796.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1260x2736.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1206x2622.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1179x2556.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1170x2532.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1284x2778.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1242x2688.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="abertura/828x1792.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1125x2436.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="abertura/1242x2208.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="abertura/750x1334.jpg" />
+    <link rel="apple-touch-startup-image" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="abertura/640x1136.jpg" />
     <style>
       html{background:#F7F6F2}
-      #intro{position:fixed;inset:0;z-index:9999;overflow:hidden;background:#F7F6F2;display:grid;place-items:center;-webkit-tap-highlight-color:transparent;animation:intro-sai .6s cubic-bezier(.4,0,.2,1) 2.23s forwards}
-      #intro .luzes{position:absolute;inset:0;animation:intro-mergulho .85s cubic-bezier(.4,0,.2,1) 2.07s forwards}
+      #intro{position:fixed;inset:0;z-index:9999;overflow:hidden;background:#F7F6F2;display:grid;place-items:center;-webkit-tap-highlight-color:transparent;animation:intro-sai .9s cubic-bezier(.65,0,.35,1) 3.2s forwards}
+      #intro .luzes{position:absolute;inset:0;animation:intro-mergulho 1.3s cubic-bezier(.33,0,.2,1) 2.85s forwards}
       #intro .luz{position:absolute;border-radius:50%;will-change:transform}
       #intro .l1{width:120vmax;height:120vmax;left:-55vmax;top:-62vmax;background:radial-gradient(closest-side,rgba(31,59,239,.13),rgba(31,59,239,.05) 55%,transparent);animation:intro-flutua1 6s ease-in-out infinite alternate}
       #intro .l2{width:100vmax;height:100vmax;left:-48vmax;bottom:-62vmax;background:radial-gradient(closest-side,rgba(34,181,218,.10),rgba(34,181,218,.04) 55%,transparent);animation:intro-flutua2 7s ease-in-out infinite alternate}
       #intro .l3{width:90vmax;height:90vmax;right:-52vmax;top:8vmax;background:radial-gradient(closest-side,rgba(123,92,255,.10),rgba(123,92,255,.04) 55%,transparent);animation:intro-flutua3 8s ease-in-out infinite alternate}
-      #intro.pula{animation:intro-sai .25s ease forwards}
-      .intro-nome{position:relative;z-index:1;width:min(44vw,246px);height:auto;overflow:visible;opacity:0;transform:translateY(12px) scale(.96);filter:blur(10px);animation:intro-sobe 1.1s cubic-bezier(.22,1,.36,1) .05s forwards,intro-vai .42s cubic-bezier(.4,0,.2,1) 1.95s forwards}
+      #intro.pula{animation:intro-sai .35s ease forwards}
+      .intro-nome{position:relative;z-index:1;width:min(64vw,320px);height:auto;overflow:visible;opacity:0;transform:translateY(10px) scale(.97);filter:blur(8px);animation:intro-sobe 1.5s cubic-bezier(.22,1,.36,1) .1s forwards,intro-vai 1s cubic-bezier(.65,0,.35,1) 2.8s forwards}
       /* cada letra se desenha enquanto desliza de um pouco mais longe até o lugar: o nome "se fecha" no centro */
-      .intro-nome .t{opacity:0;stroke-dasharray:var(--L);stroke-dashoffset:var(--L);transform:translateX(var(--x));animation:intro-traco .8s cubic-bezier(.65,0,.35,1) forwards,intro-junta 1.1s cubic-bezier(.16,1,.3,1) forwards}
-      .intro-nome .t0{--x:-39px;animation-delay:.15s}.intro-nome .t1{--x:-27px;animation-delay:.23s}.intro-nome .t2{--x:-16px;animation-delay:.31s}.intro-nome .t3{--x:2px;animation-delay:.39s}.intro-nome .t4{--x:20px;animation-delay:.47s}.intro-nome .t5{--x:39px;animation-delay:.55s}
+      .intro-nome .t{opacity:0;stroke-dasharray:var(--L);stroke-dashoffset:var(--L);transform:translateX(var(--x));animation:intro-traco 1.05s cubic-bezier(.65,0,.35,1) forwards,intro-junta 1.45s cubic-bezier(.16,1,.3,1) forwards}
+      .intro-nome .t0{--x:-39px;animation-delay:.2s}.intro-nome .t1{--x:-27px;animation-delay:.31s}.intro-nome .t2{--x:-16px;animation-delay:.42s}.intro-nome .t3{--x:2px;animation-delay:.53s}.intro-nome .t4{--x:20px;animation-delay:.64s}.intro-nome .t5{--x:39px;animation-delay:.75s}
       @keyframes intro-traco{0%{opacity:0}5%{opacity:1}to{opacity:1;stroke-dashoffset:0}}
       @keyframes intro-junta{to{transform:none}}
       @keyframes intro-sobe{to{opacity:1;transform:none;filter:none}}
-      @keyframes intro-vai{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-14px) scale(.97)}}
-      @keyframes intro-mergulho{to{transform:scale(1.18)}}
+      @keyframes intro-vai{from{opacity:1;transform:none;filter:none}to{opacity:0;transform:scale(1.06);filter:blur(6px)}}
+      @keyframes intro-mergulho{to{transform:scale(1.1);opacity:.6}}
       @keyframes intro-sai{to{opacity:0;visibility:hidden}}
       @keyframes intro-flutua1{to{transform:translate(9vmax,6vmax) scale(1.06)}}
       @keyframes intro-flutua2{to{transform:translate(7vmax,-8vmax) scale(1.1)}}
       @keyframes intro-flutua3{to{transform:translate(-8vmax,7vmax) scale(.95)}}
-      @media (prefers-reduced-motion: reduce){#intro .luz,#intro .luzes{animation:none}.intro-nome,.intro-nome .t{animation:none;opacity:1;transform:none;filter:none;stroke-dashoffset:0}.intro-nome .brilho{display:none}#intro{animation-delay:.7s}}
+      @media (prefers-reduced-motion: reduce){#intro .luz,#intro .luzes{animation:none}.intro-nome,.intro-nome .t{animation:none;opacity:1;transform:none;filter:none;stroke-dashoffset:0}.intro-nome .brilho{display:none}#intro{animation-delay:1.2s}}
     </style>
   </head>
   <body>
     <!-- Abertura animada: manchas de luz azul bem suaves flutuam no fundo off-white (igual ao ícone), o nome "avina" se desenha traço a traço (o primeiro "a" surge em degradê),
-         um reflexo de luz passa pelas letras e, na saída, o nome sobe e some enquanto o fundo dá um zoom e revela o app.
+         um reflexo de luz passa pelas letras e, na saída, o nome cresce de leve e se desfaz enquanto o fundo se dissolve no app (uns 4 segundos ao todo).
          Fica aqui no HTML (e não no React) para aparecer na hora, antes do app carregar. Um toque pula. -->
-    <div id="intro" aria-hidden="true"><div class="luzes"><i class="luz l1"></i><i class="luz l2"></i><i class="luz l3"></i></div><svg class="intro-nome" viewBox="-48 -94 616 242" role="img" aria-label="Avina"><defs><linearGradient id="nvf" x1="-18" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1F3BEF" stop-opacity="0"/><stop offset=".45" stop-color="#1F3BEF" stop-opacity=".45"/><stop offset="1" stop-color="#1F3BEF"/></linearGradient><linearGradient id="nvb" x1="0" y1="0" x2="230" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="translate(-328 0)"><stop offset="0" stop-color="#8FA6FF" stop-opacity="0"/><stop offset=".5" stop-color="#D6DEFF" stop-opacity=".95"/><stop offset="1" stop-color="#8FA6FF" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" values="-328 0;618 0" begin="1.3s" dur="0.62s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .55 1"/></linearGradient></defs><g fill="none" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path class="t t0" d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100" stroke="url(#nvf)"/><path class="t t1" d="M136 0L178 100L220 0" stroke="#1F3BEF"/><path class="t t2" d="M256 0V100" stroke="#1F3BEF"/><path class="t t3" d="M256 -37V-35" stroke="#1F3BEF"/><path class="t t4" d="M292 100V46A46 46 0 0 1 384 46V100" stroke="#1F3BEF"/><path class="t t5" d="M520 50A50 50 0 1 1 420 50A50 50 0 1 1 520 50M520 0V100" stroke="#1F3BEF"/><g class="brilho" stroke="url(#nvb)"><path d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100"/><path d="M136 0L178 100L220 0"/><path d="M256 0V100"/><path d="M256 -37V-35"/><path d="M292 100V46A46 46 0 0 1 384 46V100"/><path d="M520 50A50 50 0 1 1 420 50A50 50 0 1 1 520 50M520 0V100"/></g></g></svg></div>
+    <div id="intro" aria-hidden="true"><div class="luzes"><i class="luz l1"></i><i class="luz l2"></i><i class="luz l3"></i></div><svg class="intro-nome" viewBox="-48 -94 616 242" role="img" aria-label="Avina"><defs><linearGradient id="nvf" x1="-18" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1F3BEF" stop-opacity="0"/><stop offset=".45" stop-color="#1F3BEF" stop-opacity=".45"/><stop offset="1" stop-color="#1F3BEF"/></linearGradient><linearGradient id="nvb" x1="0" y1="0" x2="230" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="translate(-328 0)"><stop offset="0" stop-color="#8FA6FF" stop-opacity="0"/><stop offset=".5" stop-color="#D6DEFF" stop-opacity=".95"/><stop offset="1" stop-color="#8FA6FF" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" values="-328 0;618 0" begin="1.95s" dur="0.9s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .55 1"/></linearGradient></defs><g fill="none" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path class="t t0" d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100" stroke="url(#nvf)"/><path class="t t1" d="M136 0L178 100L220 0" stroke="#1F3BEF"/><path class="t t2" d="M256 0V100" stroke="#1F3BEF"/><path class="t t3" d="M256 -37V-35" stroke="#1F3BEF"/><path class="t t4" d="M292 100V46A46 46 0 0 1 384 46V100" stroke="#1F3BEF"/><path class="t t5" d="M520 50A50 50 0 1 1 420 50A50 50 0 1 1 520 50M520 0V100" stroke="#1F3BEF"/><g class="brilho" stroke="url(#nvb)"><path d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100"/><path d="M136 0L178 100L220 0"/><path d="M256 0V100"/><path d="M256 -37V-35"/><path d="M292 100V46A46 46 0 0 1 384 46V100"/><path d="M520 50A50 50 0 1 1 420 50A50 50 0 1 1 520 50M520 0V100"/></g></g></svg></div>
     <script>
       (function () {
         var el = document.getElementById("intro");
@@ -72,7 +72,7 @@
         var tirar = function () { if (el.parentNode) el.remove(); };
         el.addEventListener("animationend", function (e) { if (e.animationName === "intro-sai") tirar(); });
         el.addEventListener("click", function () { el.classList.add("pula"); setTimeout(tirar, 220); });
-        setTimeout(tirar, 3600); // garantia
+        setTimeout(tirar, 5000); // garantia
       })();
     </script>
     <div id="root"></div>
