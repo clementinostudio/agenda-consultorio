@@ -182,7 +182,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
     ] },
   ];
   const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
-  const resAssin = assin.situacao === "ok" ? resumoAssinatura(assin.a) : { texto: assin.situacao === "carregando" ? "Conferindo…" : assin.situacao === "rede" ? "Sem conexão agora" : "Precisa da sua conta" };
+  const resAssin = assin.situacao === "ok" ? resumoAssinatura(assin.a) : { texto: assin.situacao === "carregando" ? "Conferindo…" : assin.situacao === "rede" ? "Sem conexão agora" : assin.situacao === "erro" ? "Não deu para abrir agora" : "Precisa da sua conta" };
   const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", link: "Link de agendamento", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos" }[aba];
 
   return createPortal(

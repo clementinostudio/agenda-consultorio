@@ -79,8 +79,23 @@ export async function quem(req, env) {
   return u && u.id ? { id: u.id, email: u.email || "", criado: String(u.created_at || "").slice(0, 10) } : null;
 }
 
-const lerReg = async (env, uid) => (await env.AVISOS.get(`assin:${uid}`, "json")) || {};
-const gravarReg = (env, uid, reg) => env.AVISOS.put(`assin:${uid}`, JSON.stringify(reg));
+// Cada cadastro guarda de qual Asaas ele é (sandbox ou produção): o cliente e a assinatura de um não existem no outro
+const ambiente = env => /sandbox/.test(env.ASAAS_URL || "") ? "sandbox" : "producao";
+async function lerReg(env, uid) {
+  const reg = (await env.AVISOS.get(`assin:${uid}`, "json")) || {};
+  if ((!reg.cliente && !reg.assinatura) || reg.amb === ambiente(env)) return reg;
+  // cadastro de antes desta marca: confere no Asaas de agora se o cliente existe
+  let doOutro = !!reg.amb;
+  if (!doOutro) {
+    try { await asaas(env, "GET", reg.cliente ? `/customers/${reg.cliente}` : `/subscriptions/${reg.assinatura}`); }
+    catch (e) { if (e.status !== 404) throw e; doOutro = true; }
+  }
+  // sobrou dos testes no sandbox: começa do zero (os pagamentos de lá eram de mentirinha)
+  const novo = doOutro ? {} : reg;
+  await gravarReg(env, uid, novo);
+  return { ...novo, amb: ambiente(env) };
+}
+const gravarReg = (env, uid, reg) => env.AVISOS.put(`assin:${uid}`, JSON.stringify({ ...reg, amb: ambiente(env) }));
 
 const formaDe = t => t === "PIX" ? "pix" : t === "CREDIT_CARD" ? "cartao" : "pix";
 const itemHistorico = (p, plano) => ({ id: p.id, data: p.paymentDate || p.clientPaymentDate || p.confirmedDate || p.dueDate, valor: p.value, plano, forma: formaDe(p.billingType), devolvido: p.status === "REFUNDED" || undefined });

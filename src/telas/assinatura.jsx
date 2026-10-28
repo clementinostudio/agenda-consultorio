@@ -37,7 +37,8 @@ function useAssinatura(conta, aoMudar) {
   const teste = import.meta.env.DEV && !conta.uid && !!lerJSON("avina-asaas-teste", false);
   const podeReal = !!(conta.uid || teste) && !!servidorAvisos();
   const [real, setReal] = useState(null);
-  const [falha, setFalha] = useState(null); // null | "rede" | "desligado"
+  const [falha, setFalha] = useState(null); // null | "rede" | "erro" | "desligado"
+  const [erroMsg, setErroMsg] = useState("");
   const [sandbox, setSandbox] = useState(false);
   const [cortesiaAte, setCortesiaAte] = useState(null);
   // o app inteiro precisa saber do plano (limites da versão grátis e o selo PRO)
@@ -62,11 +63,11 @@ function useAssinatura(conta, aoMudar) {
   useEffect(() => {
     if (!podeReal) return;
     setFalha(null);
-    chamar("ver").then(j => { if (j.configurado === false) { setReal(null); setFalha("desligado"); } setSandbox(!!j.sandbox); setCortesiaAte(j.cortesiaAte || null); }).catch(() => setFalha("rede"));
+    chamar("ver").then(j => { if (j.configurado === false) { setReal(null); setFalha("desligado"); } setSandbox(!!j.sandbox); setCortesiaAte(j.cortesiaAte || null); }).catch(e => { const semRede = /internet/i.test(e.message); setFalha(semRede ? "rede" : "erro"); setErroMsg(semRede ? "" : e.message); });
   }, [podeReal, tentativa]);
-  // situacao: "ok" (veio do servidor) | "carregando" | "rede" (sem internet) | "desligado" (sem login ou servidor sem Asaas)
+  // situacao: "ok" (veio do servidor) | "carregando" | "rede" (sem internet) | "erro" (o servidor recusou: erroMsg diz o quê) | "desligado" (sem login ou servidor sem Asaas)
   const situacao = real ? "ok" : !podeReal ? "desligado" : falha || "carregando";
-  return { a: real || semPlano(), situacao, sandbox, cortesiaAte, chamar, tentarDeNovo: () => setTentativa(t => t + 1) };
+  return { a: real || semPlano(), situacao, erroMsg, sandbox, cortesiaAte, chamar, tentarDeNovo: () => setTentativa(t => t + 1) };
 }
 
 // Situação de hoje: a pausa e o cancelamento terminam sozinhos na data
@@ -200,6 +201,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
       <div className="assin-card">
         <small>Assinatura</small>
         {s.situacao === "carregando" ? <><b>Um instante…</b><p className="assin-espera"><span className="assin-gira" /> Conferindo a sua assinatura</p></>
+          : s.situacao === "erro" ? <><b>Não deu para abrir a assinatura</b><p>{s.erroMsg || "O servidor não respondeu."} Se continuar, fale com a gente.</p><button className="btn mode" onClick={s.tentarDeNovo}>Tentar de novo</button></>
           : s.situacao === "rede" ? <><b>Sem conexão agora</b><p>Para ver ou mudar a assinatura, o app precisa de internet. Seus dados continuam aqui.</p><button className="btn mode" onClick={s.tentarDeNovo}>Tentar de novo</button></>
           : <><b>Entre na sua conta</b><p>A assinatura fica ligada à sua conta com e-mail e senha.</p></>}
       </div>
