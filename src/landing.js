@@ -1,5 +1,5 @@
-// Página de apresentação (landing page). Títulos em Jost (o mesmo desenho geométrico do nome "avina") e texto em Inter; tudo em JavaScript simples, sem bibliotecas.
-import "@fontsource-variable/jost/wght.css";
+// Página de apresentação (landing page). Títulos em Comfortaa (o mesmo desenho redondo do nome "avina") e texto em Inter; tudo em JavaScript simples, sem bibliotecas.
+import "@fontsource-variable/comfortaa/wght.css";
 import "@fontsource-variable/inter/wght.css";
 import "./landing.css";
 import { PLANOS, LANCAMENTO_ATE, emLancamento } from "./plano.js";

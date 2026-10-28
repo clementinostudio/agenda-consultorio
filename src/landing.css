@@ -3,7 +3,7 @@
   --bg: #FFFFFF; --bg2: #F5F7FC; --fg: #0B1533; --muted: #5A6478; --dim: #8A93A6; --line: #E6E9F2;
   --marca: #1F3BEF; --marca-escura: #1630D2; --azul: #3B57FF; --roxo: #7B5CFF; --verde: #10A56F; --ciano: #22B5DA;
   --sombra: 0 1px 2px rgba(11, 21, 51, .04), 0 12px 32px -12px rgba(11, 21, 51, .14);
-  --f-display: "Jost Variable", "Jost", system-ui, sans-serif; --f-body: "Inter Variable", "Inter", system-ui, sans-serif;
+  --f-display: "Comfortaa Variable", "Comfortaa", system-ui, sans-serif; --f-body: "Inter Variable", "Inter", system-ui, sans-serif;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
@@ -12,7 +12,7 @@ html { background: var(--bg); -webkit-text-size-adjust: 100%; scroll-padding-top
 body { margin: 0; color: var(--fg); font-family: var(--f-body); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
 img { display: block; max-width: 100%; }
 a { color: inherit; }
-h1, h2, h3 { font-family: var(--f-display); font-weight: 600; letter-spacing: -.02em; line-height: 1.06; margin: 0; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 700; letter-spacing: -.01em; line-height: 1.06; margin: 0; }
 b, strong { font-weight: 600; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -85,8 +85,8 @@ section { position: relative; padding: 90px max(20px, env(safe-area-inset-left, 
 .heroi-pill { display: inline-flex; align-items: center; gap: 9px; padding: 7px 14px; border-radius: 999px; background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22); font-size: 14px; font-weight: 500; margin-bottom: 22px; }
 .heroi-pill i { width: 8px; height: 8px; border-radius: 50%; background: #7CF0BF; box-shadow: 0 0 0 4px rgba(124, 240, 191, .22); animation: pulso 2.4s ease-in-out infinite; }
 @keyframes pulso { 50% { box-shadow: 0 0 0 7px rgba(124, 240, 191, 0); } }
-.heroi h1 { font-size: clamp(42px, 6.6vw, 74px); font-weight: 600; line-height: 1; letter-spacing: -.025em; max-width: 12.5ch; }
-.heroi h1 em { font-style: normal; color: #A9D8FF; }
+.heroi h1 { font-size: clamp(40px, 6.2vw, 70px); font-weight: 700; line-height: 1.05; letter-spacing: -.02em; text-wrap: balance; }
+.heroi h1 em { display: block; font-style: normal; color: #A9D8FF; }
 .heroi .lead { color: rgba(255, 255, 255, .84); max-width: 30em; }
 .heroi-ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
 .botao.claro { background: #fff; color: var(--marca); box-shadow: 0 16px 30px -14px rgba(4, 10, 70, .6); }
@@ -98,7 +98,8 @@ section { position: relative; padding: 90px max(20px, env(safe-area-inset-left, 
 .heroi-garantias { list-style: none; padding: 0; margin: 26px 0 0; display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 14px; font-weight: 500; color: rgba(255, 255, 255, .88); }
 .heroi-garantias li { display: flex; align-items: center; gap: 8px; }
 .heroi-garantias li::before { content: ""; width: 18px; height: 18px; border-radius: 50%; background: rgba(255, 255, 255, .18) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center / 11px no-repeat; }
-.heroi-arte { position: relative; justify-self: center; width: min(100%, 540px); height: 430px; display: flex; justify-content: center; perspective: 1400px; }
+.heroi-arte { position: relative; justify-self: center; width: min(100%, 540px); height: 430px; display: flex; justify-content: center; align-items: flex-start; perspective: 1400px; }
+/* no celular e no tablet o iPhone fica no tamanho certo e a abertura corta a parte de baixo dele (sem esticar nem achatar) */
 .heroi-arte .iphone { flex: none; box-shadow: inset 0 0 0 2px #52525B, inset 0 0 0 7px #000, 0 40px 80px -20px rgba(4, 10, 70, .7); }
 /* notificações como as do iPhone (vidro claro, ícone do app, título e texto) e um cartão de resumo;
    entram uma de cada vez e ficam paradas. No celular ficam centralizadas sobre o topo do iPhone */
@@ -233,7 +234,7 @@ section { position: relative; padding: 90px max(20px, env(safe-area-inset-left, 
 /* ---------- números ---------- */
 .numeros { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 30px 20px; padding-top: 40px; padding-bottom: 40px; }
 .numeros div { display: flex; flex-direction: column; gap: 6px; padding-left: 18px; border-left: 2px solid var(--marca); }
-.numeros b { font-family: var(--f-display); font-size: clamp(34px, 5vw, 52px); letter-spacing: -.03em; line-height: 1; color: var(--fg); }
+.numeros b { font-family: var(--f-display); font-size: clamp(34px, 5vw, 52px); letter-spacing: -.01em; line-height: 1; color: var(--fg); }
 .numeros span { color: var(--muted); font-weight: 500; font-size: 15px; }
 
 /* ---------- chamada "Para profissionais" (na página Para você) ---------- */
@@ -304,9 +305,9 @@ details p { margin: 0 0 22px; color: var(--muted); }
   .s1 { left: -10px; top: 8%; } .s2 { right: -10px; }
   .heroi { padding-top: calc(64px + 36px + env(safe-area-inset-top, 0px)); }
   .heroi-ctas .botao { flex: 1 1 100%; }
-  .heroi-arte { height: 480px; }
-  .heroi-arte .iphone { --w: 280px !important; }
-  .notifs { top: 66px; }
+  .heroi-arte { height: 470px; margin-top: 4px; }
+  .heroi-arte .iphone { --w: 300px !important; }
+  .notifs { top: 196px; width: min(328px, 100%); }
   .pro-cartao { border-radius: 28px; padding: 32px 22px 0; } .pro-texto .botao { width: 100%; }
   .heroi .lead { font-size: 17px; margin-top: 16px; }
   .heroi-ctas { margin-top: 26px; gap: 10px; }
@@ -441,7 +442,7 @@ details p { margin: 0 0 22px; color: var(--muted); }
 .plano-selo { position: absolute; top: -12px; left: 26px; padding: 4px 12px; border-radius: 99px; background: var(--marca); color: #fff; font-size: 12.5px; font-weight: 700; }
 .plano-cartao h3 { font-size: 21px; margin: 0 0 10px; }
 .plano-preco { margin: 0; display: flex; align-items: baseline; gap: 8px; }
-.plano-preco b { font-family: var(--f-display); font-weight: 600; font-size: 34px; white-space: nowrap; letter-spacing: -.02em; }
+.plano-preco b { font-family: var(--f-display); font-weight: 700; font-size: 32px; white-space: nowrap; letter-spacing: -.01em; }
 .plano-preco span { color: var(--muted); font-size: 15px; white-space: nowrap; }
 .plano-mes { margin: 2px 0 0; color: var(--muted); font-size: 14px; min-height: 1.4em; }
 .plano-cartao ul { list-style: none; margin: 18px 0 22px; padding: 0; display: grid; gap: 8px; flex: 1; }
