@@ -303,6 +303,15 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
     </div>
   );
 
+  // código de acesso (criado pelo dono do app com criar-codigo.sh): libera o Pro por alguns dias.
+  // Aparece para quem ainda não tem o Pro pago (sem plano, assinatura acabada ou esperando o primeiro pagamento)
+  const codigoAcesso = comAcesso
+    ? <div className="assin-acesso">
+      <Field label="Código de acesso" htmlFor="a-acesso"><input id="a-acesso" autoCapitalize="characters" autoComplete="off" value={acesso} onChange={e => setAcesso(e.target.value.toUpperCase())} placeholder="Ex.: AVNK7M2QX" /></Field>
+      <button className="btn ghost" disabled={acesso.trim().length < 4 || ocupado} onClick={() => fazer("codigo", { codigo: acesso }, j => `Pronto! O Pro está liberado até ${dataLonga(j.cortesiaAte)}.`)}>{ocupado ? "Só um instante…" : "Usar o código"}</button>
+    </div>
+    : <button className="btn text" onClick={() => setComAcesso(true)}><I.key /> Tenho um código de acesso</button>;
+
   // Tela principal
   return (
     <div className="stack">
@@ -314,13 +323,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           {sit.s === "sem" && <p className="assin-gratis">{GRATIS_TXT}</p>}
           {s.cortesiaAte && hoje < s.cortesiaAte && <div className="note mint"><I.star /><span>O Pro completo está liberado de presente até {dataLonga(s.cortesiaAte)}. Depois, você escolhe se quer assinar.</span></div>}
           <button className="btn mode" onClick={() => setTela("planos")}>Escolher meu plano</button>
-          {/* código de acesso (criado pelo dono do app com criar-codigo.sh): libera o Pro por alguns dias */}
-          {(comAcesso
-            ? <div className="assin-acesso">
-              <Field label="Código de acesso" htmlFor="a-acesso"><input id="a-acesso" autoCapitalize="characters" autoComplete="off" value={acesso} onChange={e => setAcesso(e.target.value.toUpperCase())} placeholder="Ex.: BETA30" /></Field>
-              <button className="btn ghost" disabled={acesso.trim().length < 4 || ocupado} onClick={() => fazer("codigo", { codigo: acesso }, j => `Pronto! O Pro está liberado até ${dataLonga(j.cortesiaAte)}.`)}>{ocupado ? "Só um instante…" : "Usar o código"}</button>
-            </div>
-            : <button className="btn text" onClick={() => setComAcesso(true)}>Tenho um código de acesso</button>)}
+          {codigoAcesso}
         </div>
       ) : sit.s === "aguardando" ? (
         <div className="assin-card acabou">
@@ -328,6 +331,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           <b>Falta pagar</b>
           <p>{brlReal(a.pendente ? a.pendente.valor : atual.preco)} para começar. Assim que o pagamento cair, a assinatura fica ativa sozinha.</p>
           <button className="btn mode" onClick={() => setTela("pagar")}>{a.forma === "cartao" ? "Pagar com cartão" : "Pagar com Pix"}</button>
+          {codigoAcesso}
         </div>
       ) : (
         <div className="assin-card">
