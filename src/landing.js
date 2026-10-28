@@ -1,6 +1,7 @@
 // Página de apresentação (landing page). Fonte Jost: o mesmo desenho geométrico do nome "avina"; tudo em JavaScript simples, sem bibliotecas.
 import "@fontsource-variable/jost/wght.css";
 import "./landing.css";
+import { PLANOS, LANCAMENTO_ATE, emLancamento } from "./plano.js";
 
 // Endereço do app (fica num subdomínio só dele)
 const APP = import.meta.env.VITE_APP_URL || "https://app.avina.com.br/";
@@ -112,4 +113,28 @@ if (ac) {
   };
   itens.forEach((it, k) => it.querySelector("button").addEventListener("click", () => { auto = false; ac.classList.remove("auto"); abrir(k); }));
   if (auto && "IntersectionObserver" in window) new IntersectionObserver((es, o) => { if (es[0].isIntersecting) { ac.classList.add("auto"); abrir(0); o.disconnect(); } }).observe(ac);
+}
+
+// Planos: os preços vêm de src/plano.js (os mesmos do app). O botão Anual/Mensal troca os valores.
+const secPlanos = document.querySelector(".planos");
+if (secPlanos) {
+  const real = v => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/,00$/, "");
+  const pintar = ciclo => {
+    secPlanos.querySelectorAll("[data-produto]").forEach(c => {
+      const p = PLANOS[`${c.dataset.produto}_${ciclo}`]; if (!p) return;
+      c.querySelector("[data-preco]").textContent = real(p.preco);
+      c.querySelector("[data-por]").textContent = ciclo === "anual" ? "por ano" : "por mês";
+      c.querySelector("[data-mes]").textContent = ciclo === "anual" ? `${real(Math.round(p.preco / 12 * 100) / 100)} por mês` : "cobrado todo mês";
+    });
+    secPlanos.querySelectorAll("[data-ciclo]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.ciclo === ciclo)));
+  };
+  secPlanos.querySelectorAll("[data-ciclo]").forEach(b => b.addEventListener("click", () => pintar(b.dataset.ciclo)));
+  pintar("anual");
+  // a faixa do preço de lançamento só aparece até a data
+  const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10), aviso = secPlanos.querySelector("[data-lancamento]");
+  if (aviso && emLancamento(hoje)) {
+    const [, m, d] = LANCAMENTO_ATE.split("-").map(Number);
+    aviso.querySelector("[data-lanc-data]").textContent = `${d} de ${["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"][m - 1]}`;
+    aviso.hidden = false;
+  }
 }

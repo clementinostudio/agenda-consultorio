@@ -7,6 +7,7 @@ import { DadosRecibo } from "./consultorio.jsx";
 import { AssinaturaPagina, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaAssin } from "./assinatura.jsx";
 import { GradeHorarios, LinkAgendamento, linkDo } from "./agendamento.jsx";
 import { gradeDo, resumoGrade, periodosIniciais } from "../horarios.js";
+import { linkSuporte } from "../plano.js";
 import { nivelDe, TRILHAS } from "../conquistas.js";
 
 const TXT_PUSH = {
@@ -249,12 +250,13 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
             </div>
             <div className="perfil-lista">
               <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
+              <a className="perfil-row" href={linkSuporte()} target="_blank" rel="noopener"><i><I.chat /></i><span><b>Fale com a gente</b><small>Dúvidas, ideias ou problemas: direto no WhatsApp</small></span><I.chev /></a>
               <a className="perfil-row" href={`${BASE}termos/`} target="_blank" rel="noopener"><i><I.receipt /></i><span><b>Termos e privacidade</b><small>Termos de uso, privacidade (LGPD) e cookies</small></span><I.chev /></a>
               <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>{conta.uid ? "Seus dados continuam guardados na nuvem" : "Seus dados ficam guardados neste aparelho"}</small></span><I.chev /></button>
             </div>
           </div>
           <ConfirmButton label="Apagar meus dados" titulo="Apagar todos os seus dados?" texto={conta.uid ? "Pacientes, sessões, cobranças e gastos somem de vez, da nuvem e de todos os seus aparelhos. A conta continua. Isso não dá para desfazer." : "Pacientes, sessões, cobranças e gastos deste aparelho somem de vez. Isso não dá para desfazer."} acao="Apagar tudo" onConfirm={act.zerar} />
-          {conta.uid && <ConfirmButton label="Excluir minha conta" titulo="Excluir sua conta?" texto="O login, o perfil e todos os dados saem da nuvem e deste aparelho, de vez. Isso não dá para desfazer." acao="Excluir conta" onConfirm={act.excluirConta} />}
+          {conta.uid && <ConfirmButton label="Excluir minha conta" titulo="Excluir sua conta?" texto="O login, o perfil e todos os dados saem da nuvem e deste aparelho, de vez. Se você assina o Avina Pro, a assinatura é cancelada junto (nos 7 dias da garantia, devolvemos o valor). Isso não dá para desfazer." acao="Excluir conta" onConfirm={act.excluirConta} />}
           {db.patients.length === 0 && <button className="btn text" onClick={act.carregarExemplo}>Carregar dados de exemplo</button>}
         </>}
 

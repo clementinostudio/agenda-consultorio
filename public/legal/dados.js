@@ -5,4 +5,5 @@ window.AVINA_DONO = {
   documento: "",  // CPF (ou CNPJ)
   endereco: "",   // cidade e estado já bastam enquanto for pessoa física; com empresa, o endereço completo
   email: "",      // e-mail de contato e para pedidos sobre dados pessoais (encarregado da LGPD)
+  whatsapp: "+55 (43) 98820-8714", // atendimento (o link abre o WhatsApp direto)
 };

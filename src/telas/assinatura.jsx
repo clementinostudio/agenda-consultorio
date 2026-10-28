@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from "react";
 import { I, Marca, Seg, Field, Ilustra, Sheet, BASE, todayISO, addDays, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
 import { cliente } from "../nuvem.js";
-import { PLANOS, PRODUTOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso } from "../plano.js";
+import { PLANOS, PRODUTOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso, linkSuporte, LANCAMENTO_ATE, emLancamento } from "../plano.js";
 
 const GARANTIA_DIAS = 7;  // direito de arrependimento (compra pela internet)
 const INCLUI = {
@@ -236,6 +236,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
     <div className="stack assin-pay">
       <i className="assin-logo"><Marca /></i>
       <h2>{sit.s === "sem" ? "Assine o Avina Pro" : "Continue com o Avina Pro"}</h2>
+      {!trocando && emLancamento(hoje) && <div className="lanc-faixa"><b>Preço de lançamento</b><span>Assinando até {dataLonga(LANCAMENTO_ATE)}, você mantém este valor enquanto a assinatura estiver ativa.</span></div>}
       <Seg big value={produto} onChange={v => setPlano(`${v}_${plano.endsWith("_mensal") ? "mensal" : "anual"}`)} options={Object.entries(PRODUTOS).map(([v, x]) => ({ v, l: x.nome }))} />
       <ul className="assin-inclui">{INCLUI[produto].map(t => <li key={t}><I.check />{t}</li>)}</ul>
       <div className="assin-planos" role="radiogroup" aria-label="Plano">
@@ -244,7 +245,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           return (
             <button key={id} type="button" role="radio" aria-checked={plano === id} className={"assin-plano" + (plano === id ? " on" : "")} onClick={() => setPlano(id)}>
               {p.selo && <em>{p.selo}</em>}
-              <span><b>{c === "anual" ? "Anual" : "Mensal"} · {brlReal(p.preco)}</b><small>{p.meses > 1 ? `Só ${porMes(p)} por mês` : "Cobrado todo mês"}</small></span>
+              <span><b>{c === "anual" ? "Anual" : "Mensal"} · {c === "anual" && <s className="assin-riscado">{brlReal(PLANOS[`${produto}_mensal`].preco * 12)}</s>}{brlReal(p.preco)}</b><small>{p.meses > 1 ? `Só ${porMes(p)} por mês` : "Cobrado todo mês"}</small></span>
               <i className="assin-radio">{plano === id && <I.check />}</i>
             </button>
           );
@@ -418,6 +419,8 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
         <button className="btn text" onClick={() => setTela("cancelar")}>Cancelar assinatura</button>
       </>}
 
+      <a className="btn text" href={linkSuporte("Oi! Tenho uma dúvida sobre a assinatura do Avina.")} target="_blank" rel="noopener"><I.chat /> Dúvidas sobre a assinatura? Fale com a gente</a>
+
       {real
         ? s.sandbox && <div className="assin-demo"><b>Asaas em modo de teste</b><small>As cobranças são de mentirinha (sandbox): nenhum dinheiro de verdade passa por aqui.</small></div>
         : <div className="assin-demo">
@@ -441,7 +444,7 @@ function ProSheet({ motivo, sugerido, onClose, act }) {
       sub={pac ? `Na versão grátis, dá para acompanhar até ${LIMITE_GRATIS.pacientes} pacientes ativos.` : `Na versão grátis, dá para anotar até ${LIMITE_GRATIS.lancMes} lançamentos por mês. No mês que vem, o contador zera.`} onClose={onClose}>
       <div className="pro-topo"><i className="assin-logo"><Marca /></i><b>Avina Pro</b><span className="pro-selo">PRO</span></div>
       <ul className="assin-inclui">{INCLUI[produto].map(t => <li key={t}><I.check />{t}</li>)}</ul>
-      <div className="note mint"><I.star /><span>{P.nome}: {porMes(P)} por mês no plano anual. Garantia de 7 dias: não gostou, devolvemos tudo.</span></div>
+      <div className="note mint"><I.star /><span>{P.nome}: {porMes(P)} por mês no plano anual.{emLancamento(todayISO()) ? ` Preço de lançamento até ${dataLonga(LANCAMENTO_ATE)}: quem assina agora mantém o valor.` : ""} Garantia de 7 dias: não gostou, devolvemos tudo.</span></div>
       <button className="btn mode" onClick={() => { onClose(); setTimeout(() => act.openSettings("assinatura"), 250); }}>Conhecer o Avina Pro</button>
       <button className="btn text" onClick={onClose}>Agora não</button>
     </Sheet>

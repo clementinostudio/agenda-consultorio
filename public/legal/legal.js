@@ -11,6 +11,7 @@
       if (v) {
         el.textContent = v;
         if (el.getAttribute("data-campo") === "email") { el.innerHTML = ""; var a = document.createElement("a"); a.href = "mailto:" + v; a.textContent = v; el.appendChild(a); }
+        if (el.getAttribute("data-campo") === "whatsapp") { el.innerHTML = ""; var w = document.createElement("a"); w.href = "https://wa.me/" + v.replace(/\D/g, ""); w.target = "_blank"; w.rel = "noopener"; w.textContent = v + " (WhatsApp)"; el.appendChild(w); }
       } else el.classList.add("falta");
     });
   });

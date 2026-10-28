@@ -22,7 +22,7 @@
       <div class="topo-in">
         <a class="marca" href="/" aria-label="Avina, início"><svg class="logo" viewBox="-9 -46 538 155" aria-hidden="true"><defs><linearGradient id="logo-topo" x1="-18" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".25"/><stop offset=".5" stop-color="currentColor" stop-opacity=".6"/><stop offset="1" stop-color="currentColor"/></linearGradient></defs><g fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100" stroke="url(#logo-topo)"/><path d="M136 0L178 100L220 0"/><path d="M256 0V100"/><path d="M256 -37V-35"/><path d="M292 100V46A46 46 0 0 1 384 46V100"/><path d="M520 50A50 50 0 1 1 420 50A50 50 0 1 1 520 50M520 0V100"/></g></svg></a>
         <nav class="menu" id="menu" aria-label="Seções">
-          <a href="/" aria-current="page">Para você</a><a href="/consultorio/">Para profissionais</a><a href="/#ia">Novidades</a><a href="/#privacidade">Privacidade</a><a href="/#instalar">Instalar</a>
+          <a href="/" aria-current="page">Para você</a><a href="/consultorio/">Para profissionais</a><a href="/#ia">Novidades</a><a href="#planos">Planos</a><a href="/#privacidade">Privacidade</a><a href="/#instalar">Instalar</a>
           <a class="menu-entrar" href="https://app.avina.com.br/#entrar">Entrar</a>
         </nav>
         <div class="topo-acoes">
@@ -214,6 +214,51 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <!-- PLANOS: os preços vêm de src/plano.js (o landing.js preenche), os mesmos do app -->
+      <section class="planos" id="planos">
+        <div class="sec-cab centro revela">
+          <span class="rotulo azul">Planos</span>
+          <h2>Comece grátis. Assine quando crescer.</h2>
+          <p>A versão grátis é para sempre. O Avina Pro tira os limites, com garantia de 7 dias: não gostou, devolvemos tudo.</p>
+        </div>
+        <p class="lanc-aviso revela" data-lancamento hidden><b>Preço de lançamento</b> Assinando até <span data-lanc-data>30 de novembro</span>, você mantém o valor enquanto a assinatura estiver ativa.</p>
+        <div class="ciclo revela" role="group" aria-label="Como pagar">
+          <button type="button" data-ciclo="anual" aria-pressed="true">Anual <em>2 meses grátis</em></button>
+          <button type="button" data-ciclo="mensal" aria-pressed="false">Mensal</button>
+        </div>
+        <div class="planos-grade">
+          <article class="plano-cartao revela">
+            <h3>Grátis</h3>
+            <p class="plano-preco"><b>R$ 0</b><span>para sempre</span></p>
+            <p class="plano-mes">sem cartão</p>
+            <ul><li>Até 3 pacientes ativos</li><li>Até 30 lançamentos por mês</li><li>5 ajudas da IA por dia</li><li>Fala pelo celular à vontade</li></ul>
+            <a class="botao contorno" href="https://app.avina.com.br/#criar">Criar conta grátis</a>
+          </article>
+          <article class="plano-cartao revela" data-produto="pessoal">
+            <h3>Pessoal</h3>
+            <p class="plano-preco"><b data-preco>R$ 199</b><span data-por>por ano</span></p>
+            <p class="plano-mes" data-mes>R$ 16,58 por mês</p>
+            <ul><li>Lançamentos sem limite</li><li>Contas, caixinhas e transporte</li><li>Quanto dá para gastar hoje</li><li>IA à vontade</li></ul>
+            <a class="botao contorno" href="https://app.avina.com.br/#criar">Assinar o Pessoal</a>
+          </article>
+          <article class="plano-cartao revela" data-produto="consultorio">
+            <h3>Consultório</h3>
+            <p class="plano-preco"><b data-preco>R$ 299</b><span data-por>por ano</span></p>
+            <p class="plano-mes" data-mes>R$ 24,92 por mês</p>
+            <ul><li>Pacientes sem limite</li><li>Cobranças, recibos e imposto</li><li>Link para o paciente marcar</li><li>IA à vontade</li></ul>
+            <a class="botao contorno" href="https://app.avina.com.br/#criar">Assinar o Consultório</a>
+          </article>
+          <article class="plano-cartao revela destaque" data-produto="completo">
+            <span class="plano-selo">Recomendado</span><h3>Os dois</h3>
+            <p class="plano-preco"><b data-preco>R$ 399</b><span data-por>por ano</span></p>
+            <p class="plano-mes" data-mes>R$ 33,25 por mês</p>
+            <ul><li>Consultório e vida pessoal sem limite</li><li>O líquido do consultório entra no seu dinheiro</li><li>Tudo do Pessoal e do Consultório</li><li>IA à vontade</li></ul>
+            <a class="botao" href="https://app.avina.com.br/#criar">Assinar os dois</a>
+          </article>
+        </div>
+        <p class="planos-rodape revela">Pix ou cartão · renova sozinho e você cancela quando quiser, no app · <a href="https://app.avina.com.br/termos/">Termos de uso</a></p>
       </section>
 
       <!-- PRIVACIDADE -->

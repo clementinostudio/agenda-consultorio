@@ -4561,6 +4561,19 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       else onSair();
     },
     excluirConta: async () => {
+      // antes de apagar a conta, cancela a assinatura no Asaas (senão o cartão continuaria sendo cobrado).
+      // Nos 7 dias da garantia, o cancelamento já devolve o dinheiro. Se não der para cancelar, a conta fica.
+      try {
+        if (servidorAvisos()) {
+          const { data } = await (await cliente()).auth.getSession();
+          if (data.session) {
+            const r = await fetch(`${servidorAvisos()}/assinatura/cancelar`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` }, body: JSON.stringify({ motivo: "Excluiu a conta" }) });
+            const j = await r.json().catch(() => ({}));
+            // 409 = não tinha assinatura; configurado false = cobrança ainda não ligada
+            if (!r.ok && r.status !== 409 && j.configurado !== false) return notify(`Não consegui cancelar sua assinatura (${j.erro || "sem resposta"}). A conta não foi excluída: tente de novo.`);
+          }
+        }
+      } catch (e) { return notify("Sem internet agora: para excluir a conta, a assinatura precisa ser cancelada antes. Tente de novo com internet."); }
       try { await excluirContaNuvem(conta.uid); onSair(conta); }
       catch (e) { notify(traduzirErro(e)); }
     },

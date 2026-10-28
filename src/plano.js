@@ -38,3 +38,12 @@ export function liberadoDe(estado, cortesiaAte, hoje) {
 }
 // Selo PRO: só para quem está pagando (a cortesia libera tudo, mas não ganha selo)
 export const ehPro = (estado, hoje) => Object.keys(liberadoDe(estado, null, hoje)).length > 0;
+
+// Atendimento: "Fale com a gente" abre o WhatsApp direto (mude só aqui; nas páginas legais fica em public/legal/dados.js)
+export const WHATSAPP_SUPORTE = "5543988208714";
+export const linkSuporte = (texto = "Oi! Vim pelo app Avina e queria uma ajuda.") => `https://wa.me/${WHATSAPP_SUPORTE}?text=${encodeURIComponent(texto)}`;
+
+// Preço de lançamento: quem assina até esta data mantém o valor enquanto a assinatura continuar ativa.
+// É uma promessa de verdade: num reajuste futuro, essas assinaturas não mudam de valor. Depois da data, a faixa some sozinha.
+export const LANCAMENTO_ATE = "2026-11-30";
+export const emLancamento = hoje => hoje <= LANCAMENTO_ATE;
