@@ -21,9 +21,17 @@ fi
 SERVIDOR="https://agenda-avisos.alvena.workers.dev"
 
 verde "1/5 Chave de API $ONDE"
-echo "No Asaas ($PAINEL): menu do seu nome → Integrações → Chaves de API → Gerar chave. Copie e cole aqui."
-echo "(a chave não aparece enquanto você cola: é normal)"
-read -rs CHAVE; echo
+# Jeito mais fácil: o arquivo servidor-avisos/asaas.txt (fora do GitHub), com a chave na 1ª linha e o seu e-mail na 2ª.
+# Sem o arquivo, o script pergunta aqui no terminal.
+ARQ="asaas.txt"
+if [ -s "$ARQ" ] && grep -q '[^[:space:]]' "$ARQ"; then
+  CHAVE=$(sed -n 1p "$ARQ"); EMAIL=$(sed -n 2p "$ARQ" | tr -d '\r[:space:]'); DO_ARQUIVO=1
+  echo "Usando a chave do arquivo servidor-avisos/$ARQ."
+else
+  echo "No Asaas ($PAINEL): menu do seu nome → Integrações → Chaves de API → Gerar chave. Copie e cole aqui."
+  echo "(a chave não aparece enquanto você cola: é normal)"
+  read -rs CHAVE; echo
+fi
 # limpa o que vem junto ao colar: códigos de "colagem" de alguns terminais (VS Code, Antigravity), o caractere
 # invisível do Windows, espaços, aspas e quebras de linha. Sobra só a chave.
 CHAVE=$(printf "%s" "$CHAVE" | sed 's/\x1b\[20[01]~//g; s/\[20[01]~//g; s/^\xEF\xBB\xBF//' | tr -cd '[:graph:]' | tr -d '"'"'")
@@ -42,9 +50,13 @@ esac
 echo "Chave conferida."
 
 verde "2/5 Quem pode ver a assinatura de verdade enquanto testamos"
-echo "Escreva o e-mail que você usa para entrar no Avina (só ele verá a assinatura de verdade; os outros seguem na demonstração)."
-echo "Para liberar para todo mundo, deixe em branco e aperte Enter."
-read -r EMAIL
+if [ -n "$DO_ARQUIVO" ]; then
+  echo "${EMAIL:-Ninguém no arquivo: liberado para todo mundo.}"
+else
+  echo "Escreva o e-mail que você usa para entrar no Avina (só ele verá a assinatura de verdade; os outros seguem na demonstração)."
+  echo "Para liberar para todo mundo, deixe em branco e aperte Enter."
+  read -r EMAIL
+fi
 
 verde "3/5 Guardando os segredos na Cloudflare"
 TOKEN=$(node -e 'process.stdout.write(require("crypto").randomBytes(24).toString("hex"))')
@@ -78,5 +90,7 @@ R=$(ASAAS_URL="$ASAAS_URL" CHAVE="$CHAVE" TOKEN="$TOKEN" SERVIDOR="$SERVIDOR" EM
   })().catch(e => process.stdout.write("erro " + e.message));')
 [ "$R" = "ok" ] || echo "Não consegui criar o webhook ($R). Sem ele a assinatura funciona igual (o app confere direto no Asaas); dá para criar depois."
 
+# a chave já está guardada na Cloudflare (e no .dev.vars): o arquivo de texto não precisa mais existir
+[ -n "$DO_ARQUIVO" ] && rm -f "$ARQ"
 verde "Pronto! A assinatura de verdade está ligada $ONDE."
 [ -n "$EMAIL" ] && echo "Entre no Avina com $EMAIL e abra Perfil → Assinatura."
