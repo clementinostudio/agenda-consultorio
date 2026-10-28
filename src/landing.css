@@ -318,7 +318,7 @@ details p { margin: 0 0 22px; color: var(--muted); }
 @media (min-width: 760px) {
   .numeros { grid-template-columns: repeat(4, 1fr); }
   .pilares, .passos { grid-template-columns: repeat(3, 1fr); }
-  .rodape { grid-template-columns: 2fr 1fr 1fr 1fr; } .rod-marca { grid-column: auto; align-content: flex-start; }
+  .rodape { grid-template-columns: 2fr 1fr 1fr 1fr 1fr; } .rod-marca { grid-column: auto; align-content: flex-start; }
 }
 @media (min-width: 980px) {
   .menu { display: flex; }
