@@ -3,6 +3,8 @@
 // Quando ligar o Asaas, quem muda o "status" é o aviso de pagamento do servidor, não estes botões.
 import React, { useState, useEffect } from "react";
 import { I, Marca, Seg, Field, Ilustra, todayISO, addDays, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON } from "../App.jsx";
+import { normalizar } from "../marcas.js";
+import { ENDERECO_APP } from "../nuvem.js";
 
 const TESTE_DIAS = 14;
 const PLANOS = {
@@ -11,7 +13,8 @@ const PLANOS = {
 };
 const INCLUI = ["Agenda, pacientes e cobranças sem limite", "Gastos, contas e transporte da vida pessoal", "Avisos no celular e anotações por voz", "Cópia na nuvem e uso em vários aparelhos"];
 const MOTIVOS = ["Ficou caro", "Não estou usando", "Faltou alguma coisa", "Vou usar outro app", "Outro motivo"];
-const TITULO_ASSIN = { planos: "Escolha seu plano", pagar: "Pagamento", pronto: "Assinatura", forma: "Forma de pagamento", historico: "Pagamentos", pausar: "Pausar assinatura", cancelar: "Cancelar assinatura" };
+const COLEGAS_DEMO = ["Marina Torres", "João Pedro Alves", "Fernanda Lima", "Lucas Barros"];
+const TITULO_ASSIN = { indicar: "Indique um colega", planos: "Escolha seu plano", pagar: "Pagamento", pronto: "Assinatura", forma: "Forma de pagamento", historico: "Pagamentos", pausar: "Pausar assinatura", cancelar: "Cancelar assinatura" };
 const voltaAssin = tela => tela === "pagar" ? "planos" : null;
 
 const isoDe = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -20,6 +23,16 @@ const dias = (de, ate) => Math.round((fromISO(ate) - fromISO(de)) / 864e5);
 const dataLonga = iso => { const d = fromISO(iso); return `${d.getDate()} de ${MES_LONGO[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ` de ${d.getFullYear()}` : ""}`; };
 const porMes = p => brlReal(Math.round(p.preco / p.meses * 100) / 100);
 const novoTeste = () => ({ status: "teste", inicio: todayISO(), historico: [] });
+
+// Indique um colega: código fixo de cada conta (primeiro nome + 3 números)
+const codigoDe = conta => `${(normalizar(conta.nome).split(" ")[0] || "alvena").toUpperCase().slice(0, 8)}-${Math.abs([...String(conta.email)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)) % 900 + 100}`;
+// Um mês grátis: no teste, o teste fica 30 dias maior; assinando, a próxima cobrança anda um mês
+function ganharMes(a) {
+  const sit = situacaoDe(a), hoje = todayISO();
+  if (a.status === "teste") return { ...a, inicio: sit.s === "acabou" ? addDays(hoje, 30 - TESTE_DIAS) : addDays(a.inicio, 30) };
+  if (sit.s === "acabou") return { ...a, status: "cancelada", ate: addMeses(hoje, 1) };
+  return { ...a, proxima: addMeses(a.proxima, 1), ...(a.status === "cancelada" ? { ate: addMeses(a.ate, 1) } : {}) };
+}
 
 function useAssinatura(conta) {
   const chave = `agenda-assinatura:${conta.email}`;
@@ -82,8 +95,11 @@ const cartaoOk = c => c.num.length >= 13 && c.val.length === 4 && Number(c.val.s
 const CARTAO_VAZIO = { num: "", val: "", cvv: "", nome: "" };
 const formaTxt = a => a.forma === "cartao" ? `Cartão final ${a.final}` : "Pix";
 
-function AssinaturaPagina({ a, setA, tela, setTela, act }) {
+function AssinaturaPagina({ a, setA, tela, setTela, act, conta }) {
   const sit = situacaoDe(a), hoje = todayISO();
+  const [codigo, setCodigo] = useState("");
+  const [comCodigo, setComCodigo] = useState(false);
+  const meuCodigo = codigoDe(conta);
   const [plano, setPlano] = useState(a.plano || "anual");
   const [forma, setForma] = useState(a.forma || "pix");
   const [cartao, setCartao] = useState(CARTAO_VAZIO);
@@ -127,8 +143,47 @@ function AssinaturaPagina({ a, setA, tela, setTela, act }) {
         </>
         : <button className="btn mode" onClick={() => setTela("pagar")}>Continuar</button>}
       <div className="hint assin-centro">Cancele quando quiser, em dois toques. Sem multa e sem fidelidade.</div>
+      {!trocando && (a.codigoUsado
+        ? <div className="note mint"><I.check /><span>Código {a.codigoUsado} aplicado: você ganhou 1 mês grátis.</span></div>
+        : comCodigo
+          ? <div className="assin-codigo">
+            <Field label="Código de indicação" htmlFor="a-cod"><input id="a-cod" autoCapitalize="characters" value={codigo} onChange={e => setCodigo(e.target.value.toUpperCase().replace(/\s/g, ""))} placeholder="Ex.: ANA-123" /></Field>
+            <button className="btn ghost" disabled={!/^[A-Z]{2,8}-\d{3}$/.test(codigo) || codigo === meuCodigo} onClick={() => { setA(ganharMes({ ...a, codigoUsado: codigo })); vibrar("ok"); act.toast("Código aplicado: 1 mês grátis!"); }}>Aplicar</button>
+          </div>
+          : <button className="btn text" onClick={() => setComCodigo(true)}>Tenho um código de indicação</button>)}
     </div>
   );
+
+  if (tela === "indicar") {
+    const url = `${ENDERECO_APP}?indicacao=${meuCodigo}`;
+    const msg = `Estou usando o Alvena para a agenda e as cobranças do consultório e tem me poupado muito tempo. Com o meu código ${meuCodigo}, você ganha 1 mês grátis: ${url}`;
+    const ind = a.indicacoes || [];
+    return (
+      <div className="stack">
+        <div className="indique">
+          <Ilustra n="dinheiro" className="perfil-ilustra" />
+          <h2>Vocês dois ganham 1 mês grátis</h2>
+          <p>Quando um colega assina com o seu código, ele ganha 1 mês e você também. Quanto mais gente, mais meses.</p>
+          <button className="indique-cod" onClick={() => copiarTexto(meuCodigo, act, "Código copiado")}><span><small>Seu código</small><b>{meuCodigo}</b></span><I.copy /></button>
+          <a className="btn mode" href={`https://wa.me/?text=${encodeURIComponent(msg)}`} target="_blank" rel="noopener"><I.send /> Enviar no WhatsApp</a>
+          <button className="btn ghost" onClick={() => copiarTexto(msg, act, "Convite copiado")}><I.copy /> Copiar o convite</button>
+        </div>
+        {ind.length ? (
+          <div className="perfil-grupo">
+            <h3>Quem assinou · {ind.length} {ind.length === 1 ? "mês ganho" : "meses ganhos"}</h3>
+            <div className="perfil-lista">
+              {ind.map((x, i) => <div key={i} className="perfil-row"><i><I.user /></i><span><b>{x.nome}</b><small>Assinou em {dataLonga(x.data)} · +1 mês para você</small></span></div>)}
+            </div>
+          </div>
+        ) : <div className="hint assin-centro">Ninguém assinou com o seu código ainda.</div>}
+        <div className="assin-demo">
+          <b>Só na demonstração</b>
+          <small>Na versão de verdade, o mês entra sozinho quando o colega paga a primeira vez.</small>
+          <button className="btn ghost" onClick={() => { setA(ganharMes({ ...a, indicacoes: [{ nome: COLEGAS_DEMO[ind.length % COLEGAS_DEMO.length], data: hoje }, ...ind] })); vibrar("ok"); act.toast("Um colega assinou: você ganhou 1 mês grátis!"); }}>Simular um colega assinando</button>
+        </div>
+      </div>
+    );
+  }
 
   if (tela === "pagar") return (
     <div className="stack">
@@ -250,6 +305,10 @@ function AssinaturaPagina({ a, setA, tela, setTela, act }) {
           {sit.s === "ativa" && <button className="perfil-row" onClick={() => { setPlano(a.plano === "anual" ? "mensal" : "anual"); setTela("planos"); }}><i><I.repeat /></i><span><b>Trocar de plano</b><small>{a.plano === "anual" ? "Mudar para o mensal" : `Anual sai por ${porMes(PLANOS.anual)} por mês`}</small></span><I.chev /></button>}
         </div>
       )}
+
+      <div className="perfil-lista">
+        <button className="perfil-row" onClick={() => setTela("indicar")}><i><I.users /></i><span><b>Indique um colega</b><small>{(a.indicacoes || []).length ? `${a.indicacoes.length} ${a.indicacoes.length === 1 ? "mês ganho" : "meses ganhos"} · ganhe mais` : "Vocês dois ganham 1 mês grátis"}</small></span><I.chev /></button>
+      </div>
 
       {sit.s === "ativa" && <>
         <button className="assin-pausar" onClick={() => setTela("pausar")}><I.clock /> Pausar assinatura</button>

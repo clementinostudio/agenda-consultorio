@@ -152,6 +152,103 @@ function CartaoPrevisao({ db }) {
   );
 }
 
+// Quanto dá para gastar hoje: o que sobra para o dia a dia até o fim do mês (contas já descontadas),
+// dividido pelos dias que faltam, contando hoje
+function podeGastar(db) {
+  const p = previsaoMes(db), hoje = todayISO();
+  const gastoHoje = soma(db.pessoal.lanc.filter(l => l.tipo === "saida" && l.data === hoje), l => l.valor);
+  const restam = p.ultimo - p.diaHoje;
+  const livre = p.fim + p.ritmo * restam + gastoHoje;
+  const porDia = Math.max(0, livre / (restam + 1));
+  return { hoje: porDia - gastoHoje, porDia, gastoHoje, livre, restam, fim: p.fim, ultimo: p.ultimo };
+}
+
+// "Posso gastar 300 no sábado?": a resposta sai daqui, sem internet
+function respostaGastar(db, frase) {
+  const P = db.pessoal;
+  if (!P.lanc.length && !(P.renda && P.renda.valor)) return "Ainda não tenho seus números. Anote a entrada do mês e alguns gastos que eu consigo responder.";
+  const g = podeGastar(db), t = normalizar(frase);
+  const m = t.match(/(\d+(?:[.,]\d{1,2})?)\s*(mil)?/);
+  if (!m) return g.livre <= 0 ? `Hoje o melhor é segurar: nesse ritmo, o mês fecha faltando ${brlReal(-g.fim)}.` : `Hoje você pode gastar até ${brlReal(Math.max(0, g.hoje))}. Até o dia ${g.ultimo}, o ideal é ${brlReal(g.porDia)} por dia.`;
+  const v = Number(m[1].replace(",", ".")) * (m[2] ? 1000 : 1);
+  const sobra = g.fim - v, depois = Math.max(0, (g.livre - v) / (g.restam + 1));
+  if (sobra >= 0) return `Pode. Nesse ritmo, ainda sobram ${brlReal(sobra)} no dia ${g.ultimo}.${v > g.porDia * 3 ? ` Só que depois disso o ideal cai para ${brlReal(depois)} por dia.` : ""}`;
+  if (g.livre - v >= 0) return `Dá, mas fica no limite: para fechar o mês no azul, o resto do dia a dia teria que caber em ${brlReal(depois)} por dia até o dia ${g.ultimo}.`;
+  return `Melhor não agora: mesmo sem nenhum outro gasto, faltariam ${brlReal(v - g.livre)} para fechar o mês.`;
+}
+
+function CartaoHoje({ db, act }) {
+  const P = db.pessoal;
+  if (!P.lanc.length && !(P.renda && P.renda.valor)) return null;
+  const g = podeGastar(db), passou = g.hoje < 0, ruim = g.livre <= 0;
+  return (
+    <section className={"hoje-gasto" + (ruim ? " ruim" : passou ? " passou" : "")}>
+      <small>{ruim ? "Mês apertado" : passou ? "Hoje já passou do ideal" : "Hoje você pode gastar"}</small>
+      <b className="num"><Money v={ruim ? 0 : passou ? -g.hoje : g.hoje} /></b>
+      <p>{ruim ? `O que entra até o dia ${g.ultimo} não cobre as contas no ritmo de agora. Segure o que der.`
+        : passou ? `Tudo bem: amanhã volta a ${brl(g.porDia)} por dia.`
+        : g.gastoHoje > 0 ? `Já foram ${brl(g.gastoHoje)} hoje. Até o dia ${g.ultimo}, o ideal é ${brl(g.porDia)} por dia.`
+        : `Até o dia ${g.ultimo}, ${brl(g.porDia)} por dia, com as contas pagas.`}</p>
+      {!ruim && <span className="hoje-barra" aria-hidden="true"><i style={{ width: `${Math.min(100, Math.round(g.gastoHoje / (g.porDia || 1) * 100))}%` }} /></span>}
+      {servidorAvisos() && <button className="link" onClick={act.abrirChat}>Pergunte: “posso gastar 200 no sábado?”</button>}
+    </section>
+  );
+}
+
+// Assinaturas esquecidas: o mesmo gasto, com o mesmo valor, em meses diferentes (geralmente vindo do extrato)
+const MARCAS_ASSINATURA = new Set(["netflix", "spotify", "deezer", "youtube", "primevideo", "disney", "max", "globoplay", "paramount", "crunchyroll", "appletv", "applemusic", "amazonmusic", "tidal", "telecine", "premiere", "mubi", "kindle", "audible", "skeelo", "skymais", "claro tv"]);
+function assinaturasAchadas(db, { usadas = false } = {}) {
+  const P = db.pessoal, hoje = fromISO(todayISO());
+  const meses = [0, 1, 2, 3].map(i => { const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
+  const vistas = P.assinVistas || {};
+  const contas = P.contas.map(c => ({ m: c.marca || (acharMarca(c.nome) || {}).id, n: normalizar(c.nome) }));
+  const g = new Map();
+  P.lanc.forEach(l => {
+    const ch = l.data.slice(0, 7);
+    if (l.tipo !== "saida" || !meses.includes(ch)) return;
+    const k = l.marca || normalizar(l.desc || "").split(" ").slice(0, 3).join(" ");
+    if (!k || k.length < 3) return;
+    const it = g.get(k) || { k, marca: l.marca || null, nome: (l.marca && (marcaId(l.marca) || {}).nome) || l.desc, cat: l.cat, porMes: {}, ultimo: l.data };
+    (it.porMes[ch] = it.porMes[ch] || []).push(l.valor);
+    if (l.data > it.ultimo) it.ultimo = l.data;
+    g.set(k, it);
+  });
+  return [...g.values()].filter(it => {
+    const ms = Object.keys(it.porMes).sort();
+    if (ms.length < 2 || ms.some(m => it.porMes[m].length > 2)) return false;
+    const vals = ms.map(m => it.porMes[m][it.porMes[m].length - 1]), ref = vals[vals.length - 1];
+    const conhecida = MARCAS_ASSINATURA.has(it.marca);
+    if (ref < 3 || ref > 400 || vals.some(v => Math.abs(v - ref) > ref * (conhecida ? .25 : .05))) return false;
+    if (!conhecida && ["mercado", "transporte", "combustivel"].includes(it.cat)) return false;
+    if (contas.some(c => (it.marca && c.m === it.marca) || c.n === normalizar(it.nome))) return false;
+    if (usadas ? vistas[it.k] !== "usa" : vistas[it.k]) return false;
+    it.valor = ref; it.dia = Number(it.ultimo.slice(8, 10));
+    return true;
+  }).sort((a, b) => b.valor - a.valor);
+}
+
+function AssinaturasAchadas({ db, act }) {
+  const lista = assinaturasAchadas(db);
+  if (!lista.length) return null;
+  const total = soma(lista, x => x.valor);
+  return (
+    <div className="panel assin-achadas">
+      <div className="panel-head"><h3>Parecem assinaturas</h3><span className="hint" style={{ padding: 0 }}>{brl(total * 12)}/ano</span></div>
+      <p className="hint" style={{ padding: "0 0 8px" }}>Achei estes gastos com o mesmo valor todo mês. Ainda usa?</p>
+      {lista.map(x => (
+        <div key={x.k} className="assin-achada">
+          <MarcaLogo marca={x.marca} nome={x.nome} cat={catDe(x.cat)} className="txn-av" />
+          <span className="mid"><span className="nm">{x.nome}</span><span className="sb">{brl(x.valor)} por mês · <b>{brl(x.valor * 12)} por ano</b></span></span>
+          <div className="assin-achada-bts">
+            <button className="chip-btn" onClick={() => act.assinaturaVista(x, "nao")}>Não uso</button>
+            <button className="chip-btn on" onClick={() => act.assinaturaVista(x, "usa")}>Uso</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function serieSaldo(db, ini, fim) {
   const P = db.pessoal, out = [];
   let acc = 0;
@@ -185,6 +282,8 @@ function conversaPessoal(db, act) {
   falas.push({ txt: <>Neste mês entrou <b>{brl(r.entrou)}</b>{r.consult > 0 ? <> (sendo {brl(r.consult)} do consultório)</> : null} e saiu <b>{brl(r.saiu)}</b>. {r.sobra >= 0 ? <>Sobram {brl(r.sobra)}.</> : <>Está {brl(-r.sobra)} no vermelho.</>}</> });
   const top = Object.entries(r.porCat).sort((a, b) => b[1] - a[1])[0];
   if (top) falas.push({ txt: <>O que mais pesou até agora foi <b>{catDe(top[0]).nome}</b>: {brl(top[1])}.</>, acao: { l: "Ver gastos", ic: <I.chart />, fn: () => act.setTab("p-gastos") } });
+  const achadas = assinaturasAchadas(db);
+  if (achadas.length) falas.unshift({ txt: <>Achei {achadas.length === 1 ? <><b>{achadas[0].nome}</b>, que se repete</> : <><b>{achadas.length} gastos</b> que se repetem</>} todo mês com o mesmo valor: {brl(soma(achadas, x => x.valor) * 12)} por ano. Ainda usa?</>, acao: { l: "Ver", ic: <I.bill />, fn: () => act.setTab("p-contas") } });
   const ass = P.contas.filter(c => c.assinatura);
   if (ass.length) falas.push({ txt: <>Suas {ass.length} assinaturas somam {brl(soma(ass, c => c.valor))} por mês, ou {brl(soma(ass, c => c.valor) * 12)} por ano.</>, acao: { l: "Ver assinaturas", ic: <I.bill />, fn: () => act.setTab("p-contas") } });
   return falas.slice(0, ESTILO === "curto" ? 2 : 4);
@@ -251,6 +350,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
           <ProximaConquista act={act} trilhas={["dinheiro", "app"]} />
           <CasaCartao casa={act.casa} onAbrir={act.abrirCasa} />
           {servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
+          <CartaoHoje db={db} act={act} />
           <section className="bal">
             <div className="bal-top">
               <span className="lab">{rotulo} <button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></span>
@@ -439,6 +539,8 @@ function ContasTab({ db, act, tema }) {
   const contas = [...db.pessoal.contas].sort((a, b) => a.dia - b.dia);
   const abertas = contas.filter(c => !(c.pagas && c.pagas[chave]));
   const pagas = contas.filter(c => c.pagas && c.pagas[chave]);
+  const usadas = assinaturasAchadas(db, { usadas: true });
+  const totAssin = soma(contas.filter(c => c.assinatura), c => c.valor) + soma(usadas, x => x.valor);
   return (
     <div className="page" style={{ maxWidth: 820 }}>
       <TopBar eyebrow={`${MES_LONGO[fromISO(t).getMonth()]} · ${pagas.length} de ${contas.length} pagas`} title="Contas fixas" act={act} tema={tema}
@@ -454,9 +556,17 @@ function ContasTab({ db, act, tema }) {
           {abertas.length === 0 ? <div className="empty com-ilustra"><Ilustra n="cafe" /><b>Tudo pago</b>Nenhuma conta pendente neste mês.</div> : abertas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
         </div>
         {pagas.length > 0 && <div className="panel"><div className="panel-head"><h3>Pagas</h3></div>{pagas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}</div>}
-        {contas.some(c => c.assinatura) && (
+        <AssinaturasAchadas db={db} act={act} />
+        {(contas.some(c => c.assinatura) || usadas.length > 0) && (
           <div className="panel">
-            <div className="panel-head"><h3>Assinaturas</h3><span className="hint" style={{ padding: 0 }}>{brl(soma(contas.filter(c => c.assinatura), c => c.valor))}/mês · {brl(soma(contas.filter(c => c.assinatura), c => c.valor) * 12)}/ano</span></div>
+            <div className="panel-head"><h3>Assinaturas</h3><span className="hint" style={{ padding: 0 }}>{brl(totAssin)}/mês · {brl(totAssin * 12)}/ano</span></div>
+            {usadas.map(x => (
+              <div key={x.k} className="assin-achada">
+                <MarcaLogo marca={x.marca} nome={x.nome} cat={catDe(x.cat)} className="txn-av" />
+                <span className="mid"><span className="nm">{x.nome}</span><span className="sb">Vem no extrato · {brl(x.valor * 12)} por ano</span></span>
+                <span className="amt"><Money v={x.valor} /></span>
+              </div>
+            ))}
             {contas.filter(c => c.assinatura).map(c => (
               <button key={c.id} className="txn" onClick={() => act.editConta(c.id)}>
                 <MarcaLogo marca={c.semLogo ? null : c.marca || (acharMarca(c.nome) || {}).id} site={c.semLogo ? null : c.logoSite} nome={c.nome} cat={catDe(c.cat)} className="txn-av" />
@@ -667,4 +777,4 @@ function TetoSheet({ db, cat: cat0, act, onClose }) {
   );
 }
 
-export { PessoalHome, GastosTab, ContasTab, LancSheet, ContaSheet, TetoSheet };
+export { PessoalHome, GastosTab, ContasTab, LancSheet, ContaSheet, TetoSheet, respostaGastar };

@@ -17,6 +17,7 @@ import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquis
 import { AVATARES, ehAvatarPronto } from "./avatares.js";
 import { precosGuardados, veiculosDe } from "./transporte.js";
 import { useCasa, K_CONVITE, pesosDe } from "./casa.js";
+import { janelasDoDia } from "./horarios.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -290,8 +291,13 @@ function conversa(db, now, act, perfil) {
   if (ehAniversario(perfil)) falas.push({ txt: <>Hoje é seu aniversário. Parabéns! Se der, deixa a agenda mais leve hoje.</> });
   if (db.patients.length === 0) {
     falas.push({ txt: <>Aqui eu cuido das datas e das contas para você. Para começar, cadastre seu primeiro {TERMO.s}. Depois disso a agenda anda sozinha.</>, acao: { l: `Cadastrar ${TERMO.s}`, ic: <I.plus />, fn: act.novoPaciente } });
+    falas.push({ txt: <>Já usa outra agenda? Eu trago seus {TERMO.p} do Google Agenda, do iPhone ou de uma lista, com dia e horário.</>, acao: { l: "Trazer da agenda antiga", ic: <I.upload />, fn: act.importarAgenda } });
     return falas;
   }
+  const ped = db.pedidos || [];
+  if (ped.length) falas.push({ txt: ped.length === 1
+    ? <><b>{primeiro(ped[0].nome)}</b> pediu pelo seu link {ped[0].pid ? "para remarcar para" : "um horário:"} {relativo(ped[0].data).toLowerCase()} às {ped[0].hora}.</>
+    : <>Chegaram <b>{ped.length} pedidos de horário</b> pelo seu link.</>, acao: { l: ped.length === 1 ? "Ver pedido" : "Ver pedidos", ic: <I.cal />, fn: act.abrirPedidos } });
   const atrasados = db.patients.filter(p => p.active && p.nextDate < t);
   if (atrasados.length) falas.push({ txt: <>Antes de tudo: {atrasados.length === 1 ? "uma sessão ficou" : `${atrasados.length} sessões ficaram`} sem marcar. Responde aqui embaixo, é um toque só.</> });
   const hoje = itensDoDia(db, t);
@@ -1397,6 +1403,9 @@ function exemploPessoal() {
     incluirConsultorio: true,
     lanc: [
       la(380.2, "mercado", "Compras do mês", 3), la(48, "comida", "Lanche", 5), la(186, "lazer", "Show", 6), la(64.9, "saude", "Farmácia", 2), la(15, "transporte", "Ônibus", 4),
+      // cobranças que se repetem todo mês sem estar nas contas (o app pergunta se ainda usa)
+      la(43.9, "lazer", "Disney+", 1), { ...l("saida", 43.9, "lazer", "Disney+", 0), data: `${chave}-01` },
+      la(99.9, "compras", "ChatGPT Plus", 1), { ...l("saida", 99.9, "compras", "ChatGPT Plus", 0), data: `${chave}-01` },
       l("saida", 312.4, "mercado", "Compra da semana", -2),
       l("saida", 68, "comida", "Almoço com amigas", -1),
       l("saida", 22.5, "transporte", "Uber", 0),
@@ -2421,7 +2430,7 @@ function PatientsTab({ db, act, tema, vista = "ativos", setVista }) {
   return (
     <div className="page" style={{ maxWidth: 820 }}>
       <TopBar eyebrow={`${db.patients.length} ${db.patients.length === 1 ? TERMO.s : TERMO.p}`} title={TERMO.P} act={act} tema={tema}
-        extra={<button className="icon-btn" onClick={act.novoPaciente} aria-label={`Novo ${TERMO.s}`}><I.plus /></button>} />
+        extra={<><button className="icon-btn" onClick={act.importarAgenda} aria-label="Trazer da agenda antiga"><I.upload /></button><button className="icon-btn" onClick={act.novoPaciente} aria-label={`Novo ${TERMO.s}`}><I.plus /></button></>} />
       <div className="stack">
         <Seg big value={vista} onChange={setVista} options={[{ v: "ativos", l: TERMO.P }, { v: "espera", l: `Lista de espera${db.espera.length ? ` (${db.espera.length})` : ""}` }]} />
         {vista === "espera" && <>
@@ -3016,6 +3025,17 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
       responderFalando(tchau, () => { if (vez.current === minha) setTimeout(() => { if (vez.current === minha) fechar(); }, 600); });
       return;
     }
+    // "posso gastar 300 no sábado?": a conta é feita aqui mesmo, com a previsão do mês (sem internet)
+    if (usaPessoal && /\b(posso|da pra|da para|consigo|daria pra|daria para|devo)\s+(gastar|comprar|torrar)\b/.test(semAcento(t))) {
+      const { respostaGastar } = await import("./telas/pessoal.jsx");
+      if (vez.current !== minha) return;
+      const resp = respostaGastar(db, t);
+      setChat(true); if (!noChat) addFala("eu", t); setTexto(""); setRes(null);
+      addFala("ela", resp); setResposta(resp); setFase("resposta"); vibrar("ok");
+      if (tecRef.current) tecRef.current.blur();
+      responderFalando(resp, () => { if (deVoz && vez.current === minha && ativoRef.current) comecar(false, null, true); });
+      return;
+    }
     const r = entender(t);
     if (okDe(r)) {
       // entendeu, mas ficou com cara de chute (sem saber onde foi, ou sobrou valor na frase): confere com a IA
@@ -3414,14 +3434,14 @@ const semanaKey = iso => segunda(iso);
 
 // Horários livres nos próximos dias, dentro do horário de trabalho
 function horariosLivres(db, inicio, nDias) {
-  const hi = PERFIL.horaIni ?? 8, hf = PERFIL.horaFim ?? 20, dias = PERFIL.diasTrab || [1, 2, 3, 4, 5];
   const out = [];
   for (let k = 0; k < nDias; k++) {
     const iso = addDays(inicio, k), d = fromISO(iso);
-    if (!dias.includes(d.getDay()) || feriado(iso)) continue;
+    const janelas = janelasDoDia(PERFIL, d.getDay());
+    if (!janelas.length || feriado(iso)) continue;
     const ocup = itensDoDia(db, iso).filter(i => !(i.kind === "log" && i.session.status === "missed")).map(i => [mins(i.time), mins(i.time) + DURACAO_SESSAO]);
     const livres = [];
-    for (let m = hi * 60; m + DURACAO_SESSAO <= hf * 60; m += 60) if (!ocup.some(([a, b]) => m < b && a < m + DURACAO_SESSAO)) livres.push(m);
+    janelas.forEach(([ji, jf]) => { for (let m = ji; m + DURACAO_SESSAO <= jf; m += 60) if (!ocup.some(([a, b]) => m < b && a < m + DURACAO_SESSAO)) livres.push(m); });
     if (livres.length) out.push({ iso, livres });
   }
   return out;
@@ -3492,6 +3512,8 @@ const ConfirmSheet = lazy(() => import("./telas/paineis.jsx").then(m => ({ defau
 
 // HORÁRIOS LIVRES PARA DIVULGAR
 const LivresSheet = lazy(() => import("./telas/paineis.jsx").then(m => ({ default: m.LivresSheet })));
+const PedidosSheet = lazy(() => import("./telas/agendamento.jsx").then(m => ({ default: m.PedidosSheet })));
+const ImportarAgendaSheet = lazy(() => import("./telas/importar-agenda.jsx").then(m => ({ default: m.ImportarAgendaSheet })));
 
 // LISTA DE ESPERA
 function EsperaSheet({ inicial, onSave, onDelete, onClose }) {
@@ -4096,6 +4118,21 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     updFundo: async (id, img) => { const velho = meusFundos.find(m => m.id === id); const item = { ...velho, img }; await IDB.salvar(item); setMeusFundos(l => l.map(m => m.id === id ? item : m)); notify("Fundo ajustado"); },
     delFundo: async id => { await IDB.apagar(id).catch(() => {}); setMeusFundos(l => l.filter(m => m.id !== id)); if (conta.fundo && conta.fundo.id === "u:" + id) onAtualizar({ fundo: null }); notify("Fundo excluído"); },
     meusFundos,
+    // Link de agendamento: o pedido espera você aceitar; aceitar põe na agenda (paciente novo ou remarcação)
+    pedirHorario: p => setDb(d => ({ ...d, pedidos: [...(d.pedidos || []), { id: uid(), criado: Date.now(), ...p }] })),
+    abrirPedidos: () => setSheet({ type: "pedidos" }),
+    responderPedido: (id, ok) => {
+      const p = (db.pedidos || []).find(x => x.id === id); if (!p) return;
+      setDb(d => {
+        const r = { ...d, pedidos: (d.pedidos || []).filter(x => x.id !== id) };
+        if (!ok) return r;
+        if (p.pid) return { ...r, patients: r.patients.map(x => x.id === p.pid ? { ...x, nextDate: p.data, time: p.hora } : x) };
+        const novo = { id: uid(), name: p.nome, phone: p.phone || "", color: CORES[r.patients.length % CORES.length].id, price: perfil.valorPadrao || 0, sublet: perfil.subPadrao || 0, subletType: perfil.subTipo || "fixed", freq: 7, time: p.hora, billing: "session", packageSize: 4, nextDate: p.data, active: true, desde: todayISO() };
+        return { ...r, patients: [...r.patients, novo] };
+      });
+      vibrar(ok ? "ok" : "toque");
+      notify(ok ? `${primeiro(p.nome)} na agenda · ${dm(p.data)} às ${p.hora}` : "Pedido recusado");
+    },
     remarcar: (pid, data, hora) => { setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, nextDate: data, time: hora } : p) })); close(); notify(`Remarcado para ${dm(data)} às ${hora}`); },
     desfazer: sid => { setDb(d => desfazer(d, sid)); close(); notify("Registro desfeito"); },
     setPago: (cid, pago) => (pago && vibrar("ok"), setDb(d => ({ ...d, charges: d.charges.map(c => c.id === cid ? { ...c, paid: pago, paidAt: pago ? todayISO() : null } : c) }))),
@@ -4103,6 +4140,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     openPatient: pid => setSheet({ type: "patient", pid }),
     editPatient: pid => setSheet({ type: "form", pid }),
     novoPaciente: () => setSheet({ type: "form" }),
+    importarAgenda: () => setSheet({ type: "importar-agenda" }),
+    importarPacientes: lista => {
+      setDb(d => ({ ...d, patients: [...d.patients, ...lista] }));
+      vibrar("ok"); close(); notify(`${lista.length} ${lista.length === 1 ? TERMO.s : TERMO.p} na agenda`);
+    },
     openSettings: aba => setSheet({ type: "settings", aba: typeof aba === "string" ? aba : null }),
     salvarPerfil: (patch, pix) => {
       setDb(d => d.settings.pix === pix ? d : { ...d, settings: { ...d.settings, pix } });
@@ -4156,6 +4198,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     iniciarViagem: (moeda, iof) => { setP(P => ({ ...P, viagem: { moeda, iof, desde: todayISO() } })); close(); vibrar("ok"); notify(`Modo viagem: ${MOEDAS[moeda].nome}. Pode falar os gastos na moeda de lá.`); },
     encerrarViagem: () => { const v = db.pessoal.viagem; setP(P => { const { viagem, ...resto } = P; return resto; }); close(); notify("Modo viagem desligado", () => setP(P => ({ ...P, viagem: v }))); },
     editConta: id => setSheet({ type: "conta", id }),
+    // Assinatura achada no extrato: "usa" passa para a lista de assinaturas; "nao" some e lembra quanto economiza
+    assinaturaVista: (x, st) => {
+      setP(P => ({ ...P, assinVistas: { ...(P.assinVistas || {}), [x.k]: st } }));
+      vibrar(st === "nao" ? "ok" : "toque");
+      notify(st === "nao" ? `Cancele ${x.nome} no app ou site deles: são ${brlReal(x.valor * 12)} por ano de volta` : `${x.nome} foi para as suas assinaturas`, () => setP(P => { const v = { ...(P.assinVistas || {}) }; delete v[x.k]; return { ...P, assinVistas: v }; }));
+    },
     salvarConta: c => { setP(P => ({ ...P, contas: P.contas.some(x => x.id === c.id) ? P.contas.map(x => x.id === c.id ? c : x) : [...P.contas, c] })); close(); notify(`${c.nome} salva · vence todo dia ${c.dia}`); },
     apagarConta: id => { setP(P => ({ ...P, contas: P.contas.filter(x => x.id !== id) })); close(); notify("Conta apagada"); },
     pagarConta: id => {
@@ -4253,6 +4301,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "revisao" && <Suspense fallback={null}><RevisaoSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "confirmar" && <Suspense fallback={null}><ConfirmSheet db={db} iso={sheet.iso} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "livres" && <Suspense fallback={null}><LivresSheet db={db} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "pedidos" && <Suspense fallback={null}><PedidosSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "importar-agenda" && <Suspense fallback={null}><ImportarAgendaSheet db={db} perfil={perfil} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
       {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} casa={casa.casa && casa.membros.length > 1 ? casa : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}

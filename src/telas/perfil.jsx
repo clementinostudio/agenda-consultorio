@@ -5,6 +5,8 @@ import { createPortal, flushSync } from "react-dom";
 import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada, Marca } from "../App.jsx";
 import { DadosRecibo } from "./consultorio.jsx";
 import { AssinaturaPagina, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaAssin } from "./assinatura.jsx";
+import { GradeHorarios, LinkAgendamento, linkDo } from "./agendamento.jsx";
+import { gradeDo, resumoGrade, periodosIniciais } from "../horarios.js";
 import { nivelDe, TRILHAS } from "../conquistas.js";
 
 const TXT_PUSH = {
@@ -84,9 +86,9 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   const [pix, setPix] = useState(db.settings.pix || "");
   const [termo, setTermo] = useState(pf.termo || "Paciente");
   const [dur, setDur] = useState(pf.duracao || 50);
-  const [hIni, setHIni] = useState(pf.horaIni ?? 8);
-  const [hFim, setHFim] = useState(pf.horaFim ?? 20);
-  const [diasT, setDiasT] = useState(pf.diasTrab || [1, 2, 3, 4, 5]);
+  const [grade, setGrade] = useState(() => gradeDo(pf));
+  const [periodos, setPeriodos] = useState(() => periodosIniciais(pf));
+  const { horaIni: hIni, horaFim: hFim, diasTrab: diasT } = resumoGrade(grade, periodos);
   const [falta, setFalta] = useState(pf.falta || { cobrar: false, horas: 24 });
   const [regLembrar, setRegLembrar] = useState(pf.registro !== false);
   const [meta, setMeta] = useState(pf.meta ? fmtNum(pf.meta) : "");
@@ -117,7 +119,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
       const atual = conta.perfil || {};
       act.salvarPerfil({
         nome: nome.trim() || conta.nome, foto,
-        perfil: { ...atual, profissao, nascimento: nasc, cidade: cidade.trim(), termo, duracao: dur, horaIni: hIni, horaFim: hFim, diasTrab: diasT, falta, registro: regLembrar,
+        perfil: { ...atual, profissao, nascimento: nasc, cidade: cidade.trim(), termo, duracao: dur, horaIni: hIni, horaFim: hFim, diasTrab: diasT, grade, periodos, falta, registro: regLembrar,
           meta: num(meta) || 0, valorPadrao: num(valorPadrao) || atual.valorPadrao || 0, subPadrao: num(subPadrao), reserva,
           avisos: { ...av0, ...(atual.avisos || {}), ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar, semana: avSemana },
           estilo, vibrar: vib, pessoal: pessoal || !consult, consultorio: consult },
@@ -125,7 +127,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
       setSalvo(true);
     }, 450);
     return () => clearTimeout(t);
-  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, hIni, hFim, diasT, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, avSemana, estilo, vib, pessoal, consult]);
+  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, grade, periodos, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, avSemana, estilo, vib, pessoal, consult]);
   useEffect(() => { if (!salvo) return; const t = setTimeout(() => setSalvo(false), 1600); return () => clearTimeout(t); }, [salvo]);
   useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba, sub]);
   useEffect(() => { if (aba !== "assinatura") setSub(null); }, [aba]);
@@ -164,7 +166,8 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
       { id: "pix", ic: <I.key />, t: "Chave Pix", v: pix ? "Entra nas cobranças" : "Ainda não colocou" },
     ] },
     ...(consult ? [{ grupo: "Consultório", itens: [
-      { id: "agenda", ic: <I.cal />, t: "Agenda", v: `${hIni}h às ${hFim}h · ${diasTxt || "sem dias"}` },
+      { id: "agenda", ic: <I.cal />, t: "Agenda", v: diasT.length ? `${diasTxt} · ${hIni}h às ${hFim}h` : "Escolha os dias em que atende" },
+      { id: "link", ic: <I.share />, t: "Link de agendamento", v: (db.pedidos || []).length ? `${db.pedidos.length} ${db.pedidos.length === 1 ? "pedido esperando" : "pedidos esperando"}` : linkDo(pf).ativo ? "O paciente escolhe o horário" : "Desligado" },
       { id: "dinheiro", ic: <I.wallet />, t: "Valores e metas", v: meta ? `Meta de ${brl(num(meta))}` : "Sem meta" },
       { id: "docs", ic: <I.receipt />, t: "Recibos e imposto", v: pf.doc && pf.doc.registro ? "Seus dados prontos para o recibo" : "CPF, registro e assinatura" },
     ] }] : []),
@@ -179,7 +182,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   ];
   const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
   const resAssin = resumoAssinatura(assin);
-  const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos" }[aba];
+  const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", link: "Link de agendamento", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos" }[aba];
 
   return createPortal(
     <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
@@ -220,6 +223,9 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
               <button className="perfil-row" onClick={() => setAba("assinatura")}>
                 <i className="assin-ic"><Marca /></i><span><b>Alvena</b><small>{resAssin.texto}</small></span>
                 {resAssin.selo && <em className="assin-selo">{resAssin.selo}</em>}<I.chev />
+              </button>
+              <button className="perfil-row" onClick={() => { setAba("assinatura"); setSub("indicar"); }}>
+                <i><I.users /></i><span><b>Indique um colega</b><small>Vocês dois ganham 1 mês grátis</small></span><I.chev />
               </button>
             </div>
           </div>
@@ -273,17 +279,9 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
         </div>}
 
         {aba === "agenda" && <div className="stack">
+          <h3 className="section-title">Quando você atende</h3>
+          <GradeHorarios grade={grade} periodos={periodos} onGrade={setGrade} onPeriodos={setPeriodos} />
           <div className="fields">
-            <Field label="Horário de atendimento">
-              <div className="stepper">
-                <button type="button" aria-label="Começa mais cedo" onClick={() => setHIni(Math.max(5, hIni - 1))}>−</button><b className="num">{hIni}h</b><button type="button" aria-label="Começa mais tarde" onClick={() => setHIni(Math.min(hFim - 1, hIni + 1))}>+</button>
-                <span style={{ color: "var(--muted)", fontWeight: 600 }}>até</span>
-                <button type="button" aria-label="Termina mais cedo" onClick={() => setHFim(Math.max(hIni + 1, hFim - 1))}>−</button><b className="num">{hFim}h</b><button type="button" aria-label="Termina mais tarde" onClick={() => setHFim(Math.min(23, hFim + 1))}>+</button>
-              </div>
-            </Field>
-            <Field label="Dias em que atende">
-              <div className="slots">{[1, 2, 3, 4, 5, 6, 0].map(d => <button type="button" key={d} className={"slot" + (diasT.includes(d) ? "" : " off")} style={{ textDecoration: "none" }} aria-pressed={diasT.includes(d)} onClick={() => setDiasT(diasT.includes(d) ? diasT.filter(x => x !== d) : [...diasT, d])}>{DIA_CURTO[d]}</button>)}</div>
-            </Field>
             <Field label="Duração da sessão (minutos)"><Seg value={dur} onChange={setDur} options={DURACOES.map(d => ({ v: d, l: String(d) }))} /></Field>
           </div>
           <Toggle on={regLembrar} onClick={() => setRegLembrar(!regLembrar)}>Lembrar do registro depois de cada sessão</Toggle>
@@ -358,7 +356,9 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
 
         {aba === "conquistas" && <ConquistasPagina lista={conq} />}
 
-        {aba === "assinatura" && <AssinaturaPagina a={assin} setA={setAssin} tela={sub} setTela={setSub} act={act} />}
+        {aba === "link" && <LinkAgendamento db={db} conta={conta} act={act} />}
+
+        {aba === "assinatura" && <AssinaturaPagina a={assin} setA={setAssin} tela={sub} setTela={setSub} act={act} conta={conta} />}
 
         {aba === "app" && <div className="stack">
           <Ilustra n="ipad" className="perfil-ilustra" />
