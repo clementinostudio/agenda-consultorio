@@ -45,7 +45,7 @@ export default defineConfig({
           { src: "screenshots/pessoal.png", sizes: "780x1688", type: "image/png", form_factor: "narrow", label: "Gastos e contas da casa" },
           { src: "screenshots/computador.png", sizes: "1280x800", type: "image/png", form_factor: "wide", label: "No computador" },
         ],
-        background_color: "#070B1A",
+        background_color: "#F7F6F2", // fundo da abertura no Android: o mesmo off-white do ícone
         theme_color: "#0A0C11",
         icons: [
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
