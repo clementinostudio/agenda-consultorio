@@ -69,7 +69,7 @@ const TRADUCOES = [
 ];
 
 // Quem está pedindo: confere o login no Supabase. MODO_TESTE (só no computador, .dev.vars) aceita um id direto.
-async function quem(req, env) {
+export async function quem(req, env) {
   if (env.MODO_TESTE === "1" && req.headers.get("X-Teste-Uid")) return { id: req.headers.get("X-Teste-Uid").slice(0, 80), email: "teste@avina.app", criado: req.headers.get("X-Teste-Criado") || hojeBR() };
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!token || !env.SUPABASE_URL) return null;

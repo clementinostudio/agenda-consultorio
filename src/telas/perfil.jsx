@@ -182,7 +182,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
     ] },
   ];
   const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
-  const resAssin = resumoAssinatura(assin.a);
+  const resAssin = assin.situacao === "ok" ? resumoAssinatura(assin.a) : { texto: assin.situacao === "carregando" ? "Conferindo…" : assin.situacao === "rede" ? "Sem conexão agora" : "Precisa da sua conta" };
   const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", link: "Link de agendamento", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos" }[aba];
 
   return createPortal(
@@ -201,7 +201,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
             </button>
             <h2>{nome || conta.nome}{act.plano && act.plano.pro && <span className="pro-selo grande" title="Avina Pro">PRO</span>}</h2>
             <p>{[profissao, idade ? `${idade} anos` : null].filter(Boolean).join(" · ")}</p>
-            <span className="perfil-email">{conta.email}{conta.demo ? " · demonstração" : ""}</span>
+            <span className="perfil-email">{conta.email}</span>
             {nuvem && <span className={"perfil-nuvem " + nuvem.estado} role="status"><I.cloud />{{ ok: "Tudo salvo na nuvem", enviando: "Sincronizando…", offline: nuvem.pendentes ? `Sem internet · ${nuvem.pendentes} ${nuvem.pendentes === 1 ? "mudança guardada" : "mudanças guardadas"} aqui` : "Sem internet · tudo guardado aqui", erro: "A nuvem não respondeu · tento de novo sozinho" }[nuvem.estado]}</span>}
             <div className="perfil-nums">
               <div><b>{ativos}</b><span>{ativos === 1 ? `${T.s} ativo` : `${T.p} ativos`}</span></div>
@@ -245,8 +245,8 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
             <h3>Conta</h3>
             <div className="perfil-seguro">
               <Ilustra n="cadeados" />
-              <span><b>{conta.uid ? "Seus dados estão protegidos" : conta.demo ? "Demonstração" : "Seus dados ficam neste aparelho"}</b>
-                <small>{conta.uid ? "Login com senha, cópia na nuvem e cada conta só enxerga os próprios dados." : conta.demo ? "Nada daqui sai do aparelho. Crie uma conta para guardar de verdade." : "Crie uma conta com login para ter uma cópia na nuvem e usar em outros aparelhos."}</small></span>
+              <span><b>{conta.uid ? "Seus dados estão protegidos" : "Seus dados ficam neste aparelho"}</b>
+                <small>{conta.uid ? "Login com senha, cópia na nuvem e cada conta só enxerga os próprios dados." : "Crie uma conta com login para ter uma cópia na nuvem e usar em outros aparelhos."}</small></span>
             </div>
             <div className="perfil-lista">
               <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
@@ -257,7 +257,6 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
           </div>
           <ConfirmButton label="Apagar meus dados" titulo="Apagar todos os seus dados?" texto={conta.uid ? "Pacientes, sessões, cobranças e gastos somem de vez, da nuvem e de todos os seus aparelhos. A conta continua. Isso não dá para desfazer." : "Pacientes, sessões, cobranças e gastos deste aparelho somem de vez. Isso não dá para desfazer."} acao="Apagar tudo" onConfirm={act.zerar} />
           {conta.uid && <ConfirmButton label="Excluir minha conta" titulo="Excluir sua conta?" texto="O login, o perfil e todos os dados saem da nuvem e deste aparelho, de vez. Se você assina o Avina Pro, a assinatura é cancelada junto (nos 7 dias da garantia, devolvemos o valor). Isso não dá para desfazer." acao="Excluir conta" onConfirm={act.excluirConta} />}
-          {db.patients.length === 0 && <button className="btn text" onClick={act.carregarExemplo}>Carregar dados de exemplo</button>}
         </>}
 
         {aba === "dados" && <div className="stack">

@@ -84,6 +84,7 @@
       <li><b>Você é o controlador</b>: decide o que anotar e por quê, com base nas hipóteses do artigo 11 da LGPD (como a tutela da saúde por profissionais da área e o cumprimento de obrigações do seu conselho).</li>
       <li><b>O Avina é o operador</b>: trata esses dados só para executar o app para você, segue as suas instruções e não usa esses dados para nenhum outro fim.</li>
       <li>As anotações de sessão são criptografadas no seu aparelho (AES-256) com uma senha que só você conhece. Elas viajam e ficam guardadas assim; ninguém além de você consegue lê-las.</li>
+      <li><b>Link de agendamento:</b> quem pede um horário pelo seu link informa nome e WhatsApp. Esses dados passam pelo nosso servidor só até chegarem ao seu app (saem de lá assim que o app os recebe) e, depois, ficam na sua conta como os outros dados dos seus pacientes. A página do link mostra só o seu nome, a profissão e os horários livres, nunca quem está marcado.</li>
       <li>Se um paciente pedir acesso, correção ou exclusão dos dados dele, ele deve falar com você. Nós ajudamos você a atender (por exemplo, exportando ou apagando os dados).</li>
     </ul>
 
@@ -93,7 +94,7 @@
       <thead><tr><th>Quem</th><th>Para quê</th><th>O que recebe</th></tr></thead>
       <tbody>
         <tr><td>Supabase</td><td>Login e cópia dos seus dados na nuvem</td><td>Dados da conta e o que você anota (anotações de sessão já criptografadas)</td></tr>
-        <tr><td>Cloudflare</td><td>Nosso servidor: avisos, inteligência artificial (voz, texto e fotos) e páginas</td><td>Áudios, frases e fotos para entender (não guardados), lista de avisos, situação da assinatura</td></tr>
+        <tr><td>Cloudflare</td><td>Nosso servidor: avisos, inteligência artificial (voz, texto e fotos) e páginas</td><td>Áudios, frases e fotos para entender (não guardados), lista de avisos, situação da assinatura, horários livres do link de agendamento e os pedidos de horário (até chegarem ao seu app)</td></tr>
         <tr><td>Asaas</td><td>Cobranças da assinatura (Pix e cartão)</td><td>Nome completo, CPF, e-mail e valores</td></tr>
         <tr><td>Google, Apple ou Mozilla</td><td>Entregar os avisos no seu aparelho (serviço do próprio navegador)</td><td>O aviso, sem nomes de pacientes se você deixar essa opção desligada</td></tr>
         <tr><td>Open-Meteo e BigDataCloud</td><td>Clima e nome da cidade</td><td>Cidade ou coordenadas aproximadas</td></tr>
@@ -121,6 +122,7 @@
       <li>Ao excluir a conta (Perfil → Conta → Excluir minha conta), apagamos os dados da nuvem e do aparelho. Cópias de segurança automáticas dos nossos fornecedores, quando existem, são descartadas no ciclo normal delas.</li>
       <li>Registros de pagamento ficam com o Asaas e conosco pelo prazo exigido pelas leis fiscais e de pagamentos (em geral, 5 anos).</li>
       <li>Áudios e fotos enviados para a inteligência artificial não são guardados.</li>
+      <li>Os pedidos do link de agendamento saem do nosso servidor assim que chegam ao seu app. Se ninguém buscar, somem sozinhos em 30 dias.</li>
     </ul>
 
     <h2 id="direitos">9. Seus direitos</h2>

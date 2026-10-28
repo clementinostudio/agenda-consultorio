@@ -1,20 +1,11 @@
 // Link de agendamento: o paciente vê os horários livres e pede um; você aprova com um toque.
-// Por enquanto é demonstração: os pedidos ficam neste aparelho. Com a nuvem ligada, o link abre no celular do paciente.
-import React, { useState, useMemo } from "react";
-import { createPortal } from "react-dom";
-import { I, Field, Seg, Toggle, Avatar, Sheet, todayISO, fromISO, pad, DIA_CURTO, DIA_LONGO, diaCurto, dm, horariosLivres, primeiro, iniciais, copiarTexto, vibrar, useCamada, termoDe } from "../App.jsx";
-import { normalizar } from "../marcas.js";
-import { ENDERECO_APP } from "../nuvem.js";
+// O paciente abre a página public/agendar/ (sem login); os horários e os pedidos passam pelo servidor (src/link.js).
+import React, { useState, useEffect } from "react";
+import { I, Field, Seg, Toggle, Sheet, todayISO, fromISO, pad, DIA_CURTO, DIA_LONGO, diaCurto, dm, horariosLivres, primeiro, iniciais, copiarTexto, vibrar, termoDe } from "../App.jsx";
 import { PERIODOS, NOME_PERIODO, MODELOS, periodosDo } from "../horarios.js";
-
-const LINK_PADRAO = { ativo: true, quem: "todos", antecedencia: 24, semanas: 2 };
-const linkDo = pf => ({ ...LINK_PADRAO, ...((pf && pf.link) || {}) });
-const slugDe = nome => normalizar(nome).replace(/\s+/g, "-") || "agenda";
-const enderecoLink = (conta, pid) => `${ENDERECO_APP}agendar/${slugDe(conta.nome)}${pid ? `/${pid}` : ""}`;
+import { linkDo, enderecoLink } from "../link.js";
 const waLink = (phone, txt) => { const d = String(phone || "").replace(/\D/g, ""); const f = d.length >= 10 && d.length <= 11 ? "55" + d : d; return `https://wa.me/${f}?text=${encodeURIComponent(txt)}`; };
 const hhmm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
-const periodoDe = m => m < 12 * 60 ? "manha" : m < 18 * 60 ? "tarde" : "noite";
-const NOMES_DEMO = ["Rafael Nunes", "Beatriz Lopes", "Carla Mendes", "Diego Rocha", "Helena Duarte"];
 
 // Horários que aparecem no link: os livres da agenda, respeitando a antecedência e sem os já pedidos
 function livresDoLink(db, cfg, agora = new Date()) {
@@ -81,7 +72,7 @@ function PedidosLista({ db, conta, act }) {
     act.responderPedido(p.id, ok);
     setFeitos(l => [{ id: p.id, nome: p.nome, phone: p.phone || (pac && pac.phone) || "", ok,
       msg: ok ? `Oi, ${primeiro(p.nome)}! Confirmado: ${DIA_LONGO[fromISO(p.data).getDay()]}, ${dm(p.data)}, às ${p.hora}. Até lá!`
-        : `Oi, ${primeiro(p.nome)}! Esse horário não vai dar. Escolha outro por aqui: ${enderecoLink(conta, p.pid)}` }, ...l]);
+        : `Oi, ${primeiro(p.nome)}! Esse horário não vai dar.${linkDo(conta.perfil).endereco ? ` Escolha outro por aqui: ${enderecoLink(linkDo(conta.perfil).endereco, p.pid)}` : " Me fala outro dia e horário que fica bom para você?"}` }, ...l]);
   };
   return (
     <div className="pedidos">
@@ -122,29 +113,40 @@ function PedidosSheet({ db, conta, act, onClose }) {
 
 // Perfil > Link de agendamento
 function LinkAgendamento({ db, conta, act }) {
-  const cfg = linkDo(conta.perfil);
-  const [ver, setVer] = useState(null); // null | "novo" | id do paciente
+  const cfg = linkDo(conta.perfil), L = act.link || {};
+  const T = termoDe((conta.perfil || {}).termo || "Paciente");
+  const [erro, setErro] = useState("");
+  const [criando, setCriando] = useState(!cfg.endereco);
   const salvar = patch => act.salvarPerfil({ perfil: { ...(conta.perfil || {}), link: { ...cfg, ...patch } } }, db.settings.pix || "");
-  const url = enderecoLink(conta);
+  // abrir esta tela cria o link (na primeira vez) e manda os horários de agora
+  useEffect(() => {
+    if (!L.pode) return;
+    L.publicar(true).then(() => setErro("")).catch(e => setErro(e.message)).finally(() => setCriando(false));
+    L.buscar();
+  }, []);
+  const url = enderecoLink(cfg.endereco);
   const livres = livresDoLink(db, cfg);
   const nHor = livres.reduce((s, d) => s + d.livres.length, 0);
-  const ex = db.patients.find(p => p.active);
-  const simular = () => {
-    const d = livres[Math.min(1, livres.length - 1)];
-    if (!d) return act.toast("Não há horário livre no link para simular");
-    act.pedirHorario({ tipo: "novo", nome: NOMES_DEMO[(db.pedidos || []).length % NOMES_DEMO.length], phone: "", data: d.iso, hora: hhmm(d.livres[0]) });
-  };
+
+  if (!L.pode) return (
+    <div className="stack">
+      <div className="note"><I.cloud /><span>O link de agendamento precisa da sua conta com login (com a cópia na nuvem) e de internet.</span></div>
+    </div>
+  );
   return (
     <div className="stack">
       <div className="link-card">
         <small>Seu link</small>
-        <b className="link-url">{url.replace(/^https?:\/\//, "")}</b>
-        <div className="btn-row">
-          <button className="btn ghost" onClick={() => copiarTexto(url, act, "Link copiado")}><I.copy /> Copiar</button>
-          <a className="btn ghost" href={waLink("", `Para marcar ou remarcar um horário comigo, é só escolher aqui: ${url}`)} target="_blank" rel="noopener"><I.send /> WhatsApp</a>
-        </div>
-        <button className="btn mode" onClick={() => setVer("novo")}><I.eye /> Ver como o {termoDe((conta.perfil || {}).termo || "Paciente").s} vê</button>
+        {url ? <>
+          <b className="link-url">{url.replace(/^https?:\/\//, "")}</b>
+          <div className="btn-row">
+            <button className="btn ghost" onClick={() => copiarTexto(url, act, "Link copiado")}><I.copy /> Copiar</button>
+            <a className="btn ghost" href={waLink("", `Para marcar ou remarcar um horário comigo, é só escolher aqui: ${url}`)} target="_blank" rel="noopener"><I.send /> WhatsApp</a>
+          </div>
+          <a className="btn mode" href={url} target="_blank" rel="noopener"><I.eye /> Abrir como o {T.s} vê</a>
+        </> : <b className="link-url">{criando ? "Criando o seu link…" : "Não deu para criar o link agora"}</b>}
       </div>
+      {erro && <div className="error" role="alert">{erro} {!url && <button type="button" className="link" onClick={() => { setCriando(true); L.publicar(true).then(() => setErro("")).catch(e => setErro(e.message)).finally(() => setCriando(false)); }}>Tentar de novo</button>}</div>}
       <Toggle on={cfg.ativo} onClick={() => salvar({ ativo: !cfg.ativo })}>Aceitar pedidos pelo link</Toggle>
       {cfg.ativo && <div className="hint">{nHor ? `Agora aparecem ${nHor} horários livres no link, ${cfg.semanas === 4 ? "no próximo mês" : `nas próximas ${cfg.semanas === 1 ? "semana" : `${cfg.semanas} semanas`}`}.` : "Nenhum horário livre aparece no link agora. Confira seus dias e períodos em Agenda."}</div>}
 
@@ -157,98 +159,9 @@ function LinkAgendamento({ db, conta, act }) {
         <Field label="Antecedência mínima"><Seg value={cfg.antecedencia} onChange={v => salvar({ antecedencia: v })} options={[{ v: 2, l: "2 h" }, { v: 12, l: "12 h" }, { v: 24, l: "1 dia" }, { v: 48, l: "2 dias" }]} /></Field>
         <Field label="Mostrar horários de"><Seg value={cfg.semanas} onChange={v => salvar({ semanas: v })} options={[{ v: 1, l: "1 semana" }, { v: 2, l: "2 semanas" }, { v: 4, l: "1 mês" }]} /></Field>
       </div>
-      <div className="hint">Os horários saem dos seus dias e períodos (em Agenda), tirando o que já está marcado. Nada entra na agenda sem você aceitar.</div>
-      {ex && <button className="btn ghost" onClick={() => setVer(ex.id)}><I.repeat /> Ver como {primeiro(ex.name)} remarcaria</button>}
-
-      <div className="assin-demo">
-        <b>Só na demonstração</b>
-        <small>O link passa a abrir no celular do {termoDe((conta.perfil || {}).termo || "Paciente").s} quando ligarmos a nuvem. Por enquanto, os pedidos ficam neste aparelho.</small>
-        <button className="btn ghost" onClick={simular}>Simular um pedido</button>
-      </div>
-      {ver && <PaginaPaciente db={db} conta={conta} pid={ver === "novo" ? null : ver} onClose={() => setVer(null)} onPedir={act.pedirHorario} />}
+      <div className="hint">Os horários saem dos seus dias e períodos (em Agenda), tirando o que já está marcado. Nada entra na agenda sem você aceitar. Quando chega um pedido, ele aparece aqui e no Início, com um aviso no celular se os avisos estiverem ligados.</div>
+      {cfg.quem === "pacientes" && <div className="hint">Em “Só remarcar”, quem não é seu {T.s} vê a agenda fechada. Quando você recusa um pedido, o app manda o link para a pessoa escolher outro horário.</div>}
     </div>
-  );
-}
-
-// O que o paciente vê ao abrir o link: escolhe o dia, o horário e manda o pedido
-function PaginaPaciente({ db, conta, pid, onClose, onPedir }) {
-  useCamada(onClose);
-  const cfg = linkDo(conta.perfil), pf = conta.perfil || {};
-  const pac = pid ? db.patients.find(p => p.id === pid) : null;
-  const dias = useMemo(() => livresDoLink(db, cfg), []);
-  const [dia, setDia] = useState(dias[0] ? dias[0].iso : null);
-  const [hora, setHora] = useState(null);
-  const [passo, setPasso] = useState("escolher");
-  const [nome, setNome] = useState("");
-  const [fone, setFone] = useState("");
-  const atual = dias.find(d => d.iso === dia);
-  const fechado = !cfg.ativo || (!pac && cfg.quem === "pacientes");
-  const quando = hora != null ? `${diaCurto(dia)} às ${hhmm(hora)}` : "";
-  const pedir = () => {
-    onPedir({ tipo: pac ? "remarcar" : "novo", pid: pac ? pac.id : null, nome: pac ? pac.name : nome.trim(), phone: pac ? pac.phone || "" : fone, data: dia, hora: hhmm(hora) });
-    vibrar("ok"); setPasso("ok");
-  };
-  const prof = primeiro(conta.nome);
-  let corpo;
-  if (passo === "ok") corpo = (
-    <div className="agp-ok">
-      <i><I.check /></i>
-      <h2>Pedido enviado!</h2>
-      <p>{prof} confirma pelo WhatsApp. Seu horário fica marcado depois disso.</p>
-      <p className="hint">Precisa mudar depois? É só abrir este link de novo.</p>
-      <div className="note mint"><I.eye /><span>Na demonstração, o pedido já apareceu para você em Pedidos.</span></div>
-      <button className="btn ghost" onClick={onClose}>Fechar a prévia</button>
-    </div>
-  );
-  else if (fechado) corpo = <div className="agp-ok"><h2>Agenda fechada no momento</h2><p>Para marcar, fale com {prof} pelo WhatsApp.</p></div>;
-  else if (!dias.length) corpo = <div className="agp-ok"><h2>Sem horários livres</h2><p>Os próximos horários estão todos ocupados. Fale com {prof} pelo WhatsApp.</p></div>;
-  else if (passo === "dados") corpo = <>
-    <button className="agp-escolhido" onClick={() => setPasso("escolher")}><I.cal /><span><b>{quando}</b><small>Trocar horário</small></span></button>
-    <h2 className="agp-t">Quase lá</h2>
-    <div className="fields">
-      <Field label="Seu nome" icon={<I.user />} htmlFor="agp-nome"><input id="agp-nome" autoComplete="name" value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome e sobrenome" /></Field>
-      <Field label="Seu WhatsApp" icon={<I.phone />} htmlFor="agp-fone"><input id="agp-fone" inputMode="tel" autoComplete="tel" value={fone} onChange={e => setFone(e.target.value)} placeholder="(41) 99999-9999" /></Field>
-    </div>
-    <div className="agp-pe"><button className="btn mode" disabled={nome.trim().length < 2 || fone.replace(/\D/g, "").length < 10} onClick={pedir}>Pedir este horário</button></div>
-  </>;
-  else corpo = <>
-    {pac && pac.nextDate && <div className="agp-atual"><small>Sua próxima sessão</small><b>{diaCurto(pac.nextDate)} às {pac.time}</b></div>}
-    <h2 className="agp-t">{pac ? `Oi, ${primeiro(pac.name)}! Para quando quer mudar?` : "Escolha um horário"}</h2>
-    <div className="agp-dias" role="radiogroup" aria-label="Dia">
-      {dias.map(d => {
-        const dt = fromISO(d.iso);
-        return (
-          <button key={d.iso} type="button" role="radio" aria-checked={dia === d.iso} className={"agp-dia" + (dia === d.iso ? " on" : "")} onClick={() => { setDia(d.iso); setHora(null); }}>
-            <small>{DIA_CURTO[dt.getDay()]}</small><b>{dt.getDate()}</b><small>{diaCurto(d.iso).split(" ").pop()}</small>
-          </button>
-        );
-      })}
-    </div>
-    {atual && PERIODOS.map(k => {
-      const hs = atual.livres.filter(m => periodoDe(m) === k);
-      return hs.length ? (
-        <div key={k} className="agp-per">
-          <h4>{NOME_PERIODO[k]}</h4>
-          <div className="agp-horas">{hs.map(m => <button key={m} type="button" className={"agp-hora" + (hora === m ? " on" : "")} aria-pressed={hora === m} onClick={() => setHora(m)}>{hhmm(m)}</button>)}</div>
-        </div>
-      ) : null;
-    })}
-    <div className="agp-pe">
-      <button className="btn mode" disabled={hora == null} onClick={() => pac ? pedir() : setPasso("dados")}>{hora == null ? "Escolha um horário" : pac ? `Pedir ${quando}` : `Continuar · ${quando}`}</button>
-    </div>
-  </>;
-  return createPortal(
-    <div className="agp" role="dialog" aria-modal="true" aria-label="Página de agendamento">
-      <div className="agp-demo"><span><I.eye /> Prévia do seu link</span><button className="icon-btn" onClick={onClose} aria-label="Fechar a prévia"><I.x /></button></div>
-      <div className="agp-in">
-        <div className="agp-quem">
-          <Avatar conta={conta} />
-          <div><b>{conta.nome}</b><small>{[pf.profissao, `sessão de ${pf.duracao || 50} min`].filter(Boolean).join(" · ")}</small></div>
-        </div>
-        {corpo}
-      </div>
-    </div>,
-    document.body
   );
 }
 

@@ -19,6 +19,7 @@ import { precosGuardados, veiculosDe } from "./transporte.js";
 import { useCasa, K_CONVITE, pesosDe } from "./casa.js";
 import { janelasDoDia } from "./horarios.js";
 import { LIMITE_GRATIS, liberadoDe, ehPro, produtoDoUso } from "./plano.js";
+import { useLinkAgendamento, linkDo } from "./link.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -63,10 +64,10 @@ const CAT_ENTRADA = [
   { id: "presente", nome: "Presente", cor: "rosa",    ic: "heart" },
   { id: "outros-e", nome: "Outros",   cor: "amarelo", ic: "more" },
 ];
-const AVISOS_PADRAO_DEMO = { ativo: true, antecedencia: 15, som: true };
-// Respostas das perguntas iniciais da conta de demonstração
-const PERFIL_DEMO = { reserva: 15, falta: { cobrar: true, horas: 24 }, registro: true, horaIni: 8, horaFim: 20, diasTrab: [1, 2, 3, 4, 5], nascimento: "1993-03-14", profissao: "Psicologia", termo: "Paciente", duracao: 50, valorPadrao: 110, subPadrao: 25, subTipo: "fixed", meta: 4000, estilo: "detalhado", pessoal: true, cidade: "Curitiba", avisos: AVISOS_PADRAO_DEMO };
-const CONTA_DEMO = { nome: "Felipe", email: "demo@consultorio.app", demo: true, perfil: PERFIL_DEMO };
+// Perfil de partida de uma conta que ainda não respondeu as perguntas iniciais
+const PERFIL_PADRAO = { reserva: 15, falta: { cobrar: true, horas: 24 }, registro: true, horaIni: 8, horaFim: 20, diasTrab: [1, 2, 3, 4, 5], termo: "Paciente", duracao: 50, estilo: "detalhado", pessoal: true };
+// As versões antigas tinham uma demonstração que entrava com este e-mail: quem ainda estiver nela volta para a tela de entrar
+const EMAIL_DEMO_ANTIGO = "demo@consultorio.app";
 const PROFISSOES = [
   { id: "Psicologia", termo: "Paciente" }, { id: "Psicanálise", termo: "Analisando" }, { id: "Psiquiatria", termo: "Paciente" },
   { id: "Terapia ocupacional", termo: "Paciente" }, { id: "Fonoaudiologia", termo: "Paciente" }, { id: "Nutrição", termo: "Paciente" },
@@ -184,7 +185,7 @@ const catVars = cat => { const c = CORES.find(x => x.id === cat.cor) || CORES[0]
 const lerJSON = (k, f) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch (e) { return f; } };
 const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 const apagar = k => { try { localStorage.removeItem(k); } catch (e) {} };
-const hash = s => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) | 0; return String(h); }; // só demonstração
+const hash = s => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) | 0; return String(h); }; // só nas contas sem nuvem (ficam no aparelho)
 
 function useWide() {
   const q = "(min-width: 900px)";
@@ -930,7 +931,7 @@ function useFalaServidor({ onFinal, onFalhou, prompt, onSilencio }) {
       }
       if (x.cancelado) return;
       if (j.erro === "limite") return falhar(x, j.nivel === "gratis" ? "As transcrições da IA de hoje acabaram (no Avina Pro é à vontade). Por hoje, use o microfone do teclado: funciona igual."
-        : j.nivel === "anon" ? "Na demonstração, a fala pela IA tem poucos usos por dia. Use o microfone do teclado, ou crie sua conta." : "Você falou bastante hoje! Por hoje, use o microfone do teclado: funciona igual.");
+        : j.nivel === "anon" ? "Sem entrar na conta, a fala pela IA tem poucos usos por dia. Use o microfone do teclado, ou entre na sua conta." : "Você falou bastante hoje! Por hoje, use o microfone do teclado: funciona igual.");
       if (r.status === 404 || r.status === 501 || j.erro === "sem-ia") { VOZ_SERVIDOR_FALHOU = true; return falhar(x, "Seu servidor ainda não sabe transcrever a fala. No computador, rode de novo: bash servidor-avisos/instalar-avisos.sh. Por enquanto, toque na Bolinha que eu uso a voz do aparelho."); }
       if (!r.ok || !j.ok) throw new Error(j.erro || "HTTP " + r.status);
       const t = limparTranscricao(j.texto);
@@ -1042,7 +1043,7 @@ async function chamarIA(rota, corpo, ms = 15000) {
 const msgIA = e => {
   const m = String((e && e.message) || e);
   return m === "limite:gratis" ? "Você usou as ajudas da IA de hoje. Amanhã renova, e no Avina Pro é à vontade. O resto do app funciona normal."
-    : m === "limite:anon" ? "Na demonstração, a IA tem poucos usos por dia. Crie sua conta para usar mais."
+    : m === "limite:anon" ? "Sem entrar na conta, a IA tem poucos usos por dia. Entre na sua conta para usar mais."
     : m === "limite:pro" ? "Você usou bastante a IA hoje. Amanhã renova; o resto do app funciona normal."
     : m === "cota" ? "A IA já trabalhou bastante hoje (cota grátis do dia). Amanhã ela volta; o resto do app funciona normal."
     : m === "demorou" ? "A IA demorou para responder. Tente de novo em instantes."
@@ -1366,83 +1367,6 @@ function resumoSemana(db, dom, usaPessoal) {
   while (partes.length > 1 && partes.join(" ").length > 178) partes.pop();
   return { titulo: "Resumo da sua semana", corpo: partes.join(" ").slice(0, 180) || "Semana tranquila, nada anotado. Bom descanso!" };
 }
-
-/* =========================================================
-   5. DADOS DE EXEMPLO
-   ========================================================= */
-function exemplo() {
-  const t = todayISO();
-  const ses = (pid, off, price, sublet, extra = {}) => ({ id: uid(), patientId: pid, date: addDays(t, off), price, sublet, status: "done", chargeId: null, registro: true, ...extra });
-  const patients = [
-    { id: "p1", name: "Gustavo Andrade", phone: "", color: "azul", price: 110, sublet: 25, subletType: "fixed", freq: 14, time: "18:30", billing: "package", packageSize: 4, nextDate: t, active: true },
-    { id: "p2", name: "Marcos Lima", phone: "", color: "laranja", price: 130, sublet: 20, subletType: "percent", freq: 7, time: "10:00", billing: "package", packageSize: 4, nextDate: addDays(t, -1), active: true },
-    { id: "p3", name: "Ana Souza", phone: "", color: "rosa", price: 150, sublet: 30, subletType: "fixed", freq: 7, time: "14:00", billing: "session", packageSize: 4, nextDate: addDays(t, 2), active: true },
-    { id: "p4", name: "Júlia Prado", phone: "", color: "verde", price: 180, sublet: 0, subletType: "fixed", freq: 28, time: "09:00", billing: "session", packageSize: 4, nextDate: addDays(t, 10), active: true },
-    { id: "p5", name: "Bruno Costa", phone: "", color: "roxo", price: 120, sublet: 25, subletType: "fixed", freq: 7, time: "08:00", billing: "session", packageSize: 4, nextDate: t, active: true },
-  ];
-  const fOld = [-84, -70, -56, -42].map(o => ses("p1", o, 110, 25, { time: "18:30", chargeId: "c1" }));
-  // Histórico extra de Ana e Bruno (semanais) para o mapa de ritmo
-  const anaOld = [-26, -33, -40, -47, -54, -61, -68, -75, -82, -89].map(o => ses("p3", o, 150, 30, { time: "14:00", chargeId: "c0" }));
-  const brunoOld = [-14, -21, -28, -35, -42, -49, -56].map(o => ses("p5", o, 120, 25, { time: "08:00", chargeId: "c0" }));
-  const sessions = [
-    ...fOld, ...anaOld, ...brunoOld,
-    ses("p1", -28, 110, 25, { time: "18:30" }), ses("p1", -14, 110, 25, { time: "18:30" }),
-    ses("p2", -22, 130, 26, { time: "10:00" }), ses("p2", -15, 130, 26, { time: "10:00" }), ses("p2", -8, 130, 26, { time: "10:00", registro: false }),
-    ses("p3", -19, 150, 30, { time: "14:00", chargeId: "c2" }), ses("p3", -12, 150, 30, { time: "14:00", chargeId: "c3" }), ses("p3", -5, 150, 30, { time: "14:00", chargeId: "c4" }),
-    ses("p4", -18, 180, 0, { time: "09:00", chargeId: "c5" }), ses("p4", -46, 180, 0, { time: "09:00", chargeId: "c0" }), ses("p4", -74, 180, 0, { time: "09:00", chargeId: "c0" }),
-    ses("p5", -7, 120, 25, { time: "08:00", chargeId: "c6", registro: false }),
-  ];
-  patients.forEach(p => { p.desde = addDays(t, p.id === "p1" ? -400 : -120); });
-  const ids = c => sessions.filter(s => s.chargeId === c).map(s => s.id);
-  const charges = [
-    { id: "c0", patientId: "p3", sessionIds: ids("c0"), amount: 0, createdAt: addDays(t, -90), paid: true, paidAt: addDays(t, -90), hidden: true },
-    { id: "c1", patientId: "p1", sessionIds: ids("c1"), amount: 440, createdAt: addDays(t, -42), paid: true, paidAt: addDays(t, -40) },
-    { id: "c2", patientId: "p3", sessionIds: ids("c2"), amount: 150, createdAt: addDays(t, -19), paid: true, paidAt: addDays(t, -19) },
-    { id: "c3", patientId: "p3", sessionIds: ids("c3"), amount: 150, createdAt: addDays(t, -12), paid: true, paidAt: addDays(t, -12) },
-    { id: "c4", patientId: "p3", sessionIds: ids("c4"), amount: 150, createdAt: addDays(t, -5), paid: false, paidAt: null },
-    { id: "c5", patientId: "p4", sessionIds: ids("c5"), amount: 180, createdAt: addDays(t, -18), paid: true, paidAt: addDays(t, -18) },
-    { id: "c6", patientId: "p5", sessionIds: ids("c6"), amount: 120, createdAt: addDays(t, -7), paid: true, paidAt: addDays(t, -7) },
-  ];
-  const espera = [{ id: "e1", nome: "Luiza Martins", phone: "", pref: "manhã", obs: "Indicação da Ana", desde: addDays(t, -12) }];
-  return { settings: { pix: "" }, patients, sessions, charges, pessoal: exemploPessoal(), espera, fechados: {}, confirmados: {}, revisoes: {} };
-}
-function exemploPessoal() {
-  const t = todayISO(), chave = t.slice(0, 7);
-  const diaDe = off => fromISO(addDays(t, off)).getDate();
-  const pago = dia => { const v = `${chave}-${pad(Math.min(dia, diasNoMes(chave)))}`; return { [ant]: `${ant}-${pad(Math.min(dia, diasNoMes(ant)))}`, [chave]: v < t ? v : t }; };
-  const l = (tipo, valor, cat, desc, off) => ({ id: uid(), tipo, valor, cat, desc, data: addDays(t, off) });
-  // um pouco do mês passado, para a comparação de "para onde foi o dinheiro"
-  const pm = new Date(Number(chave.slice(0, 4)), Number(chave.slice(5)) - 2, 1), ant = `${pm.getFullYear()}-${pad(pm.getMonth() + 1)}`;
-  const la = (valor, cat, desc, dia) => ({ id: uid(), tipo: "saida", valor, cat, desc, data: `${ant}-${pad(Math.min(dia, Math.max(1, Number(t.slice(8, 10)))))}` });
-  return {
-    incluirConsultorio: true,
-    lanc: [
-      la(380.2, "mercado", "Compras do mês", 3), la(48, "comida", "Lanche", 5), la(186, "lazer", "Show", 6), la(64.9, "saude", "Farmácia", 2), la(15, "transporte", "Ônibus", 4),
-      // cobranças que se repetem todo mês sem estar nas contas (o app pergunta se ainda usa)
-      la(43.9, "lazer", "Disney+", 1), { ...l("saida", 43.9, "lazer", "Disney+", 0), data: `${chave}-01` },
-      la(99.9, "compras", "ChatGPT Plus", 1), { ...l("saida", 99.9, "compras", "ChatGPT Plus", 0), data: `${chave}-01` },
-      l("saida", 312.4, "mercado", "Compra da semana", -2),
-      l("saida", 68, "comida", "Almoço com amigas", -1),
-      l("saida", 22.5, "transporte", "Uber", 0),
-      l("saida", 54.9, "saude", "Farmácia", -4),
-      l("saida", 120, "lazer", "Cinema e jantar", -6),
-      l("saida", 89.9, "compras", "Presente de aniversário", -3),
-      l("saida", 196.3, "mercado", "Feira e açougue", -9),
-      l("entrada", 60, "extra", "Venda de livro usado", -5),
-    ],
-    contas: [
-      { id: uid(), nome: "Aluguel", valor: 1400, dia: 5, cat: "casa", pagas: pago(5) },
-      { id: uid(), nome: "Luz", valor: 182.3, dia: diaDe(1), cat: "casa", pagas: {} },
-      { id: uid(), nome: "Água", valor: 94, dia: diaDe(-3), cat: "casa", pagas: {} },
-      { id: uid(), nome: "Internet", valor: 109.9, dia: 15, cat: "casa", pagas: pago(15) },
-      { id: uid(), nome: "Plano de saúde", valor: 420, dia: diaDe(6), cat: "saude", pagas: {} },
-      { id: uid(), nome: "Netflix", valor: 44.9, dia: 12, cat: "lazer", pagas: pago(12), assinatura: true },
-      { id: uid(), nome: "Spotify", valor: 21.9, dia: 18, cat: "lazer", pagas: pago(18), assinatura: true },
-      { id: uid(), nome: "Academia", valor: 99.9, dia: 7, cat: "saude", pagas: pago(7), assinatura: true },
-    ],
-  };
-}
-const vazio = () => ({ settings: { pix: "" }, patients: [], sessions: [], charges: [], pessoal: pessoalVazio(), espera: [], fechados: {}, confirmados: {}, revisoes: {} });
 
 /* =========================================================
    6. ÍCONES
@@ -2150,7 +2074,7 @@ function AreaChart({ serie, cor }) {
 function Auth({ onLogin, emailInicial, aviso }) {
   // chegou por um convite para a casa (#casa=...): o convite fica guardado e abre depois de entrar
   const [convite] = useState(() => { try { return !!localStorage.getItem("agenda-convite-casa"); } catch (e) { return false; } });
-  const [modo, setModo] = useState(() => location.hash === "#criar" || (convite && !emailInicial) ? "criar" : "entrar"); // entrar | criar | esqueci
+  const [modo, setModo] = useState(() => ["#criar", "#demo"].includes(location.hash) || (convite && !emailInicial) ? "criar" : "entrar"); // entrar | criar | esqueci
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState(() => { if (emailInicial) return emailInicial; const daApresentacao = new URLSearchParams(location.search).get("email"); if (daApresentacao) return daApresentacao; try { const e = sessionStorage.getItem("agenda-email") || ""; sessionStorage.removeItem("agenda-email"); return e; } catch (x) { return ""; } });
   const [senha, setSenha] = useState("");
@@ -2227,13 +2151,12 @@ function Auth({ onLogin, emailInicial, aviso }) {
         {convite && !esqueci && !ok && <div className="auth-ok auth-convite" role="status"><I.users /> <span>{criar ? "Crie sua conta (é grátis) e o convite abre em seguida. Quem entra numa casa não paga nada para usar a casa." : "Entre com a sua conta e o convite abre em seguida."}</span></div>}
         <button className="btn" type="submit" disabled={indo}>{indo ? "Um instante…" : criar ? "Criar minha conta" : esqueci ? "Mandar o link" : "Entrar"}</button>
         {criar && <div className="hint auth-termos">Ao criar a conta, você concorda com os <a href={`${BASE}termos/`} target="_blank" rel="noopener">Termos de uso</a> e a <a href={`${BASE}privacidade/`} target="_blank" rel="noopener">Política de privacidade</a>.</div>}
-        {esqueci ? <button className="btn ghost" type="button" onClick={() => trocar("entrar")}>Voltar para entrar</button>
-          : <button className="btn ghost" type="button" onClick={() => onLogin(CONTA_DEMO, false)}>Só quero ver como funciona</button>}
+        {esqueci && <button className="btn ghost" type="button" onClick={() => trocar("entrar")}>Voltar para entrar</button>}
       </form>
       <div className="auth-foot">
         {criar ? <>Já tem conta? <button onClick={() => trocar("entrar")}>Entrar</button></> : !esqueci && <>Primeira vez aqui? <button onClick={() => trocar("criar")}>Criar conta</button>{NUVEM && <> · <button onClick={() => trocar("esqueci")}>Esqueci a senha</button></>}</>}
       </div>
-      <div className="demo-note">{NUVEM ? "Seus dados ficam protegidos na nuvem, só a sua conta vê, e o app funciona até sem internet." : "Versão de demonstração: tudo fica salvo só neste aparelho."}</div>
+      <div className="demo-note">{NUVEM ? "Seus dados ficam protegidos na nuvem, só a sua conta vê, e o app funciona até sem internet." : "Sem a nuvem ligada: tudo fica salvo só neste aparelho."}</div>
     </main>
   );
 }
@@ -3879,14 +3802,14 @@ I.minus = () => <Svg sw={2.2}><path d="M5 12h14"/></Svg>;
 
 function carregarDb(conta) {
   const salvo = lerJSON(K.db(conta.email), null);
-  if (!salvo) return conta.demo ? exemplo() : vazio();
-  if (!salvo.pessoal) salvo.pessoal = conta.demo ? exemploPessoal() : pessoalVazio();
+  if (!salvo) return vazio();
+  if (!salvo.pessoal) salvo.pessoal = pessoalVazio();
   salvo.espera = salvo.espera || []; salvo.fechados = salvo.fechados || {}; salvo.confirmados = salvo.confirmados || {}; salvo.revisoes = salvo.revisoes || {};
   return salvo;
 }
 
 function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem }) {
-  const perfil = conta.perfil || PERFIL_DEMO;
+  const perfil = conta.perfil || PERFIL_PADRAO;
   DURACAO_SESSAO = perfil.duracao || 50;
   TERMO = termoDe(perfil.termo || "Paciente");
   ESTILO = perfil.estilo || "detalhado";
@@ -3897,9 +3820,15 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const doisModos = usaPessoal && usaConsultorio;
   const av = { ...AVISOS_PADRAO, ...(perfil.avisos || {}) };
   const [db, setDb] = useState(() => carregarDb(conta));
-  const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem (demonstração)
+  const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem
   const casa = useCasa(conta, db, setDb); // gastos da casa divididos com quem mora junto
-  // Avina Pro: o plano vem do servidor (que lê no Asaas). Sem servidor configurado (ou na demonstração), não há limite.
+  const linkAg = useLinkAgendamento({
+    conta, db, setDb, servidor: servidorAvisos(), horariosLivres, hoje: todayISO(),
+    pushId: pushLigado() ? lerJSON(K_PUSH, {}).id : "",
+    onEndereco: endereco => onAtualizar({ perfil: { ...perfil, link: { ...linkDo(perfil), endereco } } }),
+    onPedidos: n => notify(n === 1 ? "Chegou um pedido de horário pelo seu link" : `Chegaram ${n} pedidos de horário pelo seu link`),
+  });
+  // Avina Pro: o plano vem do servidor (que lê no Asaas). Sem servidor configurado (ou sem login), não há limite.
   const kPlano = `avina-plano:${conta.email}`;
   // no computador (npm run dev), "avina-asaas-teste" = 1 testa sem login, como na tela da assinatura
   const testeAsaas = import.meta.env.DEV && !conta.uid && !!lerJSON("avina-asaas-teste", false);
@@ -3923,7 +3852,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     return () => { vivo = false; };
   }, [conta.uid]);
   const hojePlano = todayISO();
-  // null = sem limite (demonstração, ou cobrança ainda não ligada); senão, as áreas liberadas: { consultorio, pessoal }
+  // null = sem limite (sem login, ou cobrança ainda não ligada); senão, as áreas liberadas: { consultorio, pessoal }
   const libera = plano ? liberadoDe(plano.estado, plano.cortesiaAte, hojePlano) : null;
   const souPro = !!plano && ehPro(plano.estado, hojePlano);
   // Versão grátis: até 3 pacientes ativos e 30 lançamentos por mês. Passou: mostra o Avina Pro e não salva.
@@ -4407,7 +4336,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     delFundo: async id => { await IDB.apagar(id).catch(() => {}); setMeusFundos(l => l.filter(m => m.id !== id)); if (conta.fundo && conta.fundo.id === "u:" + id) onAtualizar({ fundo: null }); notify("Fundo excluído"); },
     meusFundos,
     // Link de agendamento: o pedido espera você aceitar; aceitar põe na agenda (paciente novo ou remarcação)
-    pedirHorario: p => setDb(d => ({ ...d, pedidos: [...(d.pedidos || []), { id: uid(), criado: Date.now(), ...p }] })),
+    link: linkAg,
     abrirPedidos: () => setSheet({ type: "pedidos" }),
     responderPedido: (id, ok) => {
       const p = (db.pedidos || []).find(x => x.id === id); if (!p) return;
@@ -4555,7 +4484,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     salvarAjustes: (patch, pix) => { setDb(d => ({ ...d, settings: { ...d.settings, pix } })); onAtualizar(patch); if (patch.perfil && patch.perfil.pessoal === false && modo === "pessoal") act.setModo("consultorio"); close(); notify("Tudo salvo"); },
     refazer: () => { close(); onAtualizar({ perfil: { ...perfil, refazer: true } }); },
     zerar: () => { setDb(vazio()); close(); notify("Dados apagados"); },
-    carregarExemplo: () => { setDb(exemplo()); close(); notify("Exemplos carregados"); },
     sair: async () => {
       // a conta saiu deste aparelho: para de mandar os avisos dela
       const st = lerJSON(K_PUSH, {});
@@ -4574,6 +4502,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
             const j = await r.json().catch(() => ({}));
             // 409 = não tinha assinatura; configurado false = cobrança ainda não ligada
             if (!r.ok && r.status !== 409 && j.configurado !== false) return notify(`Não consegui cancelar sua assinatura (${j.erro || "sem resposta"}). A conta não foi excluída: tente de novo.`);
+            // o link de agendamento sai do ar junto (se não der, os pedidos somem sozinhos do servidor em 30 dias)
+            await fetch(`${servidorAvisos()}/link/apagar`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` }, body: "{}" }).catch(() => {});
           }
         }
       } catch (e) { return notify("Sem internet agora: para excluir a conta, a assinatura precisa ser cancelada antes. Tente de novo com internet."); }
@@ -4707,7 +4637,7 @@ function App() {
   const [sessao, setSessao] = useState(() => {
     const email = lerJSON(K.sessao, null);
     if (!email) return null;
-    if (email === CONTA_DEMO.email) return { conta: { ...CONTA_DEMO, ...(lerJSON(K.contas, {})[email] || {}) }, novo: false };
+    if (email === EMAIL_DEMO_ANTIGO) { apagar(K.sessao); apagar(K.db(email)); return null; }
     const c = lerJSON(K.contas, {})[email];
     if (!c) return null;
     // Conta de antes da nuvem: pede a senha uma vez para levar tudo para a nuvem
@@ -4718,11 +4648,10 @@ function App() {
   const sessaoRef = useRef(sessao); sessaoRef.current = sessao;
   const entrar = (conta, novo) => {
     const contas = lerJSON(K.contas, {});
-    const salvo = contas[conta.email];
     gravar(K.sessao, conta.email);
     // conta da nuvem: guarda uma cópia aqui para o app abrir na hora, até sem internet
     if (conta.uid) { const { hash: _h, ...limpa } = conta; gravar(K.contas, { ...contas, [conta.email]: limpa }); conta = limpa; }
-    setSessao({ conta: conta.demo ? { ...CONTA_DEMO, ...(salvo || {}) } : conta, novo });
+    setSessao({ conta, novo });
     window.scrollTo(0, 0);
   };
   // limpar = a conta da nuvem que saiu com tudo já salvo lá: a cópia dela neste aparelho pode ir embora.
@@ -4738,10 +4667,9 @@ function App() {
     if (s && s.conta && s.conta.uid) desconectar();
     apagar(K.sessao); setSessao(null);
   };
-  // Veio da página de apresentação: #demo entra direto na demonstração; depois limpa o endereço
+  // Veio da página de apresentação (#entrar, #criar; o #demo dos links antigos abre o criar conta): limpa o endereço
   useEffect(() => {
     const h = location.hash;
-    if (h === "#demo" && !sessao) entrar(CONTA_DEMO, false);
     if (h === "#demo" || h === "#entrar" || h === "#criar") { const q = new URLSearchParams(location.search); q.delete("email"); history.replaceState(null, "", location.pathname + (q.size ? `?${q}` : "")); }
   }, []);
   // Nuvem: confere se o login ainda vale e escuta os links dos e-mails (confirmar conta, senha nova)

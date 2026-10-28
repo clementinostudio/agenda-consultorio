@@ -90,17 +90,6 @@ function lerLista(txt, valorPadrao) {
   return linhas.map(l => lerLinha(l, valorPadrao)).filter(Boolean);
 }
 
-const EXEMPLO_ICS = (() => {
-  const d = (off, h) => { const x = fromISO(addDays(todayISO(), off)); return `${isoDe(x).replace(/-/g, "")}T${pad(h)}0000`; };
-  const ev = (t, ini, extra = "") => `BEGIN:VEVENT\nSUMMARY:${t}\nDTSTART:${ini}\n${extra}END:VEVENT`;
-  return ["BEGIN:VCALENDAR",
-    ev("Sessão - Renata Alves", d(-14, 9), "RRULE:FREQ=WEEKLY\n"),
-    ev("Paulo Henrique (online)", d(-12, 17), "RRULE:FREQ=WEEKLY;INTERVAL=2\n"),
-    ev("Atendimento: Sofia Ramos", d(-20, 11)), ev("Atendimento: Sofia Ramos", d(-13, 11)), ev("Atendimento: Sofia Ramos", d(-6, 11)),
-    ev("Dentista", d(3, 15)), ev("Reunião do condomínio", d(5, 20)),
-    "END:VCALENDAR"].join("\n");
-})();
-
 function ImportarAgendaSheet({ db, perfil, act, onClose }) {
   const [passo, setPasso] = useState("escolher");
   const [texto, setTexto] = useState("");
@@ -148,7 +137,6 @@ function ImportarAgendaSheet({ db, perfil, act, onClose }) {
             <li>Vem um .zip: abra e escolha aqui o arquivo <b>.ics</b> da sua agenda.</li>
           </ol>
         </details>
-        <button className="btn text" onClick={() => mostrar(lerICS(EXEMPLO_ICS))}>Testar com uma agenda de exemplo</button>
       </>}
 
       {passo === "colar" && <>

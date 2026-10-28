@@ -1,13 +1,11 @@
 // Assinatura do Avina: planos, pagamento, garantia de 7 dias, pausar e cancelar.
-// Sem teste grátis: quem quer conhecer usa a demonstração; quem assina tem 7 dias para desistir com o dinheiro de volta.
-// Com login e o servidor ligado ao Asaas, é de verdade: os botões chamam o servidor (servidor-avisos/src/asaas.js),
-// que fala com o Asaas. Sem login (demonstração), nada é cobrado e tudo fica guardado neste aparelho.
+// Sem teste grátis: a versão grátis tem limites, e quem assina tem 7 dias para desistir com o dinheiro de volta.
+// Os botões chamam o servidor (servidor-avisos/src/asaas.js), que fala com o Asaas. Precisa da conta com login.
 import React, { useState, useEffect } from "react";
-import { I, Marca, Seg, Field, Ilustra, Sheet, BASE, todayISO, addDays, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
+import { I, Marca, Seg, Field, Ilustra, Sheet, BASE, todayISO, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
 import { cliente } from "../nuvem.js";
 import { PLANOS, PRODUTOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso, linkSuporte, LANCAMENTO_ATE, emLancamento } from "../plano.js";
 
-const GARANTIA_DIAS = 7;  // direito de arrependimento (compra pela internet)
 const INCLUI = {
   completo: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Lançamentos pessoais sem limite: gastos, contas, caixinhas e a casa", "O líquido do consultório entrando no seu dinheiro pessoal", "Avisos no celular, voz e cópia na nuvem"],
   consultorio: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Link de agendamento para o paciente marcar sozinho", "Lembretes de sessão, faltas e reajuste", "Avisos no celular, voz e cópia na nuvem"],
@@ -22,27 +20,24 @@ const voltaAssin = () => null;
 
 const isoDe = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const addMeses = (iso, n) => { const d = fromISO(iso); d.setMonth(d.getMonth() + n); return isoDe(d); };
-const dias = (de, ate) => Math.round((fromISO(ate) - fromISO(de)) / 864e5);
 const dataLonga = iso => { const d = fromISO(iso); return `${d.getDate()} de ${MES_LONGO[d.getMonth()]}${d.getFullYear() !== new Date().getFullYear() ? ` de ${d.getFullYear()}` : ""}`; };
 const porMes = p => brlReal(Math.round(p.preco / p.meses * 100) / 100);
 const semPlano = () => ({ status: "sem", historico: [] });
 // Garantia: cancelar até 7 dias depois do primeiro pagamento devolve tudo
-// (de verdade, o servidor já manda a garantia calculada: só o primeiro pagamento da assinatura atual)
-const garantiaDe = a => a.real ? a.garantia || null
-  : (a.historico || []).length === 1 && !a.historico[0].devolvido && dias(a.historico[0].data, todayISO()) <= GARANTIA_DIAS ? { valor: a.historico[0].valor, ate: addDays(a.historico[0].data, GARANTIA_DIAS) } : null;
+// (o servidor já manda a garantia calculada: só o primeiro pagamento da assinatura atual)
+const garantiaDe = a => a.garantia || null;
 const naGarantia = a => !!garantiaDe(a);
 
 
 function useAssinatura(conta, aoMudar) {
-  const chave = `agenda-assinatura:${conta.email}`;
-  // quem tinha o "teste grátis" da versão antiga começa sem plano
-  const [a, setA] = useState(() => { const v = lerJSON(chave, null); return v && v.status !== "teste" ? v : semPlano(); });
-  useEffect(() => { try { localStorage.setItem(chave, JSON.stringify(a)); } catch (e) {} }, [a]);
-  // De verdade: conta com login + servidor com a chave do Asaas. No computador (npm run dev), dá para testar sem login
+  // a assinatura de mentirinha das versões antigas ficava guardada aqui: não serve mais
+  useEffect(() => { try { localStorage.removeItem(`agenda-assinatura:${conta.email}`); } catch (e) {} }, []);
+  // Conta com login + servidor com a chave do Asaas. No computador (npm run dev), dá para testar sem login
   // com localStorage "avina-asaas-teste" = 1 (o servidor de teste aceita o e-mail da conta no lugar do login).
   const teste = import.meta.env.DEV && !conta.uid && !!lerJSON("avina-asaas-teste", false);
   const podeReal = !!(conta.uid || teste) && !!servidorAvisos();
   const [real, setReal] = useState(null);
+  const [falha, setFalha] = useState(null); // null | "rede" | "desligado"
   const [sandbox, setSandbox] = useState(false);
   const [cortesiaAte, setCortesiaAte] = useState(null);
   // o app inteiro precisa saber do plano (limites da versão grátis e o selo PRO)
@@ -63,11 +58,15 @@ function useAssinatura(conta, aoMudar) {
     if (j.cortesiaAte !== undefined) setCortesiaAte(j.cortesiaAte || null);
     return j;
   };
+  const [tentativa, setTentativa] = useState(0);
   useEffect(() => {
     if (!podeReal) return;
-    chamar("ver").then(j => { if (j.configurado === false) setReal(null); setSandbox(!!j.sandbox); setCortesiaAte(j.cortesiaAte || null); }).catch(() => {});
-  }, [podeReal]);
-  return { a: real || a, real: !!real, sandbox, cortesiaAte, setA, chamar };
+    setFalha(null);
+    chamar("ver").then(j => { if (j.configurado === false) { setReal(null); setFalha("desligado"); } setSandbox(!!j.sandbox); setCortesiaAte(j.cortesiaAte || null); }).catch(() => setFalha("rede"));
+  }, [podeReal, tentativa]);
+  // situacao: "ok" (veio do servidor) | "carregando" | "rede" (sem internet) | "desligado" (sem login ou servidor sem Asaas)
+  const situacao = real ? "ok" : !podeReal ? "desligado" : falha || "carregando";
+  return { a: real || semPlano(), situacao, sandbox, cortesiaAte, chamar, tentarDeNovo: () => setTentativa(t => t + 1) };
 }
 
 // Situação de hoje: a pausa e o cancelamento terminam sozinhos na data
@@ -92,37 +91,6 @@ function resumoAssinatura(a) {
   return { texto: `${P.nome} · renova em ${dataLonga(a.proxima)}` };
 }
 
-// Um QR de mentirinha, só para a demonstração (o de verdade vem do Asaas)
-function QrFalso() {
-  const n = 25; let s = 11, d = "";
-  const rnd = () => (s = (s * 9301 + 49297) % 233280) / 233280;
-  const canto = (x, y) => (x < 8 && y < 8) || (x >= n - 8 && y < 8) || (x < 8 && y >= n - 8);
-  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!canto(x, y) && rnd() > .5) d += `M${x} ${y}h1v1h-1z`;
-  const olho = (x, y) => <g key={`${x}-${y}`}><rect x={x} y={y} width="7" height="7" fill="#111" /><rect x={x + 1} y={y + 1} width="5" height="5" fill="#fff" /><rect x={x + 2} y={y + 2} width="3" height="3" fill="#111" /></g>;
-  return (
-    <svg className="assin-qr" viewBox="-2 -2 29 29" shapeRendering="crispEdges" role="img" aria-label="QR Code do Pix (exemplo)">
-      <rect x="-2" y="-2" width="29" height="29" fill="#fff" />
-      <path d={d} fill="#111" />
-      {olho(0, 0)}{olho(n - 7, 0)}{olho(0, n - 7)}
-    </svg>
-  );
-}
-
-function CamposCartao({ c, setC }) {
-  const so = (v, max) => v.replace(/\D/g, "").slice(0, max);
-  return (
-    <div className="fields">
-      <Field label="Número do cartão" icon={<I.money />} htmlFor="c-num"><input id="c-num" inputMode="numeric" autoComplete="cc-number" value={c.num.replace(/(\d{4})(?=\d)/g, "$1 ")} onChange={e => setC({ ...c, num: so(e.target.value, 16) })} placeholder="0000 0000 0000 0000" /></Field>
-      <div className="assin-duas">
-        <Field label="Validade" htmlFor="c-val"><input id="c-val" inputMode="numeric" autoComplete="cc-exp" value={c.val.length > 2 ? `${c.val.slice(0, 2)}/${c.val.slice(2)}` : c.val} onChange={e => setC({ ...c, val: so(e.target.value, 4) })} placeholder="MM/AA" /></Field>
-        <Field label="CVV" htmlFor="c-cvv"><input id="c-cvv" inputMode="numeric" autoComplete="cc-csc" value={c.cvv} onChange={e => setC({ ...c, cvv: so(e.target.value, 4) })} placeholder="123" /></Field>
-      </div>
-      <Field label="Nome impresso no cartão" icon={<I.user />} htmlFor="c-nome"><input id="c-nome" autoComplete="cc-name" autoCapitalize="characters" value={c.nome} onChange={e => setC({ ...c, nome: e.target.value.toUpperCase() })} placeholder="COMO ESTÁ NO CARTÃO" /></Field>
-    </div>
-  );
-}
-const cartaoOk = c => c.num.length >= 13 && c.val.length === 4 && Number(c.val.slice(0, 2)) >= 1 && Number(c.val.slice(0, 2)) <= 12 && c.cvv.length >= 3 && c.nome.trim().length > 2;
-const CARTAO_VAZIO = { num: "", val: "", cvv: "", nome: "" };
 const formaTxt = a => a.forma === "cartao" ? (a.final ? `Cartão final ${a.final}` : "Cartão de crédito") : "Pix";
 const soNumeros = s => String(s || "").replace(/\D/g, "");
 const fmtCpf = s => soNumeros(s).slice(0, 11).replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})(\d{1,2})$/, "$1-$2");
@@ -202,7 +170,7 @@ function PagarReal({ s, plano, forma, setForma, act, setTela, voltar }) {
 }
 
 function AssinaturaPagina({ s, tela, setTela, act, conta }) {
-  const { a, setA, real } = s;
+  const { a } = s;
   const sit = situacaoDe(a), hoje = todayISO();
   const [ocupado, setOcupado] = useState(false);
   const [comAcesso, setComAcesso] = useState(false);
@@ -217,8 +185,6 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   // plano escolhido: o atual, ou o pacote que combina com o uso do app (só pessoal ou consultório) no anual
   const [plano, setPlano] = useState(() => a.plano ? idPlano(a.plano) : `${produtoDoUso(conta.perfil)}_anual`);
   const [forma, setForma] = useState(a.forma || "pix");
-  const [cartao, setCartao] = useState(CARTAO_VAZIO);
-  const [conferindo, setConferindo] = useState(false);
   const [meses, setMeses] = useState(1);
   const [motivo, setMotivo] = useState(null);
   const P = planoDe(plano), atual = planoDe(a.plano) || P, produto = P.produto;
@@ -226,14 +192,20 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   // Quem já assina só troca o plano para a próxima renovação (sem cobrar a diferença)
   const trocando = sit.s === "ativa";
 
-  useEffect(() => { setConferindo(false); if (tela === "forma") { setForma(a.forma || "pix"); setCartao(CARTAO_VAZIO); } }, [tela]);
+  useEffect(() => { if (tela === "forma") setForma(a.forma || "pix"); }, [tela]);
 
-  const assinar = () => {
-    setA({ ...a, status: "ativa", ate: null, plano, forma, final: forma === "cartao" ? cartao.num.slice(-4) : null, desde: a.desde || hoje, proxima: addMeses(hoje, P.meses),
-      historico: [{ data: hoje, valor: P.preco, plano, forma }, ...(a.historico || [])] });
-    setCartao(CARTAO_VAZIO); vibrar("ok"); setTela("pronto");
-  };
-  const pagarPix = () => { setConferindo(true); setTimeout(assinar, 1600); };
+  // sem resposta do servidor ainda (ou sem internet): nada de planos nem de botões que cobram
+  if (s.situacao !== "ok") return (
+    <div className="stack">
+      <div className="assin-card">
+        <small>Assinatura</small>
+        {s.situacao === "carregando" ? <><b>Um instante…</b><p className="assin-espera"><span className="assin-gira" /> Conferindo a sua assinatura</p></>
+          : s.situacao === "rede" ? <><b>Sem conexão agora</b><p>Para ver ou mudar a assinatura, o app precisa de internet. Seus dados continuam aqui.</p><button className="btn mode" onClick={s.tentarDeNovo}>Tentar de novo</button></>
+          : <><b>Entre na sua conta</b><p>A assinatura fica ligada à sua conta com e-mail e senha.</p></>}
+      </div>
+      <a className="btn text" href={linkSuporte("Oi! Tenho uma dúvida sobre a assinatura do Avina.")} target="_blank" rel="noopener"><I.chat /> Dúvidas sobre a assinatura? Fale com a gente</a>
+    </div>
+  );
 
   if (tela === "planos") return (
     <div className="stack assin-pay">
@@ -258,9 +230,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
         ? <>
           <div className="note"><I.repeat /><span>{plano === idPlano(a.plano) ? "Esse já é o seu plano." : `O ${nomeCompleto(P)} começa em ${dataLonga(a.proxima)}, quando o atual terminar. Nada é cobrado agora.`}</span></div>
           <button className="btn mode" disabled={plano === idPlano(a.plano) || ocupado} onClick={() => {
-            const msg = `Combinado: ${nomeCompleto(P)} a partir de ${dataLonga(a.proxima)}`;
-            if (real) return fazer("trocar", { plano }, msg);
-            setA({ ...a, plano }); act.toast(msg); setTela(null);
+            fazer("trocar", { plano }, `Combinado: ${nomeCompleto(P)} a partir de ${dataLonga(a.proxima)}`);
           }}>Trocar para o {nomeCompleto(P)}</button>
         </>
         : <button className="btn mode" onClick={() => setTela("pagar")}>Continuar</button>}
@@ -268,29 +238,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
     </div>
   );
 
-  if (tela === "pagar" && real) return <PagarReal s={s} plano={plano} forma={forma} setForma={setForma} act={act} setTela={setTela} voltar={() => setTela(null)} />;
-
-  if (tela === "pagar") return (
-    <div className="stack">
-      <button className="assin-resumo" onClick={() => setTela("planos")}>
-        <span><small>{nomeCompleto(P)}</small><b>{brlReal(P.preco)} <small>por {P.ciclo}</small></b></span><em>Trocar</em>
-      </button>
-      <Field label="Como quer pagar"><Seg value={forma} onChange={setForma} options={[{ v: "pix", l: "Pix" }, { v: "cartao", l: "Cartão" }]} /></Field>
-      {forma === "pix" ? <>
-        <div className="assin-pix">
-          <QrFalso />
-          <small>Abra o app do seu banco, escolha <b>Pix</b> e leia o código. Ou copie e cole.</small>
-          <button className="btn ghost" onClick={() => copiarTexto("00020126580014BR.GOV.BCB.PIX0136demonstracao-alvena-nao-pague5204000053039865802BR", act, "Código Pix copiado")}><I.copy /> Copiar código Pix</button>
-        </div>
-        <button className="btn mode" disabled={conferindo} onClick={pagarPix}>{conferindo ? <><span className="assin-gira" /> Conferindo o pagamento…</> : <><I.check /> Já paguei</>}</button>
-        <div className="hint assin-centro">Na versão de verdade, o app percebe o pagamento sozinho em alguns segundos.</div>
-      </> : <>
-        <CamposCartao c={cartao} setC={setCartao} />
-        <button className="btn mode" disabled={!cartaoOk(cartao)} onClick={assinar}><I.lock /> Assinar por {brlReal(P.preco)}</button>
-        <div className="hint assin-centro">A cobrança se repete a cada {P.ciclo}. Demonstração: nada é cobrado e o cartão não é guardado.</div>
-      </>}
-    </div>
-  );
+  if (tela === "pagar") return <PagarReal s={s} plano={plano} forma={forma} setForma={setForma} act={act} setTela={setTela} voltar={() => setTela(null)} />;
 
   if (tela === "pronto") return (
     <div className="stack assin-pronto">
@@ -305,12 +253,8 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   if (tela === "forma") return (
     <div className="stack">
       <Field label="Forma de pagamento"><Seg value={forma} onChange={setForma} options={[{ v: "pix", l: "Pix" }, { v: "cartao", l: "Cartão" }]} /></Field>
-      {forma === "cartao" && !real && <CamposCartao c={cartao} setC={setCartao} />}
-      <div className="hint">{forma === "pix" ? `Três dias antes de vencer, chega um aviso com o Pix pronto para pagar.` : real ? `Na próxima cobrança, você digita o cartão na página segura do Asaas. Depois, ele é cobrado sozinho a cada ${atual.ciclo}.` : `Cobrado sozinho no cartão a cada ${atual.ciclo}. Você não precisa fazer nada.`}</div>
-      <button className="btn mode" disabled={(forma === "cartao" && !real && !cartaoOk(cartao)) || ocupado || (real && forma === a.forma)} onClick={() => {
-        if (real) return fazer("forma", { forma }, "Forma de pagamento trocada");
-        setA({ ...a, forma, final: forma === "cartao" ? cartao.num.slice(-4) : null }); act.toast("Forma de pagamento trocada"); setTela(null);
-      }}>Salvar</button>
+      <div className="hint">{forma === "pix" ? `Três dias antes de vencer, chega um aviso com o Pix pronto para pagar.` : `Na próxima cobrança, você digita o cartão na página segura do Asaas. Depois, ele é cobrado sozinho a cada ${atual.ciclo}.`}</div>
+      <button className="btn mode" disabled={ocupado || forma === a.forma} onClick={() => fazer("forma", { forma }, "Forma de pagamento trocada")}>Salvar</button>
     </div>
   );
 
@@ -336,10 +280,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
         <div className="note"><I.clock /><span>Precisa de um tempo? Pause em vez de cancelar. Nada é cobrado, e seus dados ficam guardados do jeitinho que estão.</span></div>
         <Field label="Pausar por"><Seg value={meses} onChange={setMeses} options={[1, 2, 3].map(m => ({ v: m, l: m === 1 ? "1 mês" : `${m} meses` }))} /></Field>
         <div className="hint">Volta sozinha em <b>{dataLonga(volta)}</b>. Se quiser voltar antes, é só tocar em “Voltar agora”.</div>
-        <button className="btn mode" disabled={ocupado} onClick={() => {
-          if (real) return fazer("pausar", { meses }, `Assinatura pausada até ${dataLonga(volta)}`);
-          setA({ ...a, status: "pausada", ate: volta, proxima: addMeses(a.proxima, meses) }); act.toast(`Assinatura pausada até ${dataLonga(volta)}`); setTela(null);
-        }}>Pausar por {meses === 1 ? "1 mês" : `${meses} meses`}</button>
+        <button className="btn mode" disabled={ocupado} onClick={() => fazer("pausar", { meses }, `Assinatura pausada até ${dataLonga(volta)}`)}>Pausar por {meses === 1 ? "1 mês" : `${meses} meses`}</button>
       </div>
     );
   }
@@ -356,12 +297,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
       {naGarantia(a)
         ? <div className="note mint"><I.check /><span>Você está nos 7 dias de garantia: devolvemos os <b>{brlReal(garantiaDe(a).valor)}</b> do mesmo jeito que você pagou. Seus dados ficam guardados se quiser voltar.</span></div>
         : <div className="hint">Você continua usando tudo até <b>{dataLonga(a.proxima)}</b>. Depois disso, seus dados ficam guardados se quiser voltar.</div>}
-      <button className="btn danger" disabled={ocupado} onClick={() => {
-        if (real) return fazer("cancelar", { motivo }, j => j.devolvido ? `Assinatura cancelada. Devolvemos ${brlReal(j.devolvido)}` : "Assinatura cancelada");
-        const g = naGarantia(a);
-        setA(g ? { ...a, status: "cancelada", ate: hoje, motivo, historico: a.historico.map((h, i) => i === 0 ? { ...h, devolvido: true } : h) } : { ...a, status: "cancelada", ate: a.proxima, motivo });
-        vibrar("aviso"); act.toast(g ? `Assinatura cancelada. Devolvemos ${brlReal(garantiaDe(a).valor)}` : "Assinatura cancelada"); setTela(null);
-      }}>{naGarantia(a) ? "Cancelar e receber de volta" : "Cancelar assinatura"}</button>
+      <button className="btn danger" disabled={ocupado} onClick={() => fazer("cancelar", { motivo }, j => j.devolvido ? `Assinatura cancelada. Devolvemos ${brlReal(j.devolvido)}` : "Assinatura cancelada")}>{naGarantia(a) ? "Cancelar e receber de volta" : "Cancelar assinatura"}</button>
     </div>
   );
 
@@ -377,7 +313,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           {s.cortesiaAte && hoje < s.cortesiaAte && <div className="note mint"><I.star /><span>O Pro completo está liberado de presente até {dataLonga(s.cortesiaAte)}. Depois, você escolhe se quer assinar.</span></div>}
           <button className="btn mode" onClick={() => setTela("planos")}>Escolher meu plano</button>
           {/* código de acesso (criado pelo dono do app com criar-codigo.sh): libera o Pro por alguns dias */}
-          {real && (comAcesso
+          {(comAcesso
             ? <div className="assin-acesso">
               <Field label="Código de acesso" htmlFor="a-acesso"><input id="a-acesso" autoCapitalize="characters" autoComplete="off" value={acesso} onChange={e => setAcesso(e.target.value.toUpperCase())} placeholder="Ex.: BETA30" /></Field>
               <button className="btn ghost" disabled={acesso.trim().length < 4 || ocupado} onClick={() => fazer("codigo", { codigo: acesso }, j => `Pronto! O Pro está liberado até ${dataLonga(j.cortesiaAte)}.`)}>{ocupado ? "Só um instante…" : "Usar o código"}</button>
@@ -404,8 +340,8 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
             <div className="note amber"><I.alert /><span>A cobrança de {dataLonga(a.pendente.vencimento)} ainda não foi paga.</span></div>
             <button className="btn mode" onClick={() => setTela("pagar")}>Pagar agora</button>
           </>}
-          {sit.s === "pausada" && <button className="btn mode" disabled={ocupado} onClick={() => { if (real) return fazer("voltar", {}, "Que bom ter você de volta"); setA({ ...a, status: "ativa", ate: null }); act.toast("Que bom ter você de volta"); }}>Voltar agora</button>}
-          {sit.s === "cancelada" && <button className="btn mode" disabled={ocupado} onClick={() => { if (real) return fazer("voltar", {}, "Assinatura reativada"); setA({ ...a, status: "ativa", ate: null, motivo: null }); act.toast("Assinatura reativada"); }}>Continuar assinando</button>}
+          {sit.s === "pausada" && <button className="btn mode" disabled={ocupado} onClick={() => fazer("voltar", {}, "Que bom ter você de volta")}>Voltar agora</button>}
+          {sit.s === "cancelada" && <button className="btn mode" disabled={ocupado} onClick={() => fazer("voltar", {}, "Assinatura reativada")}>Continuar assinando</button>}
         </div>
       )}
 
@@ -431,15 +367,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
 
       <a className="btn text" href={linkSuporte("Oi! Tenho uma dúvida sobre a assinatura do Avina.")} target="_blank" rel="noopener"><I.chat /> Dúvidas sobre a assinatura? Fale com a gente</a>
 
-      {real
-        ? s.sandbox && <div className="assin-demo"><b>Asaas em modo de teste</b><small>As cobranças são de mentirinha (sandbox): nenhum dinheiro de verdade passa por aqui.</small></div>
-        : <div className="assin-demo">
-          <b>Só na demonstração</b>
-          <small>Nada é cobrado de verdade. Use o botão para começar do zero.</small>
-          <div className="btn-row">
-            <button className="btn ghost" onClick={() => setA(semPlano())}>Recomeçar</button>
-          </div>
-        </div>}
+      {s.sandbox && <div className="assin-demo"><b>Asaas em modo de teste</b><small>As cobranças são de teste (sandbox): nenhum dinheiro de verdade passa por aqui.</small></div>}
     </div>
   );
 }
