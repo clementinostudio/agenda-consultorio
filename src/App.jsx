@@ -3800,6 +3800,8 @@ function useTema() {
    ========================================================= */
 I.minus = () => <Svg sw={2.2}><path d="M5 12h14"/></Svg>;
 
+// conta nova (nada salvo ainda): começa vazia
+const vazio = () => ({ settings: { pix: "" }, patients: [], sessions: [], charges: [], pessoal: pessoalVazio(), espera: [], fechados: {}, confirmados: {}, revisoes: {} });
 function carregarDb(conta) {
   const salvo = lerJSON(K.db(conta.email), null);
   if (!salvo) return vazio();
