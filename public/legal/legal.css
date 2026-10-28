@@ -1,0 +1,34 @@
+/* Páginas legais do Avina (termos, privacidade, cookies): leitura confortável, claro e escuro */
+:root { --bg: #F4F5F8; --card: #FFFFFF; --fg: #14161C; --muted: #5E6575; --line: #E3E5EC; --accent: #2B46FF; --accent-soft: #E6EAFF; --amber: #9A6200; --amber-soft: #FFF0D2; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0A0C11; --card: #15171D; --fg: #F2F4F8; --muted: #9AA1B0; --line: #2A2E37; --accent: #8FA4FF; --accent-soft: #1B2550; --amber: #FFB648; --amber-soft: #3A2A12; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #0A0C11; --card: #15171D; --fg: #F2F4F8; --muted: #9AA1B0; --line: #2A2E37; --accent: #8FA4FF; --accent-soft: #1B2550; --amber: #FFB648; --amber-soft: #3A2A12; color-scheme: dark; }
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+a { color: var(--accent); }
+.topo { position: sticky; top: 0; z-index: 2; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+.topo-in { max-width: 760px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.marca { font-weight: 800; font-size: 18px; color: var(--fg); text-decoration: none; letter-spacing: -.01em; }
+.abas { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+.abas a { padding: 6px 12px; border-radius: 99px; text-decoration: none; color: var(--muted); font-weight: 700; font-size: 14px; }
+.abas a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: clamp(28px, 6vw, 36px); line-height: 1.15; letter-spacing: -.02em; margin: 8px 0 6px; }
+.atualizado { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+.resumo { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; margin: 0 0 28px; }
+.resumo > b { display: block; margin-bottom: 6px; }
+.resumo ul { margin: 0; padding-left: 20px; }
+h2 { font-size: 20px; line-height: 1.3; margin: 32px 0 8px; scroll-margin-top: 70px; }
+h3 { font-size: 17px; margin: 20px 0 6px; }
+p, li { color: var(--fg); }
+li { margin: 4px 0; }
+.dono { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; }
+.dono div { margin: 2px 0; }
+.dono span:first-child { color: var(--muted); }
+.falta { background: var(--amber-soft); color: var(--amber); border-radius: 6px; padding: 0 6px; font-weight: 700; }
+.falta::before { content: "a preencher"; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 8px 0; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.tabela { overflow-x: auto; }
+footer { max-width: 760px; margin: 0 auto; padding: 0 16px 40px; color: var(--muted); font-size: 14px; }

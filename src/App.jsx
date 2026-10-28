@@ -1990,6 +1990,7 @@ function Auth({ onLogin, emailInicial, aviso }) {
         {erro && <div className="error" role="alert">{erro.t} {erro.b && <button type="button" onClick={erro.fn} style={{ color: "var(--accent-ink)", fontWeight: 800, textDecoration: "underline" }}>{erro.b}</button>}</div>}
         {ok && <div className="auth-ok" role="status"><I.mail /> {ok}</div>}
         <button className="btn" type="submit" disabled={indo}>{indo ? "Um instante…" : criar ? "Criar minha conta" : esqueci ? "Mandar o link" : "Entrar"}</button>
+        {criar && <div className="hint auth-termos">Ao criar a conta, você concorda com os <a href={`${BASE}termos/`} target="_blank" rel="noopener">Termos de uso</a> e a <a href={`${BASE}privacidade/`} target="_blank" rel="noopener">Política de privacidade</a>.</div>}
         {esqueci ? <button className="btn ghost" type="button" onClick={() => trocar("entrar")}>Voltar para entrar</button>
           : <button className="btn ghost" type="button" onClick={() => onLogin(CONTA_DEMO, false)}>Só quero ver como funciona</button>}
       </form>

@@ -64,6 +64,8 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,webp,woff2}"],
         globIgnores: ["**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/splash/**", "**/screenshots/**", "**/landing/**"],
         navigateFallback: "index.html",
+        // termos, privacidade e cookies são páginas próprias (public/): o app instalado não pode trocá-las pela tela do app
+        navigateFallbackDenylist: [/\/(termos|privacidade|cookies)\//],
         importScripts: ["sw-extra.js"], // abre o app ao tocar numa notificação
         runtimeCaching: [
           { // Leitor de código de barras (boleto): baixa só quando usado e fica guardado para funcionar offline

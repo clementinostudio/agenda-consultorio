@@ -252,6 +252,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
             </div>
             <div className="perfil-lista">
               <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
+              <a className="perfil-row" href={`${BASE}termos/`} target="_blank" rel="noopener"><i><I.receipt /></i><span><b>Termos e privacidade</b><small>Termos de uso, privacidade (LGPD) e cookies</small></span><I.chev /></a>
               <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>{conta.uid ? "Seus dados continuam guardados na nuvem" : "Seus dados ficam guardados neste aparelho"}</small></span><I.chev /></button>
             </div>
           </div>

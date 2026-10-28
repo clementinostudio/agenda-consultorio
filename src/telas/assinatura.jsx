@@ -3,7 +3,7 @@
 // Com login e o servidor ligado ao Asaas, é de verdade: os botões chamam o servidor (servidor-avisos/src/asaas.js),
 // que fala com o Asaas. Sem login (demonstração), nada é cobrado e tudo fica guardado neste aparelho.
 import React, { useState, useEffect } from "react";
-import { I, Marca, Seg, Field, Ilustra, Sheet, todayISO, addDays, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
+import { I, Marca, Seg, Field, Ilustra, Sheet, BASE, todayISO, addDays, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
 import { normalizar } from "../marcas.js";
 import { ENDERECO_APP, cliente } from "../nuvem.js";
 import { PLANOS, PRODUTOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso } from "../plano.js";
@@ -280,7 +280,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           }}>Trocar para o {nomeCompleto(P)}</button>
         </>
         : <button className="btn mode" onClick={() => setTela("pagar")}>Continuar</button>}
-      <div className="hint assin-centro">Garantia de 7 dias: não gostou, devolvemos tudo. Depois, cancele quando quiser, sem multa e sem fidelidade.</div>
+      <div className="hint assin-centro">Garantia de 7 dias: não gostou, devolvemos tudo. Depois, cancele quando quiser, sem multa e sem fidelidade. A assinatura se renova sozinha até você cancelar. Ao assinar, você concorda com os <a href={`${BASE}termos/#planos`} target="_blank" rel="noopener">Termos de uso</a>.</div>
       {!trocando && !a.desde && !real && (a.codigoUsado
         ? <div className="note mint"><I.check /><span>Código {a.codigoUsado} aplicado.</span></div>
         : comCodigo

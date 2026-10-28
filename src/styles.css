@@ -2375,3 +2375,6 @@ a.chip-btn { text-decoration: none; }
 .pro-topo .assin-logo svg { width: 30px; height: 30px; }
 .pro-topo b { font-family: var(--f-display); font-weight: 600; font-size: 20px; }
 .pro-topo .pro-selo { margin-left: 0; }
+.auth-termos { text-align: center; font-size: 12.5px; }
+.auth-termos a, .assin-centro a { color: var(--accent-ink); font-weight: 800; }
+a.perfil-row { text-decoration: none; }
