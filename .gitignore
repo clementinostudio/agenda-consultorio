@@ -16,3 +16,6 @@ servidor-avisos/node_modules
 servidor-avisos/.wrangler
 servidor-avisos/.chaves.json
 servidor-avisos/.segredos.json
+
+# Segredos de teste do servidor (chave do Asaas sandbox etc.)
+servidor-avisos/.dev.vars

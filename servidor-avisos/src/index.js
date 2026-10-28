@@ -15,6 +15,7 @@
   Tudo dentro da cota grátis do Workers AI. No plano gratuito, quando a cota do dia acaba,
   a IA só para de responder até o dia seguinte (nunca gera cobrança). Nada fica guardado.
 */
+import { rotaAsaas } from "./asaas.js";
 
 const CHAVE = "dados"; // tudo fica numa chave só do KV (um app pessoal, poucos aparelhos)
 const enc = new TextEncoder();
@@ -124,7 +125,7 @@ export default {
     const origem = req.headers.get("Origin") || "";
     const origens = String(env.ORIGEM || "").split(",").map(o => o.trim()).filter(Boolean); // pode ser mais de um endereço, separados por vírgula
     const permitida = !origens.length || origens.includes("*") || origens.includes(origem) || origem.startsWith("http://localhost") || origem.startsWith("http://127.0.0.1") || /^http:\/\/192\.168\./.test(origem);
-    const cors = { "Access-Control-Allow-Origin": permitida ? (origem || "*") : origens[0], "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", Vary: "Origin" };
+    const cors = { "Access-Control-Allow-Origin": permitida ? (origem || "*") : origens[0], "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type, authorization, x-teste-uid", Vary: "Origin" };
     const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...cors, "Content-Type": "application/json" } });
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -169,6 +170,9 @@ export default {
     }
 
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
+    // Assinatura pelo Asaas (cobrança do app): veja src/asaas.js
+    if (url.pathname.startsWith("/assinatura/") || url.pathname === "/asaas/webhook") return rotaAsaas(req, env, url, json, permitida);
+
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
 
     // Nota fiscal do mercado (NFC-e): o QR code aponta para a página da Sefaz com os itens e os preços.

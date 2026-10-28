@@ -74,7 +74,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   // voltar do Android: de uma seção volta para o Perfil; do Perfil, fecha
   const abaRef = useRef(aba); abaRef.current = aba;
   // telas de dentro da assinatura (planos, pagamento…): voltar passa por elas antes
-  const [assin, setAssin] = useAssinatura(conta);
+  const assin = useAssinatura(conta);
   const [sub, setSub] = useState(null);
   const subRef = useRef(sub); subRef.current = sub;
   useCamada(() => { if (subRef.current) { setSub(voltaAssin(subRef.current)); return false; } if (abaRef.current && !inicio) { setAba(null); return false; } onClose(); }, { escurece: false });
@@ -181,7 +181,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
     ] },
   ];
   const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
-  const resAssin = resumoAssinatura(assin);
+  const resAssin = resumoAssinatura(assin.a);
   const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", link: "Link de agendamento", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos" }[aba];
 
   return createPortal(
@@ -224,9 +224,9 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
                 <i className="assin-ic"><Marca /></i><span><b>Avina</b><small>{resAssin.texto}</small></span>
                 {resAssin.selo && <em className="assin-selo">{resAssin.selo}</em>}<I.chev />
               </button>
-              <button className="perfil-row" onClick={() => { setAba("assinatura"); setSub("indicar"); }}>
+              {!assin.real && <button className="perfil-row" onClick={() => { setAba("assinatura"); setSub("indicar"); }}>
                 <i><I.users /></i><span><b>Indique um colega</b><small>Vocês dois ganham 1 mês grátis</small></span><I.chev />
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -358,7 +358,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
 
         {aba === "link" && <LinkAgendamento db={db} conta={conta} act={act} />}
 
-        {aba === "assinatura" && <AssinaturaPagina a={assin} setA={setAssin} tela={sub} setTela={setSub} act={act} conta={conta} />}
+        {aba === "assinatura" && <AssinaturaPagina s={assin} tela={sub} setTela={setSub} act={act} conta={conta} />}
 
         {aba === "app" && <div className="stack">
           <Ilustra n="ipad" className="perfil-ilustra" />
