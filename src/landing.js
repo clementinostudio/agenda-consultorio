@@ -19,10 +19,19 @@ if ("IntersectionObserver" in window && !calmo) {
   blocos.forEach((b, i) => { b.style.transitionDelay = `${(i % 3) * 60}ms`; io.observe(b); });
 } else blocos.forEach(b => b.classList.add("visivel"));
 
-// 2. Barra de cima ganha vidro ao rolar
+// 2. Barra de cima ganha sombra ao rolar; no celular, o botão de duas linhas abre o menu
 const topo = document.querySelector(".topo");
-const rolar = () => topo.classList.toggle("rolou", scrollY > 12);
+const rolar = () => topo.classList.toggle("rolou", scrollY > 8);
 addEventListener("scroll", rolar, { passive: true }); rolar();
+const menuBotao = topo.querySelector(".menu-botao");
+const abrirMenu = sim => {
+  topo.classList.toggle("aberto", sim);
+  menuBotao.setAttribute("aria-expanded", sim ? "true" : "false");
+  menuBotao.setAttribute("aria-label", sim ? "Fechar o menu" : "Abrir o menu");
+};
+menuBotao.addEventListener("click", () => abrirMenu(!topo.classList.contains("aberto")));
+topo.querySelectorAll(".menu a").forEach(a => a.addEventListener("click", () => abrirMenu(false)));
+addEventListener("keydown", e => { if (e.key === "Escape") abrirMenu(false); });
 
 // 3. iPhone inclina seguindo o mouse (só no computador)
 if (matchMedia("(hover: hover) and (pointer: fine)").matches && !calmo) {
