@@ -47,11 +47,17 @@ async function asaas(env, metodo, caminho, corpo) {
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) {
-    const e = new Error((j.errors && j.errors[0] && j.errors[0].description) || `O Asaas respondeu ${r.status}`);
-    e.status = r.status; throw e;
+    const msg = (j.errors && j.errors[0] && j.errors[0].description) || `O Asaas respondeu ${r.status}`;
+    const e = new Error((TRADUCOES.find(([re]) => re.test(msg)) || [, msg])[1]);
+    e.status = r.status; e.original = msg; throw e;
   }
   return j;
 }
+// Erros do Asaas que acontecem por falta de cadastro na conta de quem recebe: viram uma frase que a pessoa entende
+const TRADUCOES = [
+  [/forma de pagamento não é permitida|chave Pix cadastrada|aprovada para utilizar o Pix/i, "O Pix ainda não está liberado na conta do Asaas. Por enquanto, use o cartão."],
+  [/CPF\/CNPJ no cadastro/i, "A conta do Asaas ainda está sem os dados de quem recebe. Termine o cadastro no Asaas e tente de novo."],
+];
 
 // Quem está pedindo: confere o login no Supabase. MODO_TESTE (só no computador, .dev.vars) aceita um id direto.
 async function quem(req, env) {
@@ -89,8 +95,10 @@ async function estado(env, uid) {
   const atuais = pagos.map(p => itemHistorico(p, reg.plano)).reverse();
   const historico = [...atuais, ...(reg.historico || []).filter(h => !atuais.some(x => x.id === h.id))];
   const recebidos = pagos.filter(p => p.status !== "REFUNDED");
-  // garantia de 7 dias: o primeiro pagamento desta assinatura, feito há até 7 dias e não devolvido
-  const prim = atuais.length === 1 && !atuais[0].devolvido && diasEntre(atuais[0].data, hoje) <= GARANTIA_DIAS ? atuais[0] : null;
+  // garantia de 7 dias: o primeiro pagamento desta assinatura, feito há até 7 dias, não devolvido e que dá para
+  // estornar pelo Asaas (Pix ou cartão; "recebido em dinheiro", marcado à mão, não tem estorno)
+  const prim = atuais.length === 1 && !atuais[0].devolvido && diasEntre(atuais[0].data, hoje) <= GARANTIA_DIAS
+    && ["RECEIVED", "CONFIRMED"].includes((pagos.find(p => p.id === atuais[0].id) || {}).status) ? atuais[0] : null;
   const r = {
     ...base, historico, garantia: prim ? { id: prim.id, valor: prim.valor, ate: addDias(prim.data, GARANTIA_DIAS) } : null,
     forma: formaDe(sub.billingType),
@@ -145,6 +153,7 @@ export async function rotaAsaas(req, env, url, json, permitida) {
       if (!reg.cliente) {
         const c = await asaas(env, "POST", "/customers", { name: nome, cpfCnpj: cpf, email: eu.email || undefined, externalReference: eu.id });
         reg.cliente = c.id;
+        await gravarReg(env, eu.id, reg); // se a assinatura falhar, a próxima tentativa usa o mesmo cliente
       } else await asaas(env, "PUT", `/customers/${reg.cliente}`, { name: nome, cpfCnpj: cpf });
       const sub = await asaas(env, "POST", "/subscriptions", {
         customer: reg.cliente, billingType: forma === "cartao" ? "CREDIT_CARD" : "PIX", value: P.valor, cycle: P.ciclo,
