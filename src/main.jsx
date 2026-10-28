@@ -32,6 +32,28 @@ const vemDaApresentacao = ["#entrar", "#criar", "#demo"].includes(location.hash)
 // Links dos e-mails da conta (confirmar cadastro, criar senha nova) também abrem direto no app
 const vemDoEmail = /access_token=|error_description=|type=recovery/.test(location.hash);
 
+// Se alguma tela quebrar, mostra um aviso com "Recarregar" em vez de deixar tudo em branco.
+// Fica fora do App: o aviso de versão nova (AvisosSistema) continua aparecendo, e é ele que traz a correção.
+class Protecao extends React.Component {
+  constructor(p) { super(p); this.state = { erro: null }; }
+  static getDerivedStateFromError(erro) { return { erro }; }
+  componentDidCatch(erro) { console.error("O app quebrou:", erro); }
+  render() {
+    if (!this.state.erro) return this.props.children;
+    // com versão nova esperando, atualizar(true) troca para ela e recarrega; senão, só recarrega
+    const recarregar = () => { try { this.props.atualizar && this.props.atualizar(true); } catch (e) {} setTimeout(() => location.reload(), 1500); };
+    const msg = String((this.state.erro && this.state.erro.message) || "").slice(0, 120);
+    return (
+      <div role="alert" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24, textAlign: "center", fontFamily: "system-ui, sans-serif", background: "#F4F5F8", color: "#14161C" }}>
+        <b style={{ fontSize: 22 }}>Algo deu errado nesta tela</b>
+        <span style={{ maxWidth: 340, color: "#5E6575" }}>Seus dados estão guardados. Toque em recarregar: se tiver uma versão nova do app, ela já entra junto.</span>
+        <button onClick={recarregar} style={{ height: 52, padding: "0 28px", border: 0, borderRadius: 16, background: "#2B46FF", color: "#fff", fontWeight: 800, fontSize: 16 }}>Recarregar</button>
+        <a href={`https://wa.me/5543988208714?text=${encodeURIComponent(`Oi! O Avina mostrou "Algo deu errado": ${msg}`)}`} target="_blank" rel="noopener" style={{ color: "#2B46FF", fontWeight: 700 }}>Avisar a gente no WhatsApp</a>
+      </div>
+    );
+  }
+}
+
 if (!logado && !instalado && !vemDaApresentacao && !vemDoEmail) {
   location.replace(SITE);
 } else {
@@ -49,7 +71,7 @@ if (!logado && !instalado && !vemDaApresentacao && !vemDoEmail) {
   });
   createRoot(document.getElementById("root")).render(
     <React.StrictMode>
-      <App />
+      <Protecao atualizar={atualizar}><App /></Protecao>
       <AvisosSistema />
     </React.StrictMode>
   );
