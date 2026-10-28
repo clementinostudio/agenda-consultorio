@@ -1,10 +1,5 @@
-// Página de apresentação (landing page). Mesmas fontes do app; tudo em JavaScript simples, sem bibliotecas.
-import "@fontsource/manrope/400.css";
-import "@fontsource/manrope/600.css";
-import "@fontsource/manrope/700.css";
-import "@fontsource/manrope/800.css";
-import "@fontsource/sora/600.css";
-import "@fontsource/sora/700.css";
+// Página de apresentação (landing page). Fonte Jost: o mesmo desenho geométrico do nome "avina"; tudo em JavaScript simples, sem bibliotecas.
+import "@fontsource-variable/jost/wght.css";
 import "./landing.css";
 
 // Endereço do app (fica num subdomínio só dele)
