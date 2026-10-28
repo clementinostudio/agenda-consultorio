@@ -18,6 +18,7 @@ import { AVATARES, ehAvatarPronto } from "./avatares.js";
 import { precosGuardados, veiculosDe } from "./transporte.js";
 import { useCasa, K_CONVITE, pesosDe } from "./casa.js";
 import { janelasDoDia } from "./horarios.js";
+import { LIMITE_GRATIS, liberadoDe, ehPro, produtoDoUso } from "./plano.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -294,6 +295,8 @@ function conversa(db, now, act, perfil) {
     falas.push({ txt: <>Já usa outra agenda? Eu trago seus {TERMO.p} do Google Agenda, do iPhone ou de uma lista, com dia e horário.</>, acao: { l: "Trazer da agenda antiga", ic: <I.upload />, fn: act.importarAgenda } });
     return falas;
   }
+  const fa = act.falaAssinatura && act.falaAssinatura();
+  if (fa) falas.push(fa);
   const ped = db.pedidos || [];
   if (ped.length) falas.push({ txt: ped.length === 1
     ? <><b>{primeiro(ped[0].nome)}</b> pediu pelo seu link {ped[0].pid ? "para remarcar para" : "um horário:"} {relativo(ped[0].data).toLowerCase()} às {ped[0].hora}.</>
@@ -3512,6 +3515,7 @@ const ConfirmSheet = lazy(() => import("./telas/paineis.jsx").then(m => ({ defau
 
 // HORÁRIOS LIVRES PARA DIVULGAR
 const LivresSheet = lazy(() => import("./telas/paineis.jsx").then(m => ({ default: m.LivresSheet })));
+const ProSheet = lazy(() => import("./telas/assinatura.jsx").then(m => ({ default: m.ProSheet })));
 const PedidosSheet = lazy(() => import("./telas/agendamento.jsx").then(m => ({ default: m.PedidosSheet })));
 const ImportarAgendaSheet = lazy(() => import("./telas/importar-agenda.jsx").then(m => ({ default: m.ImportarAgendaSheet })));
 
@@ -3657,6 +3661,40 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const [db, setDb] = useState(() => carregarDb(conta));
   const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem (demonstração)
   const casa = useCasa(conta, db, setDb); // gastos da casa divididos com quem mora junto
+  // Avina Pro: o plano vem do servidor (que lê no Asaas). Sem servidor configurado (ou na demonstração), não há limite.
+  const kPlano = `avina-plano:${conta.email}`;
+  // no computador (npm run dev), "avina-asaas-teste" = 1 testa sem login, como na tela da assinatura
+  const testeAsaas = import.meta.env.DEV && !conta.uid && !!lerJSON("avina-asaas-teste", false);
+  const [plano, setPlanoSt] = useState(() => conta.uid || testeAsaas ? lerJSON(kPlano, null) : null);
+  const mudarPlano = x => { setPlanoSt(x); gravar(kPlano, x); };
+  useEffect(() => {
+    if (!(conta.uid || testeAsaas) || !servidorAvisos()) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const headers = { "Content-Type": "application/json" };
+        if (conta.uid) { const { data } = await (await cliente()).auth.getSession(); if (!data.session) return; headers.Authorization = `Bearer ${data.session.access_token}`; }
+        else headers["X-Teste-Uid"] = conta.email;
+        const r = await fetch(`${servidorAvisos()}/assinatura/ver`, { method: "POST", headers, body: "{}" });
+        const j = await r.json().catch(() => null);
+        if (!vivo || !j) return;
+        if (j.configurado === false) mudarPlano(null);
+        else if (j.estado) mudarPlano({ estado: j.estado, cortesiaAte: j.cortesiaAte || null });
+      } catch (e) {} // sem internet: vale o último plano guardado
+    })();
+    return () => { vivo = false; };
+  }, [conta.uid]);
+  const hojePlano = todayISO();
+  // null = sem limite (demonstração, ou cobrança ainda não ligada); senão, as áreas liberadas: { consultorio, pessoal }
+  const libera = plano ? liberadoDe(plano.estado, plano.cortesiaAte, hojePlano) : null;
+  const souPro = !!plano && ehPro(plano.estado, hojePlano);
+  // Versão grátis: até 3 pacientes ativos e 30 lançamentos por mês. Passou: mostra o Avina Pro e não salva.
+  const limite = (tipo, n = 1) => {
+    if (!libera) return false;
+    if (tipo === "pac") { if (libera.consultorio || db.patients.filter(x => x.active).length + n <= LIMITE_GRATIS.pacientes) return false; }
+    else { const ch = hojePlano.slice(0, 7); if (libera.pessoal || db.pessoal.lanc.filter(l => l.data && l.data.startsWith(ch)).length + n <= LIMITE_GRATIS.lancMes) return false; }
+    vibrar("aviso"); setSheet({ type: "pro", motivo: tipo, sugerido: produtoDoUso(perfil) }); return true;
+  };
   VIAGEM = (db.pessoal && db.pessoal.viagem) || null;
   LOGOS = (db.pessoal && db.pessoal.logos) || {};
   const [modo, setModoSt] = useState(() => lerJSON(K.modo(conta.email), "consultorio"));
@@ -3965,6 +4003,17 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   };
 
   const act = {
+    plano: { libera, pro: souPro, estado: plano && plano.estado, cortesiaAte: plano && plano.cortesiaAte },
+    planoMudou: mudarPlano,
+    // aviso no Início: a cobrança do Avina Pro está para vencer (Pix) ou venceu
+    falaAssinatura: () => {
+      const e = plano && plano.estado, pend = e && e.pendente;
+      if (!pend || !(e.status === "ativa" || e.status === "aguardando")) return null;
+      const faltam = diffDias(hojePlano, pend.vencimento);
+      if (!pend.atrasada && faltam > 3) return null;
+      const quando = pend.atrasada ? "venceu" : faltam <= 0 ? "vence hoje" : faltam === 1 ? "vence amanhã" : `vence em ${faltam} dias`;
+      return { txt: <>Seu <b>Avina Pro</b> {quando}: {brl(pend.valor)}{pend.forma === "pix" ? " no Pix" : ""}.</>, acao: { l: "Pagar", ic: <I.wallet />, fn: () => act.openSettings("assinatura") } };
+    },
     toast: m => notify(m),
     conquistas,
     abrirClima: () => setSheet({ type: "clima" }),
@@ -4083,6 +4132,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       }
     },
     salvarVoz: itens => {
+      if (limite("lanc", itens.length)) return;
       const novos = itens.map(it => ({ id: uid(), tipo: it.tipo, valor: it.valor, cat: it.cat, desc: it.desc || "", marca: it.marca || null, via: "voz", data: addDays(todayISO(), -(it.off || 0)), ...(it.moeda ? { moeda: it.moeda, valorOrig: it.valorOrig, cotacao: it.cotacao, iof: !!it.iof } : {}) }));
       const ids = new Set(novos.map(n => n.id));
       setP(P => ({ ...P, lanc: [...P.lanc, ...novos] }));
@@ -4123,6 +4173,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     abrirPedidos: () => setSheet({ type: "pedidos" }),
     responderPedido: (id, ok) => {
       const p = (db.pedidos || []).find(x => x.id === id); if (!p) return;
+      if (ok && !p.pid && limite("pac")) return;
       setDb(d => {
         const r = { ...d, pedidos: (d.pedidos || []).filter(x => x.id !== id) };
         if (!ok) return r;
@@ -4139,9 +4190,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     openCharge: cid => setSheet({ type: "charge", cid }),
     openPatient: pid => setSheet({ type: "patient", pid }),
     editPatient: pid => setSheet({ type: "form", pid }),
-    novoPaciente: () => setSheet({ type: "form" }),
+    novoPaciente: () => { if (!limite("pac")) setSheet({ type: "form" }); },
     importarAgenda: () => setSheet({ type: "importar-agenda" }),
     importarPacientes: lista => {
+      if (limite("pac", lista.filter(x => x.active).length)) return;
       setDb(d => ({ ...d, patients: [...d.patients, ...lista] }));
       vibrar("ok"); close(); notify(`${lista.length} ${lista.length === 1 ? TERMO.s : TERMO.p} na agenda`);
     },
@@ -4154,12 +4206,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     },
     modo: !usaConsultorio ? "pessoal" : usaPessoal ? modo : "consultorio",
     salvarPaciente: p => {
+      if (!db.patients.some(x => x.id === p.id) && p.active && limite("pac")) return;
       setDb(d => ({ ...d, patients: d.patients.some(x => x.id === p.id) ? d.patients.map(x => x.id === p.id ? p : x) : [...d.patients, p] }));
       vibrar("ok"); close(); notify(`${primeiro(p.name)} salvo · próxima ${dm(p.nextDate)} às ${p.time}`);
     },
     excluir: pid => { setDb(d => ({ ...d, patients: d.patients.filter(p => p.id !== pid) })); close(); notify("Paciente excluído"); },
     // Pessoal
-    novoLanc: tipo => setSheet({ type: "lanc", tipo }),
+    novoLanc: tipo => { if (!limite("lanc")) setSheet({ type: "lanc", tipo }); },
     editLanc: id => setSheet({ type: "lanc", id }),
     salvarLanc: l00 => {
       const { dividirCasa, ...l0 } = l00;
@@ -4230,6 +4283,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     // Extrato do banco
     importar: () => setSheet({ type: "importar" }),
     importarLanc: lista => {
+      if (limite("lanc", lista.length)) return;
       const ids = new Set(lista.map(l => l.id));
       setP(P => ({ ...P, lanc: [...P.lanc, ...lista] }));
       close(); vibrar("ok");
@@ -4301,6 +4355,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "revisao" && <Suspense fallback={null}><RevisaoSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "confirmar" && <Suspense fallback={null}><ConfirmSheet db={db} iso={sheet.iso} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "livres" && <Suspense fallback={null}><LivresSheet db={db} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "pro" && <Suspense fallback={null}><ProSheet motivo={sheet.motivo} sugerido={sheet.sugerido} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "pedidos" && <Suspense fallback={null}><PedidosSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "importar-agenda" && <Suspense fallback={null}><ImportarAgendaSheet db={db} perfil={perfil} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}

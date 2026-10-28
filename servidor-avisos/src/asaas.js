@@ -18,10 +18,19 @@
   e sub:<id da assinatura> -> id do usuário (para o webhook achar de quem é).
 */
 
+// Mesmos preços do app (src/plano.js): mudou lá, mude aqui. O anual sai 10 mensalidades.
 const PLANOS = {
-  mensal: { nome: "Mensal", valor: 29.9, ciclo: "MONTHLY", meses: 1 },
-  anual: { nome: "Anual", valor: 299, ciclo: "YEARLY", meses: 12 },
+  completo_anual: { nome: "Pro Completo anual", valor: 399, ciclo: "YEARLY" },
+  completo_mensal: { nome: "Pro Completo mensal", valor: 39.9, ciclo: "MONTHLY" },
+  consultorio_anual: { nome: "Pro Consultório anual", valor: 299, ciclo: "YEARLY" },
+  consultorio_mensal: { nome: "Pro Consultório mensal", valor: 29.9, ciclo: "MONTHLY" },
+  pessoal_anual: { nome: "Pro Pessoal anual", valor: 199, ciclo: "YEARLY" },
+  pessoal_mensal: { nome: "Pro Pessoal mensal", valor: 19.9, ciclo: "MONTHLY" },
 };
+const ALIAS = { anual: "completo_anual", mensal: "completo_mensal" }; // planos de antes dos três pacotes (incluíam as duas áreas)
+const idPlano = id => ALIAS[id] || id;
+// Contas criadas antes de começar a cobrar (COBRANCA_INICIO) ganham 30 dias de Pro liberado
+const CORTESIA_DIAS = 30;
 const GARANTIA_DIAS = 7;
 const PAGOS = ["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"];
 const ABERTOS = ["PENDING", "OVERDUE"];
@@ -61,13 +70,13 @@ const TRADUCOES = [
 
 // Quem está pedindo: confere o login no Supabase. MODO_TESTE (só no computador, .dev.vars) aceita um id direto.
 async function quem(req, env) {
-  if (env.MODO_TESTE === "1" && req.headers.get("X-Teste-Uid")) return { id: req.headers.get("X-Teste-Uid").slice(0, 80), email: "teste@avina.app" };
+  if (env.MODO_TESTE === "1" && req.headers.get("X-Teste-Uid")) return { id: req.headers.get("X-Teste-Uid").slice(0, 80), email: "teste@avina.app", criado: req.headers.get("X-Teste-Criado") || hojeBR() };
   const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
   if (!token || !env.SUPABASE_URL) return null;
   const r = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, { headers: { apikey: env.SUPABASE_KEY, Authorization: `Bearer ${token}` } });
   if (!r.ok) return null;
   const u = await r.json().catch(() => null);
-  return u && u.id ? { id: u.id, email: u.email || "" } : null;
+  return u && u.id ? { id: u.id, email: u.email || "", criado: String(u.created_at || "").slice(0, 10) } : null;
 }
 
 const lerReg = async (env, uid) => (await env.AVISOS.get(`assin:${uid}`, "json")) || {};
@@ -79,7 +88,7 @@ const itemHistorico = (p, plano) => ({ id: p.id, data: p.paymentDate || p.client
 // Como está a assinatura agora, no formato que o app usa
 async function estado(env, uid) {
   const reg = await lerReg(env, uid), hoje = hojeBR();
-  const base = { real: true, plano: reg.plano || null, forma: reg.forma || null, desde: reg.desde || null, historico: reg.historico || [] };
+  const base = { real: true, plano: reg.plano ? idPlano(reg.plano) : null, forma: reg.forma || null, desde: reg.desde || null, historico: reg.historico || [] };
   if (!reg.assinatura) {
     if (reg.ate && hoje < reg.ate) return { ...base, status: "cancelada", ate: reg.ate, proxima: reg.ate };
     return { ...base, status: reg.ate ? "acabou" : "sem", ate: reg.ate || null };
@@ -142,24 +151,29 @@ export async function rotaAsaas(req, env, url, json, permitida) {
   const reg = await lerReg(env, eu.id), hoje = hojeBR();
 
   try {
-    if (url.pathname === "/assinatura/ver") return json({ ok: true, configurado: true, sandbox: !env.ASAAS_URL || /sandbox/.test(env.ASAAS_URL), estado: await estado(env, eu.id) });
+    if (url.pathname === "/assinatura/ver") {
+      const inicio = env.COBRANCA_INICIO || "";
+      const cortesiaAte = inicio && eu.criado && eu.criado < inicio ? addDias(inicio, CORTESIA_DIAS) : null;
+      return json({ ok: true, configurado: true, sandbox: !env.ASAAS_URL || /sandbox/.test(env.ASAAS_URL), cortesiaAte, estado: await estado(env, eu.id) });
+    }
 
     if (url.pathname === "/assinatura/assinar") {
-      const P = PLANOS[b.plano], forma = b.forma === "cartao" ? "cartao" : "pix", cpf = soNumeros(b.cpf), nome = String(b.nome || "").trim().slice(0, 100);
+      const plano = idPlano(b.plano), P = PLANOS[plano], forma = b.forma === "cartao" ? "cartao" : "pix", cpf = soNumeros(b.cpf), nome = String(b.nome || "").trim().slice(0, 100);
       if (!P) return json({ erro: "Plano inválido" }, 400);
       if (!cpfValido(cpf)) return json({ erro: "Confira o CPF: ele não parece certo" }, 400);
       if (nome.length < 3) return json({ erro: "Escreva seu nome completo" }, 400);
       if (reg.assinatura) return json({ erro: "Você já tem uma assinatura" }, 409);
       if (!reg.cliente) {
-        const c = await asaas(env, "POST", "/customers", { name: nome, cpfCnpj: cpf, email: eu.email || undefined, externalReference: eu.id });
+        // notificationDisabled: o Asaas cobra por aviso enviado (e-mail/SMS); quem avisa do Pix é o próprio app
+        const c = await asaas(env, "POST", "/customers", { name: nome, cpfCnpj: cpf, email: eu.email || undefined, externalReference: eu.id, notificationDisabled: true });
         reg.cliente = c.id;
         await gravarReg(env, eu.id, reg); // se a assinatura falhar, a próxima tentativa usa o mesmo cliente
-      } else await asaas(env, "PUT", `/customers/${reg.cliente}`, { name: nome, cpfCnpj: cpf });
+      } else await asaas(env, "PUT", `/customers/${reg.cliente}`, { name: nome, cpfCnpj: cpf, notificationDisabled: true });
       const sub = await asaas(env, "POST", "/subscriptions", {
         customer: reg.cliente, billingType: forma === "cartao" ? "CREDIT_CARD" : "PIX", value: P.valor, cycle: P.ciclo,
-        nextDueDate: hoje, description: `Avina · plano ${P.nome.toLowerCase()}`, externalReference: eu.id,
+        nextDueDate: hoje, description: `Avina ${P.nome}`, externalReference: eu.id,
       });
-      Object.assign(reg, { assinatura: sub.id, plano: b.plano, forma, desde: reg.desde || hoje, ate: null, pausaAte: null });
+      Object.assign(reg, { assinatura: sub.id, plano, forma, desde: reg.desde || hoje, ate: null, pausaAte: null });
       await gravarReg(env, eu.id, reg);
       await env.AVISOS.put(`sub:${sub.id}`, eu.id);
       const st = await estado(env, eu.id);
@@ -206,9 +220,9 @@ export async function rotaAsaas(req, env, url, json, permitida) {
     if (url.pathname === "/assinatura/voltar") {
       if (reg.assinatura) { reg.pausaAte = null; await gravarReg(env, eu.id, reg); return json({ ok: true, estado: await estado(env, eu.id) }); }
       // desfazer o cancelamento: assinatura nova que só cobra quando o período pago acabar
-      if (!reg.ate || hoje >= reg.ate || !reg.cliente || !PLANOS[reg.plano]) return json({ erro: "Assine de novo pelos planos" }, 409);
-      const P = PLANOS[reg.plano];
-      const sub = await asaas(env, "POST", "/subscriptions", { customer: reg.cliente, billingType: reg.forma === "cartao" ? "CREDIT_CARD" : "PIX", value: P.valor, cycle: P.ciclo, nextDueDate: reg.ate, description: `Avina · plano ${P.nome.toLowerCase()}`, externalReference: eu.id });
+      if (!reg.ate || hoje >= reg.ate || !reg.cliente || !PLANOS[idPlano(reg.plano)]) return json({ erro: "Assine de novo pelos planos" }, 409);
+      const P = PLANOS[idPlano(reg.plano)];
+      const sub = await asaas(env, "POST", "/subscriptions", { customer: reg.cliente, billingType: reg.forma === "cartao" ? "CREDIT_CARD" : "PIX", value: P.valor, cycle: P.ciclo, nextDueDate: reg.ate, description: `Avina ${P.nome}`, externalReference: eu.id });
       Object.assign(reg, { assinatura: sub.id, ate: null, motivo: null });
       await gravarReg(env, eu.id, reg);
       await env.AVISOS.put(`sub:${sub.id}`, eu.id);
@@ -216,11 +230,11 @@ export async function rotaAsaas(req, env, url, json, permitida) {
     }
 
     if (url.pathname === "/assinatura/trocar") {
-      const P = PLANOS[b.plano];
-      if (!P || b.plano === reg.plano) return json({ erro: "Plano inválido" }, 400);
+      const plano = idPlano(b.plano), P = PLANOS[plano];
+      if (!P || plano === idPlano(reg.plano)) return json({ erro: "Plano inválido" }, 400);
       // vale a partir da próxima cobrança: a que já está aberta continua como está
-      await asaas(env, "PUT", `/subscriptions/${reg.assinatura}`, { value: P.valor, cycle: P.ciclo, updatePendingPayments: false });
-      reg.plano = b.plano;
+      await asaas(env, "PUT", `/subscriptions/${reg.assinatura}`, { value: P.valor, cycle: P.ciclo, description: `Avina ${P.nome}`, updatePendingPayments: false });
+      reg.plano = plano;
       await gravarReg(env, eu.id, reg);
       return json({ ok: true, estado: await estado(env, eu.id) });
     }

@@ -12,6 +12,8 @@
     // Assinatura (src/asaas.js): login do app (o Supabase confere quem é) e o Asaas (sandbox = testes; produção: https://api.asaas.com/v3).
     // A chave do Asaas NÃO fica aqui: vai como segredo (npx wrangler secret put ASAAS_KEY).
     "SUPABASE_URL": "https://dtuykxvsmkfjpogbskcx.supabase.co", "SUPABASE_KEY": "sb_publishable_FLZO5Ajriib4ZrDl8zXj2g_DPBPc3uH",
-    "ASAAS_URL": "https://api-sandbox.asaas.com/v3" },
+    "ASAAS_URL": "https://api-sandbox.asaas.com/v3",
+    // Dia em que a cobrança de verdade começou (o ligar-asaas.sh producao preenche). Contas mais antigas ganham 30 dias de Pro.
+    "COBRANCA_INICIO": "" },
   "kv_namespaces": [{ "binding": "AVISOS", "id": "9f010db2187d4adf8a567f0c41cf2a9f" }]
 }

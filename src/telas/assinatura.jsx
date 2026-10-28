@@ -3,17 +3,20 @@
 // Com login e o servidor ligado ao Asaas, é de verdade: os botões chamam o servidor (servidor-avisos/src/asaas.js),
 // que fala com o Asaas. Sem login (demonstração), nada é cobrado e tudo fica guardado neste aparelho.
 import React, { useState, useEffect } from "react";
-import { I, Marca, Seg, Field, Ilustra, todayISO, addDays, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
+import { I, Marca, Seg, Field, Ilustra, Sheet, todayISO, addDays, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
 import { normalizar } from "../marcas.js";
 import { ENDERECO_APP, cliente } from "../nuvem.js";
+import { PLANOS, PRODUTOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso } from "../plano.js";
 
 const GARANTIA_DIAS = 7;  // direito de arrependimento (compra pela internet)
 const LIMITE_INDICACOES = 12; // meses ganhos por indicação, por ano
-const PLANOS = {
-  anual: { nome: "Anual", preco: 299, ciclo: "ano", meses: 12, selo: "2 meses grátis" },
-  mensal: { nome: "Mensal", preco: 29.9, ciclo: "mês", meses: 1 },
+const INCLUI = {
+  completo: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Lançamentos pessoais sem limite: gastos, contas, caixinhas e a casa", "O líquido do consultório entrando no seu dinheiro pessoal", "Avisos no celular, voz e cópia na nuvem"],
+  consultorio: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Link de agendamento para o paciente marcar sozinho", "Lembretes de sessão, faltas e reajuste", "Avisos no celular, voz e cópia na nuvem"],
+  pessoal: ["Lançamentos sem limite todo mês", "Contas, caixinhas, transporte e a casa a dois", "Quanto dá para gastar hoje e a previsão do mês", "Avisos no celular, voz e cópia na nuvem"],
 };
-const INCLUI = ["Agenda, pacientes e cobranças sem limite", "Gastos, contas e transporte da vida pessoal", "Avisos no celular e anotações por voz", "Cópia na nuvem e uso em vários aparelhos"];
+const GRATIS_TXT = `Grátis: até ${LIMITE_GRATIS.pacientes} pacientes e ${LIMITE_GRATIS.lancMes} lançamentos por mês.`;
+const nomeCompleto = p => p ? `${p.nome} ${p.meses > 1 ? "anual" : "mensal"}` : "Avina Pro";
 const MOTIVOS = ["Ficou caro", "Não estou usando", "Faltou alguma coisa", "Vou usar outro app", "Outro motivo"];
 const COLEGAS_DEMO = ["Marina Torres", "João Pedro Alves", "Fernanda Lima", "Lucas Barros"];
 const TITULO_ASSIN = { indicar: "Indique um colega", planos: "Escolha seu plano", pagar: "Pagamento", pronto: "Assinatura", forma: "Forma de pagamento", historico: "Pagamentos", pausar: "Pausar assinatura", cancelar: "Cancelar assinatura" };
@@ -43,7 +46,7 @@ function ganharMes(a) {
   return { ...a, proxima: addMeses(a.proxima, 1), ...(a.status === "cancelada" ? { ate: addMeses(a.ate, 1) } : {}) };
 }
 
-function useAssinatura(conta) {
+function useAssinatura(conta, aoMudar) {
   const chave = `agenda-assinatura:${conta.email}`;
   // quem tinha o "teste grátis" da versão antiga começa sem plano (o código e as indicações continuam)
   const [a, setA] = useState(() => { const v = lerJSON(chave, null); return v && v.status !== "teste" ? v : { ...semPlano(), codigoUsado: v && v.codigoUsado, indicacoes: v && v.indicacoes }; });
@@ -54,6 +57,9 @@ function useAssinatura(conta) {
   const podeReal = !!(conta.uid || teste) && !!servidorAvisos();
   const [real, setReal] = useState(null);
   const [sandbox, setSandbox] = useState(false);
+  const [cortesiaAte, setCortesiaAte] = useState(null);
+  // o app inteiro precisa saber do plano (limites da versão grátis e o selo PRO)
+  useEffect(() => { if (aoMudar && real) aoMudar({ estado: real, cortesiaAte }); }, [real, cortesiaAte]);
   const chamar = async (rota, corpo = {}) => {
     const headers = { "Content-Type": "application/json" };
     if (conta.uid) {
@@ -71,9 +77,9 @@ function useAssinatura(conta) {
   };
   useEffect(() => {
     if (!podeReal) return;
-    chamar("ver").then(j => { if (j.configurado === false) setReal(null); setSandbox(!!j.sandbox); }).catch(() => {});
+    chamar("ver").then(j => { if (j.configurado === false) setReal(null); setSandbox(!!j.sandbox); setCortesiaAte(j.cortesiaAte || null); }).catch(() => {});
   }, [podeReal]);
-  return { a: real || a, real: !!real, sandbox, setA, chamar };
+  return { a: real || a, real: !!real, sandbox, cortesiaAte, setA, chamar };
 }
 
 // Situação de hoje: a pausa e o cancelamento terminam sozinhos na data
@@ -87,7 +93,7 @@ function situacaoDe(a) {
 }
 
 function resumoAssinatura(a) {
-  const sit = situacaoDe(a), P = PLANOS[a.plano];
+  const sit = situacaoDe(a), P = planoDe(a.plano);
   if (sit.s === "sem") return { texto: mesesGratis(a) ? `Você tem ${mesesGratis(a) === 1 ? "1 mês grátis" : `${mesesGratis(a)} meses grátis`} para usar` : "Escolha um plano · garantia de 7 dias" };
   if (sit.s === "acabou") return { texto: "Escolha um plano para continuar", selo: "Acabou" };
   if (sit.s === "aguardando") return { texto: "Falta pagar para começar", selo: "Pagar" };
@@ -141,7 +147,7 @@ function cpfValido(c) {
 // Pagamento de verdade: assina (CPF e nome vão para o Asaas) e mostra o Pix aqui, ou o link da página segura do Asaas
 // para o cartão. Enquanto espera, confere a cada 5 segundos se o pagamento caiu.
 function PagarReal({ s, plano, forma, setForma, act, setTela, voltar }) {
-  const a = s.a, P = PLANOS[plano];
+  const a = s.a, P = planoDe(plano);
   const cobranca = a.pendente && (a.status === "aguardando" || a.status === "ativa") ? a.pendente : null;
   const [cpf, setCpf] = useState("");
   const [nome, setNome] = useState("");
@@ -166,7 +172,7 @@ function PagarReal({ s, plano, forma, setForma, act, setTela, voltar }) {
 
   if (cobranca) return (
     <div className="stack">
-      <div className="assin-resumo"><span><small>Plano {(PLANOS[a.plano] || P).nome}</small><b>{brlReal(cobranca.valor)}</b></span><em>{cobranca.atrasada ? "Venceu" : "A pagar"}</em></div>
+      <div className="assin-resumo"><span><small>{nomeCompleto(planoDe(a.plano) || P)}</small><b>{brlReal(cobranca.valor)}</b></span><em>{cobranca.atrasada ? "Venceu" : "A pagar"}</em></div>
       {formaVale === "pix" ? (
         <div className="assin-pix">
           {pix ? <img className="assin-qr" src={`data:image/png;base64,${pix.imagem}`} alt="QR Code do Pix" /> : <div className="assin-qr assin-qr-vazio"><span className="assin-gira" /></div>}
@@ -190,7 +196,7 @@ function PagarReal({ s, plano, forma, setForma, act, setTela, voltar }) {
   return (
     <div className="stack">
       <button className="assin-resumo" onClick={() => setTela("planos")}>
-        <span><small>Plano {P.nome}</small><b>{brlReal(P.preco)} <small>por {P.ciclo}</small></b></span><em>Trocar</em>
+        <span><small>{nomeCompleto(P)}</small><b>{brlReal(P.preco)} <small>por {P.ciclo}</small></b></span><em>Trocar</em>
       </button>
       <div className="fields">
         <Field label="Nome completo" icon={<I.user />} htmlFor="a-nome"><input id="a-nome" autoComplete="name" value={nome} onChange={e => setNome(e.target.value)} placeholder="Como no documento" /></Field>
@@ -221,13 +227,15 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   const [codigo, setCodigo] = useState("");
   const [comCodigo, setComCodigo] = useState(false);
   const meuCodigo = codigoDe(conta);
-  const [plano, setPlano] = useState(a.plano || "anual");
+  // plano escolhido: o atual, ou o pacote que combina com o uso do app (só pessoal ou consultório) no anual
+  const [plano, setPlano] = useState(() => a.plano ? idPlano(a.plano) : `${produtoDoUso(conta.perfil)}_anual`);
   const [forma, setForma] = useState(a.forma || "pix");
   const [cartao, setCartao] = useState(CARTAO_VAZIO);
   const [conferindo, setConferindo] = useState(false);
   const [meses, setMeses] = useState(1);
   const [motivo, setMotivo] = useState(null);
-  const P = PLANOS[plano], atual = PLANOS[a.plano];
+  const P = planoDe(plano), atual = planoDe(a.plano) || P, produto = P.produto;
+  const produtoPadrao = produtoDoUso(conta.perfil);
   const gratis = real ? 0 : mesesGratis(a);
   // Quem já assina só troca o plano para a próxima renovação (sem cobrar a diferença)
   const trocando = sit.s === "ativa";
@@ -246,26 +254,30 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   if (tela === "planos") return (
     <div className="stack assin-pay">
       <i className="assin-logo"><Marca /></i>
-      <h2>{sit.s === "sem" ? "Assine o Avina" : "Continue com o Avina"}</h2>
-      <ul className="assin-inclui">{INCLUI.map(t => <li key={t}><I.check />{t}</li>)}</ul>
+      <h2>{sit.s === "sem" ? "Assine o Avina Pro" : "Continue com o Avina Pro"}</h2>
+      <Seg big value={produto} onChange={v => setPlano(`${v}_${plano.endsWith("_mensal") ? "mensal" : "anual"}`)} options={Object.entries(PRODUTOS).map(([v, x]) => ({ v, l: x.nome }))} />
+      <ul className="assin-inclui">{INCLUI[produto].map(t => <li key={t}><I.check />{t}</li>)}</ul>
       <div className="assin-planos" role="radiogroup" aria-label="Plano">
-        {Object.entries(PLANOS).map(([id, p]) => (
-          <button key={id} type="button" role="radio" aria-checked={plano === id} className={"assin-plano" + (plano === id ? " on" : "")} onClick={() => setPlano(id)}>
-            {p.selo && <em>{p.selo}</em>}
-            <span><b>{p.nome} · {brlReal(p.preco)}</b><small>{p.meses > 1 ? `Só ${porMes(p)} por mês` : "Cobrado todo mês"}</small></span>
-            <i className="assin-radio">{plano === id && <I.check />}</i>
-          </button>
-        ))}
+        {["anual", "mensal"].map(c => {
+          const id = `${produto}_${c}`, p = PLANOS[id];
+          return (
+            <button key={id} type="button" role="radio" aria-checked={plano === id} className={"assin-plano" + (plano === id ? " on" : "")} onClick={() => setPlano(id)}>
+              {p.selo && <em>{p.selo}</em>}
+              <span><b>{c === "anual" ? "Anual" : "Mensal"} · {brlReal(p.preco)}</b><small>{p.meses > 1 ? `Só ${porMes(p)} por mês` : "Cobrado todo mês"}</small></span>
+              <i className="assin-radio">{plano === id && <I.check />}</i>
+            </button>
+          );
+        })}
       </div>
       {!trocando && gratis > 0 && <div className="note mint"><I.star /><span>{gratis === 1 ? "Seu primeiro mês é grátis" : `Seus primeiros ${gratis} meses são grátis`}: nada é cobrado hoje.</span></div>}
       {trocando
         ? <>
-          <div className="note"><I.repeat /><span>{plano === a.plano ? "Esse já é o seu plano." : `O plano ${P.nome} começa em ${dataLonga(a.proxima)}, quando o atual terminar. Nada é cobrado agora.`}</span></div>
-          <button className="btn mode" disabled={plano === a.plano || ocupado} onClick={() => {
-            const msg = `Combinado: plano ${P.nome} a partir de ${dataLonga(a.proxima)}`;
+          <div className="note"><I.repeat /><span>{plano === idPlano(a.plano) ? "Esse já é o seu plano." : `O ${nomeCompleto(P)} começa em ${dataLonga(a.proxima)}, quando o atual terminar. Nada é cobrado agora.`}</span></div>
+          <button className="btn mode" disabled={plano === idPlano(a.plano) || ocupado} onClick={() => {
+            const msg = `Combinado: ${nomeCompleto(P)} a partir de ${dataLonga(a.proxima)}`;
             if (real) return fazer("trocar", { plano }, msg);
             setA({ ...a, plano }); act.toast(msg); setTela(null);
-          }}>Trocar para o {P.nome.toLowerCase()}</button>
+          }}>Trocar para o {nomeCompleto(P)}</button>
         </>
         : <button className="btn mode" onClick={() => setTela("pagar")}>Continuar</button>}
       <div className="hint assin-centro">Garantia de 7 dias: não gostou, devolvemos tudo. Depois, cancele quando quiser, sem multa e sem fidelidade.</div>
@@ -296,7 +308,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           <button className="btn ghost" onClick={() => copiarTexto(msg, act, "Convite copiado")}><I.copy /> Copiar o convite</button>
         </div>
         <ul className="indique-regras">
-          <li>Vale para colegas que nunca assinaram o Avina.</li>
+          <li>Vale para contas novas, de quem nunca assinou o Avina.</li>
           <li>Seu mês entra 7 dias depois do primeiro pagamento do colega.</li>
           <li>Se você ainda não assina, o mês fica guardado para quando assinar.</li>
           <li>Até {LIMITE_INDICACOES} meses grátis por ano.</li>
@@ -328,7 +340,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   if (tela === "pagar") return (
     <div className="stack">
       <button className="assin-resumo" onClick={() => setTela("planos")}>
-        <span><small>Plano {P.nome}</small><b>{brlReal(P.preco)} <small>por {P.ciclo}</small></b></span><em>Trocar</em>
+        <span><small>{nomeCompleto(P)}</small><b>{brlReal(P.preco)} <small>por {P.ciclo}</small></b></span><em>Trocar</em>
       </button>
       {gratis > 0 && <div className="note mint"><I.star /><span>Hoje: <b>R$ 0,00</b>. A primeira cobrança é em {dataLonga(addMeses(hoje, gratis))}.</span></div>}
       <Field label="Como quer pagar"><Seg value={forma} onChange={setForma} options={[{ v: "pix", l: "Pix" }, { v: "cartao", l: "Cartão" }]} /></Field>
@@ -355,7 +367,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
     <div className="stack assin-pronto">
       <Ilustra n="trofeu" className="perfil-ilustra" />
       <h2>Tudo certo!</h2>
-      <p>Sua assinatura <b>{atual.nome}</b> está ativa.<br />{(a.historico || []).length ? "A próxima" : "A primeira"} cobrança é em {dataLonga(a.proxima)}, e a gente avisa 3 dias antes.</p>
+      <p>Seu <b>{nomeCompleto(atual)}</b> está ativo.<br />{(a.historico || []).length ? "A próxima" : "A primeira"} cobrança é em {dataLonga(a.proxima)}, e a gente avisa 3 dias antes.</p>
       {naGarantia(a) && <div className="note mint"><I.check /><span>Garantia de 7 dias: se não gostar, cancele até {dataLonga(garantiaDe(a).ate)} e devolvemos tudo.</span></div>}
       <button className="btn mode" onClick={() => setTela(null)}>Pronto</button>
     </div>
@@ -379,7 +391,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
         <div className="perfil-lista">
           {a.historico.map((h, i) => (
             <div key={i} className="perfil-row assin-hist">
-              <i><I.receipt /></i><span><b>{dataLonga(h.data)}</b><small>Plano {PLANOS[h.plano].nome} · {h.forma === "cartao" ? "Cartão" : "Pix"}</small></span>
+              <i><I.receipt /></i><span><b>{dataLonga(h.data)}</b><small>{nomeCompleto(planoDe(h.plano))} · {h.forma === "cartao" ? "Cartão" : "Pix"}</small></span>
               <span className="assin-hist-v"><b className="num">{brlReal(h.valor)}</b><small className={h.devolvido ? "devolvido" : ""}>{h.devolvido ? "Devolvido" : "Pago"}</small></span>
             </div>
           ))}
@@ -408,7 +420,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
       <h3 className="section-title">Antes de ir…</h3>
       <div className="perfil-lista">
         <button className="perfil-row" onClick={() => setTela("pausar")}><i><I.clock /></i><span><b>Pausar em vez de cancelar</b><small>Até 3 meses sem pagar nada</small></span><I.chev /></button>
-        {a.plano === "mensal" && <button className="perfil-row" onClick={() => { setPlano("anual"); setTela("planos"); }}><i><I.star /></i><span><b>Mudar para o anual</b><small>Sai por {porMes(PLANOS.anual)} por mês</small></span><I.chev /></button>}
+        {idPlano(a.plano || "").endsWith("_mensal") && <button className="perfil-row" onClick={() => { setPlano(`${atual.produto}_anual`); setTela("planos"); }}><i><I.star /></i><span><b>Mudar para o anual</b><small>Sai por {porMes(PLANOS[`${atual.produto}_anual`])} por mês</small></span><I.chev /></button>}
       </div>
       <h3 className="section-title">Conta pra gente o motivo <small>opcional</small></h3>
       <div className="chips-wrap">{MOTIVOS.map(m => <button type="button" key={m} className={"chip-op" + (motivo === m ? " on" : "")} aria-pressed={motivo === m} onClick={() => setMotivo(motivo === m ? null : m)}>{m}</button>)}</div>
@@ -431,25 +443,27 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
         <div className={"assin-card" + (sit.s === "acabou" ? " acabou" : "")}>
           <small>Assinatura</small>
           <b>{sit.s === "acabou" ? "Sua assinatura terminou" : "Escolha seu plano"}</b>
-          <p>{sit.s === "acabou" ? "Seus dados continuam guardados. Escolha um plano para continuar anotando." : `A partir de ${porMes(PLANOS.anual)} por mês. Garantia de 7 dias: não gostou, devolvemos tudo.`}</p>
+          <p>{sit.s === "acabou" ? "Seus dados continuam guardados. Escolha um plano para continuar anotando." : `A partir de ${porMes(PLANOS.pessoal_anual)} por mês. Garantia de 7 dias: não gostou, devolvemos tudo.`}</p>
+          {sit.s === "sem" && <p className="assin-gratis">{GRATIS_TXT}</p>}
+          {s.cortesiaAte && hoje < s.cortesiaAte && <div className="note mint"><I.star /><span>Como você já usava o Avina, o Pro está liberado de presente até {dataLonga(s.cortesiaAte)}.</span></div>}
           {gratis > 0 && <div className="note mint"><I.star /><span>Você tem {gratis === 1 ? "1 mês grátis" : `${gratis} meses grátis`} para usar: nada é cobrado no começo.</span></div>}
           <button className="btn mode" onClick={() => setTela("planos")}>Escolher meu plano</button>
         </div>
       ) : sit.s === "aguardando" ? (
         <div className="assin-card acabou">
-          <small>Plano {atual.nome}</small>
+          <small>{nomeCompleto(atual)}</small>
           <b>Falta pagar</b>
           <p>{brlReal(a.pendente ? a.pendente.valor : atual.preco)} para começar. Assim que o pagamento cair, a assinatura fica ativa sozinha.</p>
           <button className="btn mode" onClick={() => setTela("pagar")}>{a.forma === "cartao" ? "Pagar com cartão" : "Pagar com Pix"}</button>
         </div>
       ) : (
         <div className="assin-card">
-          <small>Seu plano</small>
+          <small>Seu plano · <span className="pro-selo">PRO</span></small>
           <div className="assin-card-topo">
             <b>{atual.nome}</b>
             <em className={sit.s}>{{ ativa: "Ativa", pausada: "Pausada", cancelada: "Cancelada" }[sit.s]}</em>
           </div>
-          <p className="num">{brlReal(atual.preco)} por {atual.ciclo}</p>
+          <p className="num">{atual.meses > 1 ? "Anual" : "Mensal"} · {brlReal(atual.preco)} por {atual.ciclo}</p>
           <p>{sit.s === "ativa" ? ((a.historico || []).length ? `Renova em ${dataLonga(a.proxima)}` : `Grátis até ${dataLonga(a.proxima)}. A primeira cobrança é nesse dia.`) : sit.s === "pausada" ? `Volta sozinha em ${dataLonga(a.ate)}. Nada é cobrado até lá.` : `Você usa tudo até ${dataLonga(a.ate)}. Depois, seus dados ficam guardados.`}</p>
           {sit.s === "ativa" && a.pendente && a.pendente.atrasada && <>
             <div className="note amber"><I.alert /><span>A cobrança de {dataLonga(a.pendente.vencimento)} ainda não foi paga.</span></div>
@@ -462,8 +476,8 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
 
       {(sit.s === "sem" || sit.s === "acabou") && (
         <div className="perfil-grupo">
-          <h3>O que vem no Avina</h3>
-          <ul className="assin-inclui">{INCLUI.map(t => <li key={t}><I.check />{t}</li>)}</ul>
+          <h3>O que vem no Avina Pro</h3>
+          <ul className="assin-inclui">{INCLUI[produtoPadrao].map(t => <li key={t}><I.check />{t}</li>)}</ul>
         </div>
       )}
 
@@ -471,7 +485,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
         <div className="perfil-lista">
           {a.plano && sit.s !== "acabou" && sit.s !== "sem" && <button className="perfil-row" onClick={() => setTela("forma")}><i><I.wallet /></i><span><b>Forma de pagamento</b><small>{formaTxt(a)}</small></span><I.chev /></button>}
           {(a.historico || []).length > 0 && <button className="perfil-row" onClick={() => setTela("historico")}><i><I.receipt /></i><span><b>Pagamentos</b><small>{a.historico.length} {a.historico.length === 1 ? "pagamento" : "pagamentos"}</small></span><I.chev /></button>}
-          {sit.s === "ativa" && <button className="perfil-row" onClick={() => { setPlano(a.plano === "anual" ? "mensal" : "anual"); setTela("planos"); }}><i><I.repeat /></i><span><b>Trocar de plano</b><small>{a.plano === "anual" ? "Mudar para o mensal" : `Anual sai por ${porMes(PLANOS.anual)} por mês`}</small></span><I.chev /></button>}
+          {sit.s === "ativa" && <button className="perfil-row" onClick={() => { setPlano(idPlano(a.plano)); setTela("planos"); }}><i><I.repeat /></i><span><b>Trocar de plano</b><small>Anual ou mensal, um pacote ou os dois</small></span><I.chev /></button>}
         </div>
       )}
 
@@ -497,4 +511,21 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   );
 }
 
-export { AssinaturaPagina, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaAssin };
+// Passou do limite da versão grátis: mostra o que o Pro libera (nada do que já está anotado se perde)
+function ProSheet({ motivo, sugerido, onClose, act }) {
+  const pac = motivo === "pac";
+  // quem usa as duas áreas vê o pacote com as duas; senão, só a área que travou
+  const produto = sugerido === "completo" ? "completo" : pac ? "consultorio" : "pessoal", P = PLANOS[`${produto}_anual`];
+  return (
+    <Sheet title={pac ? `Você chegou a ${LIMITE_GRATIS.pacientes} pacientes` : `Você chegou a ${LIMITE_GRATIS.lancMes} lançamentos este mês`}
+      sub={pac ? `Na versão grátis, dá para acompanhar até ${LIMITE_GRATIS.pacientes} pacientes ativos.` : `Na versão grátis, dá para anotar até ${LIMITE_GRATIS.lancMes} lançamentos por mês. No mês que vem, o contador zera.`} onClose={onClose}>
+      <div className="pro-topo"><i className="assin-logo"><Marca /></i><b>Avina Pro</b><span className="pro-selo">PRO</span></div>
+      <ul className="assin-inclui">{INCLUI[produto].map(t => <li key={t}><I.check />{t}</li>)}</ul>
+      <div className="note mint"><I.star /><span>{P.nome}: {porMes(P)} por mês no plano anual. Garantia de 7 dias: não gostou, devolvemos tudo.</span></div>
+      <button className="btn mode" onClick={() => { onClose(); setTimeout(() => act.openSettings("assinatura"), 250); }}>Conhecer o Avina Pro</button>
+      <button className="btn text" onClick={onClose}>Agora não</button>
+    </Sheet>
+  );
+}
+
+export { AssinaturaPagina, ProSheet, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaAssin };

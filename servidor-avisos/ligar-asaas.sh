@@ -64,10 +64,16 @@ printf "%s" "$CHAVE" | npx wrangler secret put ASAAS_KEY >/dev/null
 printf "%s" "$TOKEN" | npx wrangler secret put ASAAS_WEBHOOK_TOKEN >/dev/null
 # lista vazia (um espaço) = liberado para todo mundo
 printf "%s" "${EMAIL:- }" | npx wrangler secret put ASAAS_TESTADORES >/dev/null
-# o endereço do Asaas (sandbox ou produção) fica no wrangler.jsonc
+# o endereço do Asaas (sandbox ou produção) fica no wrangler.jsonc.
+# Na produção, marca também o dia em que a cobrança começou (só na primeira vez): quem criou a conta antes
+# ganha 30 dias de Pro liberado.
+HOJE=$(node -e 'process.stdout.write(new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10))')
 node -e '
   const fs = require("fs"); let t = fs.readFileSync("wrangler.jsonc", "utf8");
-  t = t.replace(/"ASAAS_URL": "[^"]*"/, `"ASAAS_URL": "${process.argv[1]}"`); fs.writeFileSync("wrangler.jsonc", t);' "$ASAAS_URL"
+  const [url, producao, hoje] = process.argv.slice(1);
+  t = t.replace(/"ASAAS_URL": "[^"]*"/, `"ASAAS_URL": "${url}"`);
+  if (producao === "1" && /"COBRANCA_INICIO": ""/.test(t)) t = t.replace(/"COBRANCA_INICIO": ""/, `"COBRANCA_INICIO": "${hoje}"`);
+  fs.writeFileSync("wrangler.jsonc", t);' "$ASAAS_URL" "$([ "$1" = "producao" ] && echo 1 || echo 0)" "$HOJE"
 # cópia para testar no computador (fica fora do GitHub)
 printf 'ASAAS_KEY=%s\nASAAS_URL=%s\nASAAS_WEBHOOK_TOKEN=%s\nMODO_TESTE=1\n' "$CHAVE" "$ASAAS_URL" "$TOKEN" > .dev.vars
 

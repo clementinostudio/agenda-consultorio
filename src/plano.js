@@ -1,0 +1,40 @@
+// Avina Pro: planos, preços e o que a versão grátis permite.
+// Os preços também ficam no servidor (servidor-avisos/src/asaas.js, PLANOS): mudou aqui, mude lá.
+
+// Grátis: dá para usar de verdade, com limite em cada área
+export const LIMITE_GRATIS = { pacientes: 3, lancMes: 30 };
+
+// Três pacotes: os dois juntos, só o consultório ou só a vida pessoal. O anual sai 10 mensalidades (2 meses grátis).
+export const PLANOS = {
+  completo_anual: { produto: "completo", nome: "Pro Completo", preco: 399, ciclo: "ano", meses: 12, selo: "2 meses grátis" },
+  completo_mensal: { produto: "completo", nome: "Pro Completo", preco: 39.9, ciclo: "mês", meses: 1 },
+  consultorio_anual: { produto: "consultorio", nome: "Pro Consultório", preco: 299, ciclo: "ano", meses: 12, selo: "2 meses grátis" },
+  consultorio_mensal: { produto: "consultorio", nome: "Pro Consultório", preco: 29.9, ciclo: "mês", meses: 1 },
+  pessoal_anual: { produto: "pessoal", nome: "Pro Pessoal", preco: 199, ciclo: "ano", meses: 12, selo: "2 meses grátis" },
+  pessoal_mensal: { produto: "pessoal", nome: "Pro Pessoal", preco: 19.9, ciclo: "mês", meses: 1 },
+};
+// o que cada pacote libera sem limite
+const LIBERA = { completo: { consultorio: true, pessoal: true }, consultorio: { consultorio: true }, pessoal: { pessoal: true } };
+// planos antigos (antes dos três pacotes) incluíam as duas áreas
+const ALIAS = { anual: "completo_anual", mensal: "completo_mensal" };
+export const idPlano = id => ALIAS[id] || id;
+export const planoDe = id => PLANOS[idPlano(id)] || null;
+
+export const PRODUTOS = {
+  completo: { nome: "Os dois", texto: "Consultório e vida pessoal juntos, sem limite" },
+  consultorio: { nome: "Consultório", texto: "Agenda, pacientes, cobranças, recibos e imposto" },
+  pessoal: { nome: "Pessoal", texto: "Gastos, contas, caixinhas, transporte e a casa" },
+};
+// pacote que combina com o jeito que a pessoa usa o app
+export const produtoDoUso = perfil => (perfil || {}).consultorio === false ? "pessoal" : (perfil || {}).pessoal === false ? "consultorio" : "completo";
+
+// O que está liberado hoje: { consultorio, pessoal }. A cortesia (contas de antes da cobrança) libera tudo.
+export function liberadoDe(estado, cortesiaAte, hoje) {
+  if (cortesiaAte && hoje < cortesiaAte) return LIBERA.completo;
+  if (!estado) return {};
+  const vale = estado.status === "ativa" || (estado.status === "cancelada" && estado.ate && hoje < estado.ate);
+  const p = vale && planoDe(estado.plano);
+  return p ? LIBERA[p.produto] : {};
+}
+// Selo PRO: só para quem está pagando (a cortesia libera tudo, mas não ganha selo)
+export const ehPro = (estado, hoje) => Object.keys(liberadoDe(estado, null, hoje)).length > 0;

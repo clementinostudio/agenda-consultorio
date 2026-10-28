@@ -282,6 +282,8 @@ function conversaPessoal(db, act) {
   falas.push({ txt: <>Neste mês entrou <b>{brl(r.entrou)}</b>{r.consult > 0 ? <> (sendo {brl(r.consult)} do consultório)</> : null} e saiu <b>{brl(r.saiu)}</b>. {r.sobra >= 0 ? <>Sobram {brl(r.sobra)}.</> : <>Está {brl(-r.sobra)} no vermelho.</>}</> });
   const top = Object.entries(r.porCat).sort((a, b) => b[1] - a[1])[0];
   if (top) falas.push({ txt: <>O que mais pesou até agora foi <b>{catDe(top[0]).nome}</b>: {brl(top[1])}.</>, acao: { l: "Ver gastos", ic: <I.chart />, fn: () => act.setTab("p-gastos") } });
+  const fa = act.falaAssinatura && act.falaAssinatura();
+  if (fa) falas.unshift(fa);
   const achadas = assinaturasAchadas(db);
   if (achadas.length) falas.unshift({ txt: <>Achei {achadas.length === 1 ? <><b>{achadas[0].nome}</b>, que se repete</> : <><b>{achadas.length} gastos</b> que se repetem</>} todo mês com o mesmo valor: {brl(soma(achadas, x => x.valor) * 12)} por ano. Ainda usa?</>, acao: { l: "Ver", ic: <I.bill />, fn: () => act.setTab("p-contas") } });
   const ass = P.contas.filter(c => c.assinatura);

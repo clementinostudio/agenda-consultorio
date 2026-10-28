@@ -74,7 +74,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   // voltar do Android: de uma seção volta para o Perfil; do Perfil, fecha
   const abaRef = useRef(aba); abaRef.current = aba;
   // telas de dentro da assinatura (planos, pagamento…): voltar passa por elas antes
-  const assin = useAssinatura(conta);
+  const assin = useAssinatura(conta, act.planoMudou);
   const [sub, setSub] = useState(null);
   const subRef = useRef(sub); subRef.current = sub;
   useCamada(() => { if (subRef.current) { setSub(voltaAssin(subRef.current)); return false; } if (abaRef.current && !inicio) { setAba(null); return false; } onClose(); }, { escurece: false });
@@ -198,7 +198,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
             <button className="perfil-foto" onClick={() => setAba("dados")} aria-label="Trocar foto e dados">
               <Avatar conta={{ nome: nome || "?", foto }} /><i><I.pencil /></i>
             </button>
-            <h2>{nome || conta.nome}</h2>
+            <h2>{nome || conta.nome}{act.plano && act.plano.pro && <span className="pro-selo grande" title="Avina Pro">PRO</span>}</h2>
             <p>{[profissao, idade ? `${idade} anos` : null].filter(Boolean).join(" · ")}</p>
             <span className="perfil-email">{conta.email}{conta.demo ? " · demonstração" : ""}</span>
             {nuvem && <span className={"perfil-nuvem " + nuvem.estado} role="status"><I.cloud />{{ ok: "Tudo salvo na nuvem", enviando: "Sincronizando…", offline: nuvem.pendentes ? `Sem internet · ${nuvem.pendentes} ${nuvem.pendentes === 1 ? "mudança guardada" : "mudanças guardadas"} aqui` : "Sem internet · tudo guardado aqui", erro: "A nuvem não respondeu · tento de novo sozinho" }[nuvem.estado]}</span>}
@@ -221,7 +221,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
             <h3>Assinatura</h3>
             <div className="perfil-lista">
               <button className="perfil-row" onClick={() => setAba("assinatura")}>
-                <i className="assin-ic"><Marca /></i><span><b>Avina</b><small>{resAssin.texto}</small></span>
+                <i className="assin-ic"><Marca /></i><span><b>{act.plano && act.plano.pro ? "Avina Pro" : "Avina"}</b><small>{resAssin.texto}</small></span>
                 {resAssin.selo && <em className="assin-selo">{resAssin.selo}</em>}<I.chev />
               </button>
               {!assin.real && <button className="perfil-row" onClick={() => { setAba("assinatura"); setSub("indicar"); }}>
