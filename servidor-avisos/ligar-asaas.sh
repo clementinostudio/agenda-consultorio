@@ -24,14 +24,21 @@ verde "1/5 Chave de API $ONDE"
 echo "No Asaas ($PAINEL): menu do seu nome → Integrações → Chaves de API → Gerar chave. Copie e cole aqui."
 echo "(a chave não aparece enquanto você cola: é normal)"
 read -rs CHAVE; echo
-# tira espaços, aspas, quebras de linha e o caractere invisível que o Windows às vezes cola no começo
-CHAVE=$(printf "%s" "$CHAVE" | sed 's/^\xEF\xBB\xBF//' | tr -d '\r\n\t "'"'")
+# limpa o que vem junto ao colar: códigos de "colagem" de alguns terminais (VS Code, Antigravity), o caractere
+# invisível do Windows, espaços, aspas e quebras de linha. Sobra só a chave.
+CHAVE=$(printf "%s" "$CHAVE" | sed 's/\x1b\[20[01]~//g; s/\[20[01]~//g; s/^\xEF\xBB\xBF//' | tr -cd '[:graph:]' | tr -d '"'"'")
 [ -n "$CHAVE" ] || erro "Não veio nenhuma chave."
-case "$CHAVE" in \$aact_*) ;; *) echo "Atenção: as chaves do Asaas costumam começar com \$aact_. Vou testar mesmo assim." ;; esac
+echo "Recebi uma chave que começa com ${CHAVE:0:6}… e tem ${#CHAVE} caracteres."
+case "$CHAVE" in \$aact_*) ;; *) echo "Atenção: as chaves do Asaas começam com \$aact_. Confira se copiou a chave inteira. Vou testar mesmo assim." ;; esac
 OK=$(ASAAS_URL="$ASAAS_URL" CHAVE="$CHAVE" node -e '
   fetch(process.env.ASAAS_URL + "/customers?limit=1", { headers: { access_token: process.env.CHAVE, "User-Agent": "Avina" } })
-    .then(r => process.stdout.write(r.ok ? "ok" : "erro " + r.status)).catch(e => process.stdout.write("erro " + e.message));')
-[ "$OK" = "ok" ] || erro "O Asaas não aceitou essa chave ($OK). Confira se é a chave $ONDE e tente de novo."
+    .then(r => process.stdout.write(r.ok ? "ok" : "erro " + r.status)).catch(e => process.stdout.write("rede " + ((e.cause && (e.cause.code || e.cause.message)) || e.message)));')
+case "$OK" in
+  ok) ;;
+  "erro 401") erro "O Asaas recusou a chave (401). Confira se é a chave $ONDE (a do sandbox só funciona no sandbox) e se copiou ela inteira." ;;
+  rede*) erro "Não consegui falar com o Asaas (${OK#rede }). Confira a internet e rode de novo." ;;
+  *) erro "O Asaas não aceitou essa chave ($OK). Confira se é a chave $ONDE e tente de novo." ;;
+esac
 echo "Chave conferida."
 
 verde "2/5 Quem pode ver a assinatura de verdade enquanto testamos"
