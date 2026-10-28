@@ -15,7 +15,7 @@
   Tudo dentro da cota grátis do Workers AI. No plano gratuito, quando a cota do dia acaba,
   a IA só para de responder até o dia seguinte (nunca gera cobrança). Nada fica guardado.
 */
-import { rotaAsaas } from "./asaas.js";
+import { rotaAsaas, usarCotaIA } from "./asaas.js";
 
 const CHAVE = "dados"; // tudo fica numa chave só do KV (um app pessoal, poucos aparelhos)
 const enc = new TextEncoder();
@@ -193,6 +193,8 @@ export default {
     if (url.pathname === "/transcrever") {
       if (!permitida) return json({ erro: "Origem não permitida" }, 403);
       if (!env.AI) return json({ erro: "sem-ia" }, 501);
+      const cota = await usarCotaIA(req, env, url.pathname);
+      if (!cota.ok) return json({ erro: "limite", ...cota }, 429);
       const audio = typeof b.audio === "string" ? b.audio : "";
       if (audio.length < 2000 || audio.length > 2500000) return json({ erro: "Áudio vazio ou grande demais" }, 400);
       // vad_filter: o próprio Whisper descarta o que não é voz (sem ele, ruído vira "Se inscreva no canal.")
@@ -212,6 +214,8 @@ export default {
     if (url.pathname === "/entender" || url.pathname === "/perguntar" || url.pathname === "/ler-imagem" || url.pathname === "/ler-nota") {
       if (!permitida) return json({ erro: "Origem não permitida" }, 403);
       if (!env.AI) return json({ erro: "sem-ia" }, 501);
+      const cota = await usarCotaIA(req, env, url.pathname);
+      if (!cota.ok) return json({ erro: "limite", ...cota }, 429);
       const hoje = limpar(b.hoje, 40), cats = (Array.isArray(b.categorias) ? b.categorias : []).slice(0, 30).map(c => limpar(c, 20)).join(", ");
       try {
         if (url.pathname === "/entender") {

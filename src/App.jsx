@@ -113,6 +113,7 @@ const termoDe = S => ({ S, s: S.toLowerCase(), P: S + "s", p: S.toLowerCase() + 
 let TERMO = termoDe("Paciente");
 let ESTILO = "detalhado"; // "curto" mostra menos frases no resumo
 let PERFIL = {};          // respostas do perfil, lidas por várias partes do app
+let LOGADO = false;       // conta com login: a IA do servidor conta o uso do dia por pessoa (e não por aparelho)
 let VIAGEM = null;        // modo viagem do Pessoal (a fala assume a moeda da viagem)
 let LOGOS = {};           // fotos que a pessoa escolheu como logo de uma empresa (por nome)
 // Fundos que já vêm no app (arquivos em public/fundos/). Para adicionar um, coloque a imagem lá e inclua uma linha aqui.
@@ -920,7 +921,7 @@ function useFalaServidor({ onFinal, onFalhou, prompt, onSilencio }) {
       let r, j;
       for (let tentativa = 0; ; tentativa++) {
         try {
-          r = await fetch(`${servidorAvisos()}/transcrever`, { method: "POST", headers: { "content-type": "application/json" }, body: corpo, signal: ctrl.signal });
+          r = await fetch(`${servidorAvisos()}/transcrever`, { method: "POST", headers: await cabecalhosIA(), body: corpo, signal: ctrl.signal });
           j = await r.json().catch(() => ({}));
           if (r.status < 500 || tentativa >= 1) break;
         } catch (e) { if (e.name === "AbortError" || tentativa >= 1 || navigator.onLine === false) throw e; }
@@ -928,6 +929,8 @@ function useFalaServidor({ onFinal, onFalhou, prompt, onSilencio }) {
         await new Promise(ok => setTimeout(ok, 700));
       }
       if (x.cancelado) return;
+      if (j.erro === "limite") return falhar(x, j.nivel === "gratis" ? "As transcrições da IA de hoje acabaram (no Avina Pro é à vontade). Por hoje, use o microfone do teclado: funciona igual."
+        : j.nivel === "anon" ? "Na demonstração, a fala pela IA tem poucos usos por dia. Use o microfone do teclado, ou crie sua conta." : "Você falou bastante hoje! Por hoje, use o microfone do teclado: funciona igual.");
       if (r.status === 404 || r.status === 501 || j.erro === "sem-ia") { VOZ_SERVIDOR_FALHOU = true; return falhar(x, "Seu servidor ainda não sabe transcrever a fala. No computador, rode de novo: bash servidor-avisos/instalar-avisos.sh. Por enquanto, toque na Bolinha que eu uso a voz do aparelho."); }
       if (!r.ok || !j.ok) throw new Error(j.erro || "HTTP " + r.status);
       const t = limparTranscricao(j.texto);
@@ -1019,11 +1022,17 @@ function useFalaServidor({ onFinal, onFalhou, prompt, onSilencio }) {
    No plano grátis da Cloudflare, se a cota do dia acabar, a IA só para até o dia seguinte: nunca gera cobrança. */
 const iaDisponivel = () => !!servidorAvisos() && navigator.onLine !== false;
 const hojeTexto = () => `${todayISO()} (${DIA_LONGO[new Date().getDay()]})`;
+async function cabecalhosIA() {
+  const h = { "content-type": "application/json" };
+  if (LOGADO) try { const { data } = await (await cliente()).auth.getSession(); if (data.session) h.Authorization = `Bearer ${data.session.access_token}`; } catch (e) {}
+  return h;
+}
 async function chamarIA(rota, corpo, ms = 15000) {
   const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), ms);
   try {
-    const r = await fetch(`${servidorAvisos()}${rota}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hoje: hojeTexto(), ...corpo }), signal: ctrl.signal });
+    const r = await fetch(`${servidorAvisos()}${rota}`, { method: "POST", headers: await cabecalhosIA(), body: JSON.stringify({ hoje: hojeTexto(), ...corpo }), signal: ctrl.signal });
     const j = await r.json().catch(() => ({}));
+    if (j.erro === "limite") throw new Error(`limite:${j.nivel}`);
     if (r.status === 429 || j.erro === "cota") throw new Error("cota");
     if (!r.ok || !j.ok) throw new Error(j.erro || "HTTP " + r.status);
     return j;
@@ -1032,7 +1041,10 @@ async function chamarIA(rota, corpo, ms = 15000) {
 }
 const msgIA = e => {
   const m = String((e && e.message) || e);
-  return m === "cota" ? "A IA já trabalhou bastante hoje (cota grátis do dia). Amanhã ela volta; o resto do app funciona normal."
+  return m === "limite:gratis" ? "Você usou as ajudas da IA de hoje. Amanhã renova, e no Avina Pro é à vontade. O resto do app funciona normal."
+    : m === "limite:anon" ? "Na demonstração, a IA tem poucos usos por dia. Crie sua conta para usar mais."
+    : m === "limite:pro" ? "Você usou bastante a IA hoje. Amanhã renova; o resto do app funciona normal."
+    : m === "cota" ? "A IA já trabalhou bastante hoje (cota grátis do dia). Amanhã ela volta; o resto do app funciona normal."
     : m === "demorou" ? "A IA demorou para responder. Tente de novo em instantes."
     : m === "ilegivel" ? "Não consegui ler o valor nessa foto. Tente uma foto mais de perto, com o valor bem visível."
     : navigator.onLine === false ? "Sem internet agora. Tente de novo quando a conexão voltar."
@@ -1109,22 +1121,22 @@ function contextoPergunta(db, usaPessoal) {
   const P = db.pessoal;
   if (usaPessoal && P) {
     L.push("## PESSOAL (casa)");
-    meses.forEach(ch => {
+    meses.slice(0, 4).forEach(ch => {
       const ls = P.lanc.filter(l => l.data.startsWith(ch)); if (!ls.length) return;
       const sai = ls.filter(l => l.tipo === "saida"), ent = ls.filter(l => l.tipo === "entrada"), porCat = {}, porLoja = {};
       sai.forEach(l => { porCat[l.cat] = (porCat[l.cat] || 0) + l.valor; const k = l.desc || catDe(l.cat).nome; porLoja[k] = porLoja[k] || [0, 0]; porLoja[k][0] += l.valor; porLoja[k][1]++; });
       L.push(`${nomeMes(ch)}: entrou ${r(soma(ent, l => l.valor))}, saiu ${r(soma(sai, l => l.valor))} (fora as contas fixas)`);
       L.push(`  por categoria: ${Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `${catDe(c).nome} ${r(v)}`).join("; ") || "nada"}`);
-      L.push(`  por loja: ${Object.entries(porLoja).sort((a, b) => b[1][0] - a[1][0]).slice(0, 15).map(([k, [v, n]]) => `${k} ${r(v)} (${n}x)`).join("; ")}`);
+      L.push(`  por loja: ${Object.entries(porLoja).sort((a, b) => b[1][0] - a[1][0]).slice(0, 10).map(([k, [v, n]]) => `${k} ${r(v)} (${n}x)`).join("; ")}`);
     });
-    const rec = P.lanc.filter(l => l.data >= addDays(hoje, -45)).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 120);
+    const rec = P.lanc.filter(l => l.data >= addDays(hoje, -30)).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 60);
     if (rec.length) L.push(`Lançamentos dos últimos 45 dias: ${rec.map(l => `${dm(l.data)} ${l.tipo === "entrada" ? "+" : "-"}${r(l.valor)} ${l.desc || catDe(l.cat).nome} [${catDe(l.cat).nome}]`).join("; ")}`);
     L.push(`Contas fixas (todo mês): ${P.contas.map(c => `${c.nome} ${r(c.valor)} dia ${c.dia}, ${c.pagas && c.pagas[mesAt] ? "paga este mês" : "não paga este mês"}${c.assinatura ? ", assinatura" : ""}`).join("; ") || "nenhuma"}`);
     if ((P.caixinhas || []).length) L.push(`Caixinhas: ${P.caixinhas.map(x => `${x.nome} guardado ${r(soma(x.movs || [], m => m.valor))}${x.meta ? ` de ${r(x.meta)}` : ""}`).join("; ")}`);
     const tet = Object.entries(P.limites || {}).filter(([, v]) => v > 0);
     if (tet.length) { const g = gastoPorCat(db, mesAt); L.push(`Tetos do mês por categoria: ${tet.map(([c, v]) => `${catDe(c).nome} teto ${r(v)}, gasto ${r(g[c] || 0)}`).join("; ")}`); }
   }
-  return L.join("\n").slice(0, 38000);
+  return L.join("\n").slice(0, 16000);
 }
 
 // Dica para o Whisper: exemplos, nomes dos pacientes e as lojas que você mais usa (até ~680 letras)
@@ -3876,6 +3888,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   TERMO = termoDe(perfil.termo || "Paciente");
   ESTILO = perfil.estilo || "detalhado";
   PERFIL = perfil;
+  LOGADO = !!conta.uid;
   const usaConsultorio = perfil.consultorio !== false;
   const usaPessoal = perfil.pessoal !== false || !usaConsultorio;
   const doisModos = usaPessoal && usaConsultorio;

@@ -125,6 +125,30 @@ async function pixDe(env, pagamentoId) {
   return { imagem: q.encodedImage, copiaecola: q.payload, expira: q.expirationDate };
 }
 
+// ---------- Cota diária da IA (voz, perguntas e fotos) ----------
+// A IA da Cloudflare cobra por uso: cada pessoa tem um tanto por dia. Quem assina usa à vontade (com um teto
+// anti-abuso que ninguém alcança usando normal). Sem login (demonstração), o limite é pequeno e conta por endereço.
+// "voz" é barata (transcrever e entender a frase); "ia" é a cara (Bolinha e leitura de fotos).
+const COTA_IA = { voz: { anon: 15, gratis: 30, pro: 300 }, ia: { anon: 3, gratis: 5, pro: 100 } };
+const GRUPO_IA = { "/transcrever": "voz", "/entender": "voz", "/perguntar": "ia", "/ler-imagem": "ia", "/ler-nota": "ia" };
+const testadoresDe = env => String(env.ASAAS_TESTADORES || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+// a cobrança vale para esta pessoa? (antes de ligar, ou fora da lista de testadores, ninguém é limitado como grátis)
+const cobrancaLigada = (env, eu) => !!env.ASAAS_KEY && (!testadoresDe(env).length || testadoresDe(env).includes(String(eu.email).toLowerCase()));
+// guardado pela /assinatura/ver (o app chama ao abrir): "pro" ou "gratis". Só grava quando muda.
+async function marcarPlano(env, uid, valor) { if ((await env.AVISOS.get(`plano:${uid}`)) !== valor) await env.AVISOS.put(`plano:${uid}`, valor); }
+
+export async function usarCotaIA(req, env, rota) {
+  const grupo = GRUPO_IA[rota]; if (!grupo) return { ok: true };
+  const eu = (req.headers.get("Authorization") || req.headers.get("X-Teste-Uid")) ? await quem(req, env) : null;
+  let nivel = "anon", quemConta = "ip:" + (req.headers.get("CF-Connecting-IP") || "local");
+  if (eu) { quemConta = eu.id; nivel = !cobrancaLigada(env, eu) || (await env.AVISOS.get(`plano:${eu.id}`)) === "pro" ? "pro" : "gratis"; }
+  const max = COTA_IA[grupo][nivel], k = `cota:${grupo}:${hojeBR()}:${quemConta}`;
+  const usados = Number(await env.AVISOS.get(k)) || 0;
+  if (usados >= max) return { ok: false, grupo, nivel, max };
+  await env.AVISOS.put(k, String(usados + 1), { expirationTtl: 2 * 86400 });
+  return { ok: true, grupo, nivel, max, restam: max - usados - 1 };
+}
+
 export async function rotaAsaas(req, env, url, json, permitida) {
   // Webhook: o Asaas manda o token que combinamos; sem ele, ignora
   if (url.pathname === "/asaas/webhook") {
@@ -145,8 +169,7 @@ export async function rotaAsaas(req, env, url, json, permitida) {
   const eu = await quem(req, env);
   if (!eu) return json({ erro: "Entre na sua conta para assinar" }, 401);
   // Enquanto testa (sandbox), só os e-mails em ASAAS_TESTADORES veem a assinatura de verdade; o resto segue na demonstração
-  const testadores = String(env.ASAAS_TESTADORES || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-  if (testadores.length && !testadores.includes(String(eu.email).toLowerCase())) return json({ configurado: false });
+  if (!cobrancaLigada(env, eu)) return json({ configurado: false });
   let b = {}; try { b = await req.json(); } catch (e) {}
   const reg = await lerReg(env, eu.id), hoje = hojeBR();
 
@@ -154,7 +177,11 @@ export async function rotaAsaas(req, env, url, json, permitida) {
     if (url.pathname === "/assinatura/ver") {
       const inicio = env.COBRANCA_INICIO || "";
       const cortesiaAte = inicio && eu.criado && eu.criado < inicio ? addDias(inicio, CORTESIA_DIAS) : null;
-      return json({ ok: true, configurado: true, sandbox: !env.ASAAS_URL || /sandbox/.test(env.ASAAS_URL), cortesiaAte, estado: await estado(env, eu.id) });
+      const st = await estado(env, eu.id);
+      // para a cota da IA: quem paga (ou está na cortesia) usa à vontade
+      const pago = st.status === "ativa" || (st.status === "cancelada" && st.ate && hoje < st.ate);
+      await marcarPlano(env, eu.id, pago || (cortesiaAte && hoje < cortesiaAte) ? "pro" : "gratis");
+      return json({ ok: true, configurado: true, sandbox: !env.ASAAS_URL || /sandbox/.test(env.ASAAS_URL), cortesiaAte, estado: st });
     }
 
     if (url.pathname === "/assinatura/assinar") {
