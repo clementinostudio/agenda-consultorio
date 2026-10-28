@@ -80,8 +80,6 @@ section { position: relative; padding: 90px max(20px, env(safe-area-inset-left, 
 /* ---------- abertura ---------- */
 /* azul da marca emendado na barra de cima (como no Asaas); o iPhone sobe do pé da seção e é cortado por ela */
 .heroi { overflow: hidden; color: #fff; padding-top: calc(64px + 52px + env(safe-area-inset-top, 0px)); padding-bottom: 0; background: var(--marca); }
-.heroi-fundo { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(55% 70% at 88% 25%, rgba(118, 146, 255, .7), transparent 70%), radial-gradient(45% 60% at 0% 100%, rgba(112, 64, 240, .55), transparent 70%), linear-gradient(180deg, var(--marca) 0%, #1A33DA 100%); }
-.heroi-fundo::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .16) 1px, transparent 0) 0 0 / 26px 26px; -webkit-mask-image: radial-gradient(60% 70% at 75% 45%, #000, transparent 75%); mask-image: radial-gradient(60% 70% at 75% 45%, #000, transparent 75%); }
 .heroi-in { position: relative; z-index: 1; width: 100%; max-width: 1200px; margin: 0 auto; display: grid; gap: 8px; }
 .heroi-texto { padding-bottom: 48px; }
 .heroi-pill { display: inline-flex; align-items: center; gap: 9px; padding: 7px 14px; border-radius: 999px; background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22); font-size: 14px; font-weight: 500; margin-bottom: 22px; }
@@ -101,7 +99,6 @@ section { position: relative; padding: 90px max(20px, env(safe-area-inset-left, 
 .heroi-garantias li { display: flex; align-items: center; gap: 8px; }
 .heroi-garantias li::before { content: ""; width: 18px; height: 18px; border-radius: 50%; background: rgba(255, 255, 255, .18) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center / 11px no-repeat; }
 .heroi-arte { position: relative; justify-self: center; width: min(100%, 540px); height: 430px; display: flex; justify-content: center; perspective: 1400px; }
-.heroi-halo { position: absolute; left: 50%; top: 10px; width: 560px; height: 560px; translate: -50% 0; border-radius: 50%; background: radial-gradient(circle, rgba(255, 255, 255, .3), rgba(255, 255, 255, .08) 45%, transparent 68%); }
 .heroi-arte .iphone { flex: none; box-shadow: inset 0 0 0 2px #52525B, inset 0 0 0 7px #000, 0 40px 80px -20px rgba(4, 10, 70, .7); }
 /* notificações como as do iPhone (vidro claro, ícone do app, título e texto) e um cartão de resumo;
    entram uma de cada vez e ficam paradas. No celular ficam centralizadas sobre o topo do iPhone */
@@ -333,7 +330,6 @@ details p { margin: 0 0 22px; color: var(--muted); }
   .heroi-texto { padding-bottom: 0; }
   .heroi-arte { height: auto; padding: 10px 0; }
   .heroi-arte .iphone { --w: 330px !important; }
-  .heroi-halo { top: 50%; translate: -50% -50%; width: 680px; height: 680px; }
   .notifs { translate: none; top: 120px; left: -48px; width: 316px; }
   .pro-cartao { grid-template-columns: 1.15fr .85fr; align-items: end; gap: 30px; padding: 0 64px; }
   .pro-texto { padding: 60px 0; } .pro-arte { height: 430px; margin-top: 50px; }
