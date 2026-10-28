@@ -70,8 +70,7 @@ section { position: relative; padding: 90px max(20px, env(safe-area-inset-left, 
 .sec-cab h2 { font-size: clamp(32px, 6.4vw, 56px); }
 .sec-cab p { color: var(--muted); font-size: clamp(17px, 2vw, 19px); margin: 16px 0 0; }
 .sec-cab.centro p { margin-left: auto; margin-right: auto; max-width: 36em; }
-.rotulo { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; margin-bottom: 14px; color: var(--marca); }
-.rotulo::before { content: ""; width: 26px; height: 2px; border-radius: 2px; background: currentColor; }
+.rotulo { display: inline-flex; align-items: center; font-weight: 800; font-size: 14px; margin-bottom: 14px; color: var(--marca); }
 .rotulo.azul { color: var(--marca); } .rotulo.roxo { color: #6A48F0; } .rotulo.verde { color: #0B9463; }
 /* faixas cinza-claro alternadas, como nas páginas de banco */
 .fala, .recursos, .privacidade { background: var(--bg2); }

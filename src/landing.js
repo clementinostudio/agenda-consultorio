@@ -59,7 +59,7 @@ if (conversa) {
   const ex = [
     // a logo da empresa vem do ícone do próprio site, como no app
     { f: "gastei 30 reais no uber", t: "Uber", s: "Transporte · Hoje", v: "R$ 30,00", logo: "uber.com" },
-    { f: "Felipe veio e pagou", t: "Felipe Andrade", s: "Sessão marcada · pago", v: "✓", ic: "FA", cor: "#4A62FF" },
+    { f: "Gustavo veio e pagou", t: "Gustavo Andrade", s: "Sessão marcada · pago", v: "✓", ic: "GA", cor: "#4A62FF" },
     { f: "paguei 120 de luz ontem", t: "Luz", s: "Casa · Ontem", v: "R$ 120,00", ic: "⌂", cor: "#2F4AD9" },
     { f: "remarca a Júlia pra quinta às 15h", t: "Júlia Prado", s: "Remarcada · qui às 15:00", v: "↻", ic: "JP", cor: "#8B6CFF" },
   ];

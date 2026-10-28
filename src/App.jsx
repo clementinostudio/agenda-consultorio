@@ -65,7 +65,7 @@ const CAT_ENTRADA = [
 const AVISOS_PADRAO_DEMO = { ativo: true, antecedencia: 15, som: true };
 // Respostas das perguntas iniciais da conta de demonstração
 const PERFIL_DEMO = { reserva: 15, falta: { cobrar: true, horas: 24 }, registro: true, horaIni: 8, horaFim: 20, diasTrab: [1, 2, 3, 4, 5], nascimento: "1993-03-14", profissao: "Psicologia", termo: "Paciente", duracao: 50, valorPadrao: 110, subPadrao: 25, subTipo: "fixed", meta: 4000, estilo: "detalhado", pessoal: true, cidade: "Curitiba", avisos: AVISOS_PADRAO_DEMO };
-const CONTA_DEMO = { nome: "Camila", email: "demo@consultorio.app", demo: true, perfil: PERFIL_DEMO };
+const CONTA_DEMO = { nome: "Felipe", email: "demo@consultorio.app", demo: true, perfil: PERFIL_DEMO };
 const PROFISSOES = [
   { id: "Psicologia", termo: "Paciente" }, { id: "Psicanálise", termo: "Analisando" }, { id: "Psiquiatria", termo: "Paciente" },
   { id: "Terapia ocupacional", termo: "Paciente" }, { id: "Fonoaudiologia", termo: "Paciente" }, { id: "Nutrição", termo: "Paciente" },
@@ -1359,7 +1359,7 @@ function exemplo() {
   const t = todayISO();
   const ses = (pid, off, price, sublet, extra = {}) => ({ id: uid(), patientId: pid, date: addDays(t, off), price, sublet, status: "done", chargeId: null, registro: true, ...extra });
   const patients = [
-    { id: "p1", name: "Felipe Andrade", phone: "", color: "azul", price: 110, sublet: 25, subletType: "fixed", freq: 14, time: "18:30", billing: "package", packageSize: 4, nextDate: t, active: true },
+    { id: "p1", name: "Gustavo Andrade", phone: "", color: "azul", price: 110, sublet: 25, subletType: "fixed", freq: 14, time: "18:30", billing: "package", packageSize: 4, nextDate: t, active: true },
     { id: "p2", name: "Marcos Lima", phone: "", color: "laranja", price: 130, sublet: 20, subletType: "percent", freq: 7, time: "10:00", billing: "package", packageSize: 4, nextDate: addDays(t, -1), active: true },
     { id: "p3", name: "Ana Souza", phone: "", color: "rosa", price: 150, sublet: 30, subletType: "fixed", freq: 7, time: "14:00", billing: "session", packageSize: 4, nextDate: addDays(t, 2), active: true },
     { id: "p4", name: "Júlia Prado", phone: "", color: "verde", price: 180, sublet: 0, subletType: "fixed", freq: 28, time: "09:00", billing: "session", packageSize: 4, nextDate: addDays(t, 10), active: true },
