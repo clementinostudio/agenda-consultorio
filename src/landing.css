@@ -301,11 +301,11 @@ details p { margin: 0 0 22px; color: var(--muted); }
   .s1 { left: -10px; top: 8%; } .s2 { right: -10px; }
   .heroi { padding-top: calc(64px + 36px + env(safe-area-inset-top, 0px)); }
   .heroi-ctas .botao { flex: 1 1 100%; }
-  .heroi-arte { height: 380px; }
-  .heroi-arte .iphone { --w: 268px !important; }
+  .heroi-arte { height: 480px; }
+  .heroi-arte .iphone { --w: 280px !important; }
   .cartao-flutua { padding: 10px 13px 10px 10px; gap: 10px; border-radius: 17px; }
   .cf-ic { width: 32px; height: 32px; }
-  .f1 { top: 46px; left: -6px; } .f2 { top: 196px; right: -6px; } .f3 { display: none; }
+  .f1 { top: 70px; left: -6px; } .f2 { top: 250px; right: -6px; } .f3 { display: none; }
   .pro-cartao { border-radius: 28px; padding: 32px 22px 0; } .pro-texto .botao { width: 100%; }
   .heroi .lead { font-size: 17px; margin-top: 16px; }
   .heroi-ctas { margin-top: 26px; gap: 10px; }
@@ -323,11 +323,14 @@ details p { margin: 0 0 22px; color: var(--muted); }
 @media (min-width: 980px) {
   .menu { display: flex; }
   .menu-botao { display: none; }
-  .heroi-in { grid-template-columns: 1.05fr .95fr; align-items: end; gap: 40px; }
-  .heroi-texto { align-self: center; padding-bottom: 96px; }
-  .heroi-arte { height: 560px; }
-  .heroi-arte .iphone { --w: 320px !important; }
-  .f1 { top: 90px; left: -10px; } .f2 { top: 260px; right: -6px; } .f3 { top: 430px; left: 0; }
+  /* no computador a abertura ocupa a tela e o iPhone aparece inteiro, com respiro em volta */
+  .heroi { display: flex; align-items: center; min-height: max(100svh, 860px); padding-top: calc(64px + 56px); padding-bottom: 72px; }
+  .heroi-in { grid-template-columns: 1.05fr .95fr; align-items: center; gap: 56px; }
+  .heroi-texto { padding-bottom: 0; }
+  .heroi-arte { height: auto; padding: 10px 0; }
+  .heroi-arte .iphone { --w: 330px !important; }
+  .heroi-halo { top: 50%; translate: -50% -50%; width: 680px; height: 680px; }
+  .f1 { top: 120px; left: -22px; } .f2 { top: 330px; right: -28px; } .f3 { top: 540px; left: -6px; }
   .pro-cartao { grid-template-columns: 1.15fr .85fr; align-items: end; gap: 30px; padding: 0 64px; }
   .pro-texto { padding: 60px 0; } .pro-arte { height: 430px; margin-top: 50px; }
   .fala-grade, .aba-corpo, .tdah-grade { grid-template-columns: 1fr 1fr; gap: 70px; }
