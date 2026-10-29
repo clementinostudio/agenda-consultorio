@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- SEO: o título e a descrição são o que aparece no Google. Dados estruturados, sitemap e robots saem do seo.site.js -->
+    <title>App de caixa para pequenas lojas e docerias | Avina</title>
+    <meta name="description" content="O caixa da loja no celular: cada venda num toque, Pix com QR code, fechamento do caixa, gastos da loja e a lista do que falta. Grátis para começar." />
+    <meta name="robots" content="max-image-preview:large" />
+    <link rel="canonical" href="https://avina.com.br/loja/" />
+    <meta name="theme-color" content="#1F3BEF" />
+    <!-- Prévia ao compartilhar o link (WhatsApp, Instagram, LinkedIn, X) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Avina" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:url" content="https://avina.com.br/loja/" />
+    <meta property="og:title" content="Avina para lojas · o caixa fora do caderno" />
+    <meta property="og:description" content="Cada venda num toque, Pix com QR code na hora e o caixa fechado em 2 minutos. Quem ajuda anota junto." />
+    <meta property="og:image" content="https://avina.com.br/screenshots/computador.png" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="800" />
+    <meta property="og:image:alt" content="O Avina aberto no computador" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <style>html{background:#fff}</style>
+  </head>
+  <body>
+    <!-- QR code do Pix (só o desenho, não é lido por câmera): usado nas telas de exemplo com <use href="#qr"> -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="qr" viewBox="0 0 25 25"><path d="M0 0h7v1h-7zM9 0h1v1h-1zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM9 1h2v1h-2zM12 1h4v1h-4zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM11 2h1v1h-1zM13 2h2v1h-2zM16 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM9 3h2v1h-2zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM8 4h3v1h-3zM12 4h2v1h-2zM15 4h1v1h-1zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM9 5h2v1h-2zM12 5h2v1h-2zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h3v1h-3zM12 7h2v1h-2zM1 8h3v1h-3zM6 8h2v1h-2zM9 8h2v1h-2zM13 8h2v1h-2zM16 8h2v1h-2zM19 8h1v1h-1zM21 8h1v1h-1zM24 8h1v1h-1zM0 9h1v1h-1zM2 9h3v1h-3zM7 9h3v1h-3zM11 9h1v1h-1zM17 9h4v1h-4zM2 10h1v1h-1zM5 10h2v1h-2zM10 10h5v1h-5zM17 10h1v1h-1zM19 10h2v1h-2zM0 11h1v1h-1zM2 11h1v1h-1zM4 11h2v1h-2zM7 11h1v1h-1zM9 11h2v1h-2zM12 11h1v1h-1zM15 11h1v1h-1zM17 11h1v1h-1zM20 11h1v1h-1zM24 11h1v1h-1zM1 12h2v1h-2zM5 12h6v1h-6zM14 12h2v1h-2zM17 12h4v1h-4zM23 12h1v1h-1zM0 13h1v1h-1zM2 13h1v1h-1zM4 13h2v1h-2zM8 13h1v1h-1zM10 13h6v1h-6zM17 13h5v1h-5zM1 14h2v1h-2zM5 14h2v1h-2zM9 14h5v1h-5zM20 14h1v1h-1zM4 15h1v1h-1zM12 15h1v1h-1zM14 15h1v1h-1zM16 15h1v1h-1zM18 15h1v1h-1zM21 15h3v1h-3zM0 16h4v1h-4zM6 16h2v1h-2zM11 16h1v1h-1zM14 16h6v1h-6zM12 17h3v1h-3zM17 17h2v1h-2zM23 17h2v1h-2zM0 18h7v1h-7zM8 18h1v1h-1zM11 18h1v1h-1zM13 18h3v1h-3zM18 18h3v1h-3zM23 18h2v1h-2zM0 19h1v1h-1zM6 19h1v1h-1zM8 19h1v1h-1zM10 19h1v1h-1zM13 19h1v1h-1zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM8 20h2v1h-2zM14 20h1v1h-1zM16 20h1v1h-1zM19 20h1v1h-1zM22 20h1v1h-1zM24 20h1v1h-1zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h2v1h-2zM12 21h1v1h-1zM16 21h4v1h-4zM21 21h3v1h-3zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM12 22h1v1h-1zM14 22h3v1h-3zM18 22h4v1h-4zM0 23h1v1h-1zM6 23h1v1h-1zM8 23h1v1h-1zM10 23h3v1h-3zM14 23h1v1h-1zM19 23h6v1h-6zM0 24h7v1h-7zM9 24h3v1h-3zM13 24h3v1h-3zM18 24h2v1h-2zM21 24h2v1h-2z"/></symbol></svg>
+
+    <!-- Barra de cima: a mesma da página "Para você" (sobre/index.html) -->
+    <header class="topo">
+      <div class="topo-in">
+        <a class="marca" href="/" aria-label="Avina, início"><svg class="logo" viewBox="-9 -46 538 155" aria-hidden="true"><defs><linearGradient id="logo-topo" x1="-18" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".25"/><stop offset=".5" stop-color="currentColor" stop-opacity=".6"/><stop offset="1" stop-color="currentColor"/></linearGradient></defs><g fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100" stroke="url(#logo-topo)"/><path d="M136 0L178 100L220 0"/><path d="M256 0V100"/><path d="M256 -37V-35"/><path d="M292 100V46A46 46 0 0 1 384 46V100"/><path d="M520 50A50 50 0 1 1 420 50A50 50 0 1 1 520 50M520 0V100"/></g></svg></a>
+        <nav class="menu" id="menu" aria-label="Seções">
+          <a href="/">Para você</a><a href="/consultorio/">Para profissionais</a><a href="/loja/" aria-current="page">Para lojas</a><a href="#recursos">Recursos</a><a href="#planos">Planos</a>
+          <a class="menu-entrar" href="https://app.avina.com.br/#entrar">Entrar</a>
+        </nav>
+        <div class="topo-acoes">
+          <a class="botao-contorno" href="https://app.avina.com.br/#entrar">Entrar</a>
+          <a class="botao-branco" href="https://app.avina.com.br/#criar">Criar conta</a>
+          <button class="menu-botao" type="button" aria-expanded="false" aria-controls="menu" aria-label="Abrir o menu"><i></i><i></i></button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- ABERTURA -->
+      <section class="heroi">
+        <div class="heroi-in">
+          <div class="heroi-texto">
+            <span class="heroi-pill"><i aria-hidden="true"></i>Para docerias, lanchonetes e quem vende</span>
+            <h1>O caixa da loja <em>fora do caderno.</em></h1>
+            <p class="lead">Cada venda num toque, Pix com QR code na hora e o caixa fechado em 2 minutos. Quem te ajuda anota junto, cada um no seu celular.</p>
+            <div class="heroi-ctas">
+              <a class="botao claro" href="https://app.avina.com.br/#criar">Abrir minha loja <span aria-hidden="true">→</span></a>
+              <a class="botao vazado" href="#experimente">Experimentar o caixa</a>
+            </div>
+            <ul class="heroi-garantias">
+              <li>Pronto em 1 minuto</li>
+              <li>Celular e computador</li>
+              <li>Grátis para começar</li>
+            </ul>
+            <a class="heroi-outro" href="/">Também cuida do seu dinheiro: <b>gastos, contas e a casa <span aria-hidden="true">→</span></b></a>
+          </div>
+
+          <div class="heroi-arte">
+            <div class="iphone tilt" style="--w: 300px">
+              <i class="hw hw1"></i><i class="hw hw2"></i><i class="hw hw3"></i><i class="hw hw4"></i>
+              <div class="tela">
+                <!-- tela do caixa, desenhada em HTML -->
+                <div class="ap" role="img" aria-label="Tela do caixa da loja: o que entrou hoje, os produtos para tocar e a venda sendo montada">
+                  <div class="ap-cab"><span class="ap-av">A</span><span class="ap-modo"><i></i>Loja</span></div>
+                  <div class="ap-topo"><small>qua, 29 de out · 3 pessoas</small><b>Doces da Ana</b></div>
+                  <div class="ap-card"><div class="ap-linha"><small>Entrou hoje</small><small class="ap-tag">23 vendas</small></div><p class="ap-valor">R$ 486,50</p><div class="ap-chips"><span>Dinheiro <b>182</b></span><span>Pix <b>214,50</b></span><span>Débito <b>90</b></span></div></div>
+                  <div class="ap-card"><p class="ap-tit">Vender</p><div class="ap-grade">
+                    <span class="ap-prod" style="--pc:#FF6FA8;--pk:#fff"><i>3</i><b>Brigadeiro</b><small>R$ 3,00</small></span>
+                    <span class="ap-prod" style="--pc:#FF9A4C;--pk:#2A1405"><i>1</i><b>Bolo de pote</b><small>R$ 12,00</small></span>
+                    <span class="ap-prod" style="--pc:#FFC93D;--pk:#2A1F00"><b>Brownie</b><small>R$ 8,00</small></span>
+                    <span class="ap-prod" style="--pc:#8B6CFF;--pk:#fff"><b>Trufa</b><small>R$ 4,50</small></span>
+                    <span class="ap-prod" style="--pc:#2FCB8E;--pk:#04261A"><b>Fatia de bolo</b><small>R$ 10,00</small></span>
+                    <span class="ap-prod novo"><b>+ Produto</b></span>
+                  </div></div>
+                  <div class="ap-card"><div class="ap-linha"><span><b>3×</b> Brigadeiro</span><b>R$ 9,00</b></div><div class="ap-linha"><span><b>1×</b> Bolo de pote</span><b>R$ 12,00</b></div><div class="ap-linha ap-tot"><span>4 itens</span><b>R$ 21,00</b></div><div class="ap-pagar"><span class="on">Dinheiro</span><span>Pix</span><span>Débito</span><span>Crédito</span></div></div>
+                </div>
+                <i class="ilha"></i><i class="reflexo"></i>
+              </div>
+            </div>
+            <!-- notificações como as do iPhone: entram uma de cada vez e ficam paradas -->
+            <div class="notifs">
+              <div class="notif n1"><img class="notif-ic" src="/icons/icon-192.png" alt="" width="40" height="40" /><div class="notif-tx"><p class="notif-topo"><span>Avina</span><time>agora</time></p><p class="notif-tit">Venda no Pix</p><p class="notif-corpo">R$ 21,00 · Bia, no caixa</p></div></div>
+              <div class="notif n2"><img class="notif-ic" src="/icons/icon-192.png" alt="" width="40" height="40" /><div class="notif-tx"><p class="notif-topo"><span>Avina</span><time>ontem</time></p><p class="notif-tit">Caixa fechado</p><p class="notif-corpo">Bateu certinho: R$ 232,00 na gaveta</p></div></div>
+            </div>
+            <div class="resumo-lugar"><div class="resumo r1"><p class="resumo-rot">Sobrou em outubro</p><p class="resumo-valor">R$ 3.912,40</p><div class="resumo-barra" aria-hidden="true"><i style="width: 75%"></i></div><p class="resumo-pe">Entrou R$ 5.197 · gastos R$ 1.284</p></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FAIXA DE TIPOS DE LOJA -->
+      <section class="faixa" aria-label="Para quem é">
+        <p>Feito para quem vende</p>
+        <div class="faixa-trilho" aria-hidden="true">
+          <div class="faixa-itens"><span>Doceria</span><span>Confeitaria</span><span>Lanchonete</span><span>Sorveteria</span><span>Açaí</span><span>Padaria</span><span>Salgados</span><span>Marmitas</span><span>Ateliê</span><span>Brechó</span><span>Feira</span></div>
+          <div class="faixa-itens"><span>Doceria</span><span>Confeitaria</span><span>Lanchonete</span><span>Sorveteria</span><span>Açaí</span><span>Padaria</span><span>Salgados</span><span>Marmitas</span><span>Ateliê</span><span>Brechó</span><span>Feira</span></div>
+        </div>
+        <p class="sr">Doceria, confeitaria, lanchonete, sorveteria, açaí, padaria, salgados, marmitas, ateliê, brechó e feira.</p>
+      </section>
+
+      <!-- EXPERIMENTE: um caixa de verdade, só que de mentira (src/landing.js, parte 8) -->
+      <section class="experimente" id="experimente">
+        <div class="sec-cab revela">
+          <span class="rotulo laranja">Experimente</span>
+          <h2>Vender é tocar no produto.</h2>
+          <p>Toque nos doces para montar a venda, escolha quanto o cliente deu e veja o troco. Depois, é só tocar em como ele pagou: a venda entra na conta do dia.</p>
+        </div>
+        <div class="caixa-demo revela" data-caixa data-entrou="486.5" data-vendas="23">
+          <div class="cx-col">
+            <div class="ap-card"><div class="ap-linha"><p class="ap-tit">Vender</p><small>toque para pôr na venda</small></div>
+              <div class="ap-grade">
+                <button type="button" class="ap-prod" data-p="Brigadeiro" data-v="3" style="--pc:#FF6FA8;--pk:#fff"><i hidden></i><b>Brigadeiro</b><small>R$ 3,00</small></button>
+                <button type="button" class="ap-prod" data-p="Bolo de pote" data-v="12" style="--pc:#FF9A4C;--pk:#2A1405"><i hidden></i><b>Bolo de pote</b><small>R$ 12,00</small></button>
+                <button type="button" class="ap-prod" data-p="Brownie" data-v="8" style="--pc:#FFC93D;--pk:#2A1F00"><i hidden></i><b>Brownie</b><small>R$ 8,00</small></button>
+                <button type="button" class="ap-prod" data-p="Trufa" data-v="4.5" style="--pc:#8B6CFF;--pk:#fff"><i hidden></i><b>Trufa</b><small>R$ 4,50</small></button>
+                <button type="button" class="ap-prod" data-p="Fatia de bolo" data-v="10" style="--pc:#2FCB8E;--pk:#04261A"><i hidden></i><b>Fatia de bolo</b><small>R$ 10,00</small></button>
+                <button type="button" class="ap-prod" data-p="Café" data-v="5" style="--pc:#3CC4E6;--pk:#04232C"><i hidden></i><b>Café</b><small>R$ 5,00</small></button>
+              </div>
+            </div>
+            <div class="ap-card cx-ticket">
+              <p class="cx-vazio" data-vazio>Nenhum item ainda. Toque num produto acima.</p>
+              <div class="cx-itens" data-itens></div>
+              <div class="ap-linha ap-tot"><span data-n>0 itens</span><b data-total>R$ 0,00</b></div>
+              <div class="cx-receb"><small>Recebeu</small><div class="cx-notas"><button type="button" data-rec="20" aria-pressed="false">R$ 20</button><button type="button" data-rec="50" aria-pressed="false">R$ 50</button><button type="button" data-rec="100" aria-pressed="false">R$ 100</button></div><b class="cx-troco" data-troco aria-live="polite"></b></div>
+              <div class="ap-pagar"><button type="button" class="on" data-pag="Dinheiro" disabled>Dinheiro</button><button type="button" data-pag="Pix" disabled>Pix</button><button type="button" data-pag="Débito" disabled>Débito</button><button type="button" data-pag="Crédito" disabled>Crédito</button></div>
+            </div>
+          </div>
+          <div class="cx-col">
+            <div class="ap-card cx-dia" aria-live="polite"><div class="ap-linha"><small>Entrou hoje</small><small class="ap-tag" data-vendas>23 vendas</small></div><p class="ap-valor" data-entrou>R$ 486,50</p></div>
+            <div class="ap-card"><p class="ap-tit">Vendas de hoje</p>
+              <ul class="cx-lista" data-lista>
+                <li class="ap-venda"><span>15:42</span><span><b>2× Brigadeiro, Café</b><small>Pix · Bia</small></span><b>R$ 11,00</b></li>
+                <li class="ap-venda"><span>15:30</span><span><b>Bolo de pote</b><small>Dinheiro · Rafa</small></span><b>R$ 12,00</b></li>
+                <li class="ap-venda"><span>15:12</span><span><b>Fatia de bolo</b><small>Débito · Ana</small></span><b>R$ 10,00</b></li>
+                <li class="ap-venda"><span>14:58</span><span><b>3× Trufa</b><small>Pix · Bia</small></span><b>R$ 13,50</b></li>
+              </ul>
+            </div>
+          </div>
+          <!-- Pix: o QR code aparece para o cliente ler -->
+          <div class="cx-pix" data-pix hidden>
+            <div class="cx-pix-cartao" role="dialog" aria-modal="false" aria-label="Pix">
+              <small>Pix de</small><b data-pix-v>R$ 0,00</b>
+              <svg viewBox="-2 -2 29 29" aria-hidden="true"><use href="#qr" /></svg>
+              <small>O cliente lê com o app do banco e o dinheiro cai na sua chave.</small>
+              <button type="button" class="cx-pago" data-pago>Já pagou</button>
+              <button type="button" class="cx-voltar" data-pix-fechar>Voltar</button>
+            </div>
+          </div>
+        </div>
+        <p class="cx-nota revela">É só um exemplo: nada daqui vai para lugar nenhum.</p>
+      </section>
+
+      <!-- RECURSOS EM ABAS (as telas do iPhone são desenhadas em HTML) -->
+      <section class="recursos" id="recursos">
+        <div class="sec-cab centro revela">
+          <span class="rotulo laranja">Recursos</span>
+          <h2>Tudo o que o balcão pede, num lugar só.</h2>
+        </div>
+        <div class="abas revela" role="tablist" aria-label="Recursos">
+          <button role="tab" aria-selected="true" data-aba="0">Caixa</button>
+          <button role="tab" aria-selected="false" data-aba="1">Pix</button>
+          <button role="tab" aria-selected="false" data-aba="2">Fechar o caixa</button>
+          <button role="tab" aria-selected="false" data-aba="3">Gastos</button>
+          <button role="tab" aria-selected="false" data-aba="4">O que falta</button>
+          <button role="tab" aria-selected="false" data-aba="5">Resumo</button>
+        </div>
+        <div class="aba-corpo revela">
+          <div class="aba-textos">
+            <article class="aba-painel ativo" data-painel="0"><h3>Cada venda num toque.</h3><p>Cadastre o que você vende com o preço. Na hora da venda, toque nos produtos, veja o total e o troco, e escolha como o cliente pagou.</p><ul><li>Dinheiro, Pix, débito ou crédito</li><li>Venda só com o valor, sem produto</li><li>Errou? Corrige ou apaga a venda</li></ul></article>
+            <article class="aba-painel" data-painel="1"><h3>Pix com QR code na hora.</h3><p>O QR code sai com o valor certo e a sua chave Pix. O cliente lê com o app do banco e o dinheiro cai direto na sua conta: o Avina não passa no meio e não cobra taxa.</p><ul><li>Valor já preenchido, sem digitar</li><li>Pix copia e cola para mandar por mensagem</li><li>A venda entra no caixa quando você confirma</li></ul></article>
+            <article class="aba-painel" data-painel="2"><h3>O caixa fechado em 2 minutos.</h3><p>O app sabe quanto deveria ter na gaveta. Você conta as notas e moedas, e ele diz na hora se bateu, sobrou ou faltou.</p><ul><li>Conta nota por nota, sem calculadora</li><li>Troco do começo do dia já na conta</li><li>Tirar ou pôr dinheiro na gaveta fica anotado</li></ul></article>
+            <article class="aba-painel" data-painel="3"><h3>Os gastos da loja, separados dos seus.</h3><p>Insumos, embalagem, gás, aluguel e ajudante, cada um na sua categoria. A nota do fornecedor vira gasto lendo o QR code ou tirando uma foto.</p><ul><li>Quanto foi para cada coisa no mês</li><li>Gasto pago com o dinheiro da gaveta</li><li>Nota do fornecedor com os itens</li></ul></article>
+            <article class="aba-painel" data-painel="4"><h3>Acabou? Vai para a lista.</h3><p>O que está faltando aparece na hora no celular de quem vai comprar. Na volta, marque o que comprou e coloque o preço: vira gasto da loja sozinho.</p><ul><li>Lista dividida com quem ajuda</li><li>Sugestões do que sempre falta</li><li>Mandar a lista pelo WhatsApp</li></ul></article>
+            <article class="aba-painel" data-painel="5"><h3>Quanto sobrou, de verdade.</h3><p>Entrou, saiu e sobrou no dia, na semana e no mês, com o que mais vendeu e para onde foi o dinheiro.</p><ul><li>Barras por dia: vendas e gastos</li><li>Os produtos que mais saem</li><li>Mandar o resumo pelo WhatsApp</li></ul></article>
+          </div>
+          <div class="palco pequeno">
+            <div class="iphone tilt" style="--w: 270px">
+              <i class="hw hw1"></i><i class="hw hw2"></i><i class="hw hw3"></i><i class="hw hw4"></i>
+              <div class="tela troca">
+                <!-- 0. caixa -->
+                <div class="ap ativo" data-tela="0" role="img" aria-label="Caixa: produtos para tocar e a venda sendo montada">
+                  <div class="ap-cab"><span class="ap-av">A</span><span class="ap-modo"><i></i>Loja</span></div>
+                  <div class="ap-topo"><small>qua, 29 de out</small><b>Doces da Ana</b></div>
+                  <div class="ap-card"><p class="ap-tit">Vender</p><div class="ap-grade">
+                    <span class="ap-prod" style="--pc:#FF6FA8;--pk:#fff"><i>2</i><b>Brigadeiro</b><small>R$ 3,00</small></span>
+                    <span class="ap-prod" style="--pc:#FF9A4C;--pk:#2A1405"><b>Bolo de pote</b><small>R$ 12,00</small></span>
+                    <span class="ap-prod" style="--pc:#FFC93D;--pk:#2A1F00"><b>Brownie</b><small>R$ 8,00</small></span>
+                    <span class="ap-prod" style="--pc:#8B6CFF;--pk:#fff"><b>Trufa</b><small>R$ 4,50</small></span>
+                    <span class="ap-prod" style="--pc:#2FCB8E;--pk:#04261A"><b>Fatia de bolo</b><small>R$ 10,00</small></span>
+                    <span class="ap-prod" style="--pc:#3CC4E6;--pk:#04232C"><i>1</i><b>Café</b><small>R$ 5,00</small></span>
+                  </div></div>
+                  <div class="ap-card"><div class="ap-linha"><span><b>2×</b> Brigadeiro</span><b>R$ 6,00</b></div><div class="ap-linha"><span><b>1×</b> Café</span><b>R$ 5,00</b></div><div class="ap-linha ap-tot"><span>3 itens</span><b>R$ 11,00</b></div>
+                    <div class="ap-linha"><small>Recebeu R$ 20,00</small><b class="up">Troco R$ 9,00</b></div>
+                    <div class="ap-pagar"><span class="on">Dinheiro</span><span>Pix</span><span>Débito</span><span>Crédito</span></div></div>
+                </div>
+                <!-- 1. pix -->
+                <div class="ap" data-tela="1" role="img" aria-label="Pix: QR code com o valor da venda">
+                  <div class="ap-topo"><small>Doces da Ana</small><b>Pix de R$ 11,00</b></div>
+                  <div class="ap-card ap-qr"><svg viewBox="-2 -2 29 29" aria-hidden="true"><use href="#qr" /></svg><small>Mostre para o cliente ler com o app do banco</small></div>
+                  <div class="ap-card"><div class="ap-linha"><small>Cai na chave</small><b>doces•••@gmail.com</b></div><div class="ap-linha"><small>Em nome de</small><b>Ana Lima</b></div></div>
+                  <span class="ap-btn">✓ Já pagou</span><span class="ap-btn fant">Copiar o Pix copia e cola</span>
+                </div>
+                <!-- 2. fechar o caixa -->
+                <div class="ap" data-tela="2" role="img" aria-label="Fechar o caixa: contagem das notas e o caixa batendo">
+                  <div class="ap-topo"><small>qua, 29 de out</small><b>Fechar o caixa</b></div>
+                  <div class="ap-card"><small>Deveria ter na gaveta</small><p class="ap-valor">R$ 232,00</p><small>R$ 50 de troco + R$ 182 das vendas em dinheiro</small></div>
+                  <div class="ap-card"><p class="ap-tit">Conte as notas</p>
+                    <div class="ap-ced"><span class="ap-nota" style="--n:#3E8FD1">100</span><span>× 1</span><b>R$ 100,00</b></div>
+                    <div class="ap-ced"><span class="ap-nota" style="--n:#C9873A">50</span><span>× 2</span><b>R$ 100,00</b></div>
+                    <div class="ap-ced"><span class="ap-nota" style="--n:#D2A92E">20</span><span>× 1</span><b>R$ 20,00</b></div>
+                    <div class="ap-ced"><span class="ap-nota" style="--n:#C4566A">10</span><span>× 1</span><b>R$ 10,00</b></div>
+                    <div class="ap-ced"><span class="ap-nota" style="--n:#4C78C6">2</span><span>× 1</span><b>R$ 2,00</b></div>
+                  </div>
+                  <div class="ap-card ap-ok"><b>✓ Bateu certinho</b><small>Contou R$ 232,00</small></div>
+                  <span class="ap-btn">Fechar o caixa</span>
+                </div>
+                <!-- 3. gastos -->
+                <div class="ap" data-tela="3" role="img" aria-label="Gastos da loja no mês, por categoria">
+                  <div class="ap-topo"><small>Doces da Ana</small><b>Gastos da loja</b></div>
+                  <div class="ap-card"><small>Outubro de 2026</small><p class="ap-valor">R$ 1.284,60</p><small>18 gastos em outubro</small>
+                    <div class="ap-cat" style="--c:#2FCB8E;--p:100%"><span class="ap-ci"></span><span>Insumos<i></i></span><b>R$ 642</b></div>
+                    <div class="ap-cat" style="--c:#3CC4E6;--p:37%"><span class="ap-ci"></span><span>Embalagem<i></i></span><b>R$ 238</b></div>
+                    <div class="ap-cat" style="--c:#FFC93D;--p:31%"><span class="ap-ci"></span><span>Gás e luz<i></i></span><b>R$ 196</b></div>
+                    <div class="ap-cat" style="--c:#FF6FA8;--p:25%"><span class="ap-ci"></span><span>Ajudante<i></i></span><b>R$ 160</b></div>
+                    <div class="ap-cat" style="--c:#8B6CFF;--p:8%"><span class="ap-ci"></span><span>Entrega<i></i></span><b>R$ 48,60</b></div>
+                  </div>
+                  <div class="ap-card"><div class="ap-venda"><span class="ap-ci" style="--c:#2FCB8E"></span><span><b>Atacadão</b><small>Insumos · 28/10 · com nota</small></span><b>R$ 187,40</b></div><div class="ap-venda"><span class="ap-ci" style="--c:#3CC4E6"></span><span><b>Potes e colheres</b><small>Embalagem · 27/10 · Bia</small></span><b>R$ 64,90</b></div></div>
+                  <span class="ap-btn fant">Ler a nota do fornecedor</span>
+                </div>
+                <!-- 4. o que falta -->
+                <div class="ap" data-tela="4" role="img" aria-label="Lista do que falta na loja, dividida com a equipe">
+                  <div class="ap-topo"><small>Doces da Ana</small><b>O que falta</b></div>
+                  <div class="ap-card"><div class="ap-linha"><p class="ap-tit">Lista de compras da loja</p><small>2 de 5</small></div>
+                    <div class="ap-campo">Acabou o quê?</div>
+                    <div class="ap-sug"><small>Sempre falta. Acabou?</small><span>+ Granulado</span><span>+ Creme de leite</span></div>
+                    <div class="ap-item"><span class="ap-box"></span><span><b>2×</b> Leite condensado</span></div>
+                    <div class="ap-item"><span class="ap-box"></span><span>Chocolate em pó</span></div>
+                    <div class="ap-item"><span class="ap-box"></span><span>Forminhas nº 4 <small>· Bia</small></span></div>
+                    <small class="ap-secao">Comprado</small>
+                    <div class="ap-item feito"><span class="ap-box"></span><span>Copos de 200 ml</span></div>
+                    <div class="ap-item feito"><span class="ap-box"></span><span>Gás</span></div>
+                  </div>
+                  <span class="ap-btn">✓ Anotar o que comprei (2)</span>
+                  <span class="ap-btn fant">Mandar a lista</span>
+                </div>
+                <!-- 5. resumo -->
+                <div class="ap" data-tela="5" role="img" aria-label="Resumo do mês: quanto entrou, saiu e sobrou e o que mais vendeu">
+                  <div class="ap-topo"><small>Doces da Ana</small><b>Resumo</b></div>
+                  <div class="ap-ranges"><span>Hoje</span><span>7 dias</span><span class="on">Mês</span></div>
+                  <div class="ap-card"><small>Sobrou em outubro</small><p class="ap-valor">R$ 3.912,40</p><div class="ap-linha"><b class="up">+R$ 5.197,00</b><b class="dn">−R$ 1.284,60</b></div>
+                    <div class="ap-barras"><span style="--e:55%;--s:20%"></span><span style="--e:70%;--s:8%"></span><span style="--e:48%;--s:0%"></span><span style="--e:62%;--s:35%"></span><span style="--e:90%;--s:6%"></span><span style="--e:100%;--s:12%"></span><span style="--e:30%;--s:0%"></span><span style="--e:58%;--s:28%"></span><span style="--e:66%;--s:5%"></span><span style="--e:52%;--s:10%"></span><span style="--e:74%;--s:0%"></span><span style="--e:88%;--s:40%"></span><span style="--e:95%;--s:9%"></span><span style="--e:36%;--s:0%"></span></div>
+                  </div>
+                  <div class="ap-card"><p class="ap-tit">O que mais vendeu</p>
+                    <div class="ap-top" style="--p:100%"><span class="ap-pos">1</span><span>Brigadeiro<i></i></span><b>612 un</b></div>
+                    <div class="ap-top" style="--p:24%"><span class="ap-pos">2</span><span>Bolo de pote<i></i></span><b>148 un</b></div>
+                    <div class="ap-top" style="--p:16%"><span class="ap-pos">3</span><span>Brownie<i></i></span><b>96 un</b></div>
+                  </div>
+                  <span class="ap-btn fant">Mandar este resumo</span>
+                </div>
+                <i class="ilha"></i><i class="reflexo"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DO CADERNO PARA O CELULAR -->
+      <section class="caderno" id="caderno">
+        <div class="sec-cab centro revela">
+          <span class="rotulo laranja">Do caderno para o celular</span>
+          <h2>Uma hora no caderno virou 2 minutos.</h2>
+          <p>O modo Loja nasceu numa doceria de verdade, onde fechar o dia era somar venda por venda no papel. Agora é tocar, contar a gaveta e pronto.</p>
+        </div>
+        <div class="antes-depois">
+          <article class="ad antes revela"><h3>No caderno</h3><ul><li>Somar as vendas no fim do dia, com a calculadora</li><li>Contar a gaveta sem saber quanto deveria ter</li><li>Lembrar o que acabou só quando falta</li><li>Chegar no fim do mês sem saber quanto sobrou</li></ul></article>
+          <article class="ad depois revela"><h3>No Avina</h3><ul><li>As vendas somam sozinhas, a cada toque</li><li>O app diz quanto deveria ter e se bateu</li><li>A lista do que falta no celular de todo mundo</li><li>Entrou, saiu e sobrou, por dia e por mês</li></ul></article>
+        </div>
+      </section>
+
+      <!-- EQUIPE -->
+      <section class="pro-chamada" id="equipe">
+        <div class="pro-cartao loja revela">
+          <div class="pro-texto">
+            <span class="rotulo laranja">Equipe</span>
+            <h2>Quem ajuda anota junto, cada um no seu celular.</h2>
+            <p>Mande um link para quem trabalha com você. As vendas, os gastos e a lista aparecem na hora para todo mundo, com o nome de quem anotou.</p>
+            <ul>
+              <li>Até 5 ajudantes por loja</li>
+              <li>O lucro só aparece para quem você deixar</li>
+              <li>Saiu da equipe, perdeu o acesso</li>
+            </ul>
+            <a class="botao" href="https://app.avina.com.br/#criar">Abrir minha loja <span aria-hidden="true">→</span></a>
+          </div>
+          <div class="pro-arte" aria-hidden="true">
+            <div class="iphone" style="--w: 250px">
+              <i class="hw hw1"></i><i class="hw hw2"></i><i class="hw hw3"></i><i class="hw hw4"></i>
+              <div class="tela">
+                <div class="ap">
+                  <div class="ap-topo"><small>Doces da Ana</small><b>Equipe</b></div>
+                  <div class="ap-card">
+                    <div class="ap-pessoa"><span class="ap-av">A</span><span><b>Ana</b><small>criou a loja</small></span></div>
+                    <div class="ap-pessoa"><span class="ap-av" style="--c:#FF6FA8">B</span><span><b>Bia</b><small>vê o lucro</small></span><span class="ap-chave on"></span></div>
+                    <div class="ap-pessoa"><span class="ap-av" style="--c:#3CC4E6">R</span><span><b>Rafa</b><small>só anota</small></span><span class="ap-chave"></span></div>
+                  </div>
+                  <span class="ap-btn fant">+ Chamar mais alguém</span>
+                  <div class="ap-card"><p class="ap-tit">Vendas de hoje</p>
+                    <div class="ap-venda"><span>15:42</span><span><b>2× Brigadeiro, Café</b><small>Pix · Bia</small></span><b>R$ 11,00</b></div>
+                    <div class="ap-venda"><span>15:30</span><span><b>Bolo de pote</b><small>Dinheiro · Rafa</small></span><b>R$ 12,00</b></div>
+                    <div class="ap-venda"><span>15:12</span><span><b>Fatia de bolo</b><small>Débito · Ana</small></span><b>R$ 10,00</b></div>
+                    <div class="ap-venda"><span>14:58</span><span><b>3× Trufa</b><small>Pix · Bia</small></span><b>R$ 13,50</b></div>
+                  </div>
+                </div>
+                <i class="ilha"></i><i class="reflexo"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- NÚMEROS -->
+      <section class="numeros laranja revela" aria-label="Em números">
+        <div><b>1 toque</b><span>para cada venda</span></div>
+        <div><b>2 min</b><span>para fechar o caixa</span></div>
+        <div><b>R$ 0</b><span>de taxa no Pix</span></div>
+        <div><b>0</b><span>cadernos</span></div>
+      </section>
+
+      <!-- PLANOS: os preços vêm de src/plano.js (o landing.js preenche), os mesmos do app -->
+      <section class="planos" id="planos">
+        <div class="sec-cab centro revela">
+          <span class="rotulo azul">Planos</span>
+          <h2>Comece grátis. Assine quando a equipe chegar.</h2>
+          <p>Na versão grátis, o caixa, os gastos e a lista não têm limite. O Pro Loja traz a equipe e o histórico, com garantia de 7 dias: não gostou, devolvemos tudo.</p>
+        </div>
+        <p class="lanc-aviso revela" data-lancamento hidden><b>Preço de lançamento</b> Assinando até <span data-lanc-data>30 de novembro</span>, você mantém o valor enquanto a assinatura estiver ativa.</p>
+        <div class="ciclo revela" role="group" aria-label="Como pagar">
+          <button type="button" data-ciclo="anual" aria-pressed="true">Anual <em>2 meses grátis</em></button>
+          <button type="button" data-ciclo="mensal" aria-pressed="false">Mensal</button>
+        </div>
+        <div class="planos-grade tres">
+          <article class="plano-cartao revela">
+            <h3>Grátis</h3>
+            <p class="plano-preco"><b>R$ 0</b><span>para sempre</span></p>
+            <p class="plano-mes">sem cartão</p>
+            <ul><li>Caixa, Pix e fechamento sem limite</li><li>Gastos e lista do que falta</li><li>Resumo dos últimos 30 dias</li><li>A loja só sua, sem equipe</li></ul>
+            <a class="botao contorno" href="https://app.avina.com.br/#criar">Criar conta grátis</a>
+          </article>
+          <article class="plano-cartao revela" data-produto="loja">
+            <h3>Loja</h3>
+            <p class="plano-preco"><b data-preco>R$ 24,92</b><span>por mês</span></p>
+            <p class="plano-mes" data-mes>R$ 299 por ano, em uma cobrança</p>
+            <ul><li>Até 5 ajudantes, cada um no seu celular</li><li>Resumo e gastos de todos os meses</li><li>Quem vê o lucro, você escolhe</li><li>Avisos no celular e cópia na nuvem</li></ul>
+            <a class="botao contorno" href="https://app.avina.com.br/#criar">Assinar o Loja</a>
+          </article>
+          <article class="plano-cartao revela destaque" data-produto="lojapessoal">
+            <span class="plano-selo">Recomendado</span><h3>Loja + Pessoal</h3>
+            <p class="plano-preco"><b data-preco>R$ 33,25</b><span>por mês</span></p>
+            <p class="plano-mes" data-mes>R$ 399 por ano, em uma cobrança</p>
+            <ul><li>A loja e a sua vida pessoal sem limite</li><li>A retirada da loja entra no seu dinheiro</li><li>Contas da casa, caixinhas e transporte</li><li>Tudo do Pro Loja</li></ul>
+            <a class="botao" href="https://app.avina.com.br/#criar">Assinar os dois</a>
+          </article>
+        </div>
+        <p class="planos-rodape revela">Também atende pacientes ou clientes? O consultório entra no mesmo plano, no app · Pix ou cartão · cancela quando quiser · <a href="/termos/">Termos de uso</a></p>
+      </section>
+
+      <!-- PRIVACIDADE -->
+      <section class="privacidade" id="privacidade">
+        <div class="sec-cab centro revela">
+          <img class="sec-ilustra" src="/ilustras/cadeados.webp" alt="" loading="lazy" width="640" height="457" />
+          <span class="rotulo verde">Privacidade</span>
+          <h2>O caixa da loja fica com você.</h2>
+          <p>Vendas, gastos e o lucro protegidos por login, com cópia na nuvem.</p>
+        </div>
+        <div class="pilares quatro">
+          <article class="revela"><span class="pil-ic">✦</span><h3>Só quem você chama</h3><p>Cada loja enxerga só os próprios dados. Quem sai da equipe perde o acesso na hora.</p></article>
+          <article class="revela"><span class="pil-ic">◐</span><h3>O lucro é seu</h3><p>Quem ajuda anota vendas e gastos. O resumo com o lucro aparece só para quem você liberar.</p></article>
+          <article class="revela"><span class="pil-ic">↯</span><h3>Caiu a internet?</h3><p>A venda fica guardada no celular e sobe para a nuvem quando a conexão voltar.</p></article>
+          <article class="revela"><span class="pil-ic">◎</span><h3>O Pix vai direto</h3><p>O QR code leva a sua chave. O dinheiro cai na sua conta, sem passar pelo Avina e sem taxa.</p></article>
+        </div>
+      </section>
+
+      <!-- PERGUNTAS -->
+      <section class="faq">
+        <h2 class="revela">Perguntas rápidas</h2>
+        <details class="revela"><summary>O que é o Avina para lojas?</summary><p>É o modo Loja do Avina, um app brasileiro em português que tira o caixa da pequena loja do caderno: cada venda num toque, Pix com QR code na hora, o fechamento do caixa contando as notas, os gastos da loja separados do seu dinheiro e a lista do que falta, dividida com quem ajuda. Funciona no celular e no computador.</p></details>
+        <details class="revela"><summary>Substitui a maquininha de cartão?</summary><p>Não. A maquininha continua cobrando o cartão; no Avina você só toca em Débito ou Crédito para a venda entrar na conta do dia. No Pix é diferente: o QR code sai com a sua chave, e o dinheiro cai direto na sua conta, sem taxa.</p></details>
+        <details class="revela"><summary>Quem me ajuda vê quanto a loja lucra?</summary><p>Só se você deixar. Quem ajuda anota vendas, gastos e a lista; o resumo com o lucro aparece só para quem você ligar a opção “vê o lucro”.</p></details>
+        <details class="revela"><summary>Dá para testar antes?</summary><p>Sim. A versão grátis é para sempre e não pede cartão: o caixa, os gastos e a lista não têm limite. A equipe e o histórico de todos os meses ficam no Pro Loja, com garantia de 7 dias: se não gostar, devolvemos o valor.</p></details>
+        <details class="revela"><summary>O Avina emite nota fiscal?</summary><p>Não. Ele organiza o caixa, os gastos e o resumo do mês, que ajudam na hora de prestar contas, mas a nota fiscal continua saindo pelo sistema que você já usa.</p></details>
+        <details class="revela"><summary>Dá para separar o dinheiro da loja do meu?</summary><p>Sim. Os gastos da loja ficam na loja e os seus ficam no modo Pessoal. Quando você tira dinheiro do caixa para você, a retirada pode entrar no Pessoal com um toque.</p></details>
+      </section>
+
+      <!-- CHAMADA FINAL -->
+      <section class="final revela">
+        <div class="brilho baixo" aria-hidden="true"><i></i><i></i><i></i></div>
+        <h2>Feche o caderno. Abra o caixa.</h2>
+        <p>Grátis para começar e pronto em um minuto.</p>
+        <form class="cadastro centro" action="../" data-cadastro>
+          <label class="sr" for="email-fim">Seu e-mail</label>
+          <input id="email-fim" type="email" name="email" placeholder="Seu e-mail" autocomplete="email" inputmode="email" />
+          <button class="botao" type="submit">Abrir minha loja</button>
+        </form>
+        <a class="link-seta" href="#planos">Ou veja os planos <span aria-hidden="true">→</span></a>
+      </section>
+    </main>
+
+    <footer class="rodape">
+      <div class="rod-marca"><a class="marca" href="/" aria-label="Avina, início"><svg class="logo" viewBox="-9 -46 538 155" aria-hidden="true"><defs><linearGradient id="logo-rodape" x1="-18" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".25"/><stop offset=".5" stop-color="currentColor" stop-opacity=".6"/><stop offset="1" stop-color="currentColor"/></linearGradient></defs><g fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"><path d="M100 50A50 50 0 1 1 0 50A50 50 0 1 1 100 50M100 0V100" stroke="url(#logo-rodape)"/><path d="M136 0L178 100L220 0"/><path d="M256 0V100"/><path d="M256 -37V-35"/><path d="M292 100V46A46 46 0 0 1 384 46V100"/><path d="M520 50A50 50 0 1 1 420 50A50 50 0 1 1 520 50M520 0V100"/></g></svg></a><small>A agenda que lembra por você.</small></div>
+      <div class="rod-col"><b>Produto</b><a href="/">Para você</a><a href="/consultorio/">Para profissionais</a><a href="/loja/">Para lojas</a><a href="#experimente">Experimentar o caixa</a><a href="#equipe">Equipe da loja</a></div>
+      <div class="rod-col"><b>Conta</b><a href="https://app.avina.com.br/#criar">Criar conta</a><a href="https://app.avina.com.br/#entrar">Entrar</a></div>
+      <div class="rod-col"><b>Ajuda</b><a href="/#instalar">Instalar</a><a href="#privacidade">Privacidade</a></div>
+      <div class="rod-col"><b>Legal</b><a href="/termos/">Termos de uso</a><a href="/privacidade/">Privacidade (LGPD)</a><a href="/cookies/">Cookies</a></div>
+    </footer>
+
+    <script type="module" src="../../src/landing.js"></script>
+  </body>
+</html>

@@ -15,7 +15,7 @@ const APP = "https://app.avina.com.br/";
 
 // Quem é o Avina, numa frase. Vai nos dados estruturados e no llms.txt: é o que o Google e as IAs usam para não
 // confundir a gente com outra marca de nome parecido. Mantenha igual à resposta "O que é o Avina?" das páginas.
-const SOBRE = "O Avina é um app brasileiro, em português, para organizar o dinheiro e a agenda: gastos anotados falando, aviso antes das contas vencerem, contas da casa divididas e, para psicólogos e terapeutas, agenda com sessões que se repetem sozinhas e cobrança no Pix. Funciona no celular e no computador, até sem internet.";
+const SOBRE = "O Avina é um app brasileiro, em português, para organizar o dinheiro e a agenda: gastos anotados falando, aviso antes das contas vencerem, contas da casa divididas e, para psicólogos e terapeutas, agenda com sessões que se repetem sozinhas e cobrança no Pix e, para pequenas lojas, o caixa do dia com Pix e fechamento. Funciona no celular e no computador, até sem internet.";
 // Perfis oficiais do Avina em outros sites (Instagram, LinkedIn, YouTube...). Cada endereço aqui ajuda o Google
 // e as IAs a ligarem esses perfis ao site. Coloque só perfis que existem de verdade.
 const PERFIS = [];
@@ -25,6 +25,7 @@ const PERFIS = [];
 const APLICATIVO = {
   "/": { nome: "Avina", categoria: "FinanceApplication", produtos: ["pessoal", "completo"] },
   "/consultorio/": { nome: "Avina para profissionais", categoria: "BusinessApplication", produtos: ["consultorio", "completo"], trilha: "Para profissionais" },
+  "/loja/": { nome: "Avina para lojas", categoria: "BusinessApplication", produtos: ["loja", "lojapessoal"], trilha: "Para lojas" },
 };
 // Páginas que vêm de public/ (as mesmas do app), mas cujo endereço oficial é avina.com.br
 const LEGAIS = ["termos", "privacidade", "cookies"];
@@ -150,7 +151,7 @@ function llms(paginas) {
     "## Páginas", "",
     ...paginas.map(p => `- [${p.titulo}](${p.url}): ${p.descricao}`), "",
     "## Planos", "",
-    `- Grátis, para sempre e sem cartão: até ${LIMITE_GRATIS.pacientes} pacientes ativos e ${LIMITE_GRATIS.lancMes} lançamentos por mês`,
+    `- Grátis, para sempre e sem cartão: até ${LIMITE_GRATIS.pacientes} pacientes ativos, ${LIMITE_GRATIS.lancMes} lançamentos por mês e o caixa da loja sem limite (sem equipe, resumo dos últimos ${LIMITE_GRATIS.lojaDias} dias)`,
     ...planos,
     "- O plano anual sai pelo preço de 10 meses. Garantia de 7 dias: cancelando nesse prazo, o valor volta inteiro.", "",
   ].join("\n");

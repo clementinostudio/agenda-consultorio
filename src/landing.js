@@ -116,6 +116,68 @@ if (ac) {
   if (auto && "IntersectionObserver" in window) new IntersectionObserver((es, o) => { if (es[0].isIntersecting) { ac.classList.add("auto"); abrir(0); o.disconnect(); } }).observe(ac);
 }
 
+// 8. Caixa de exemplo (página da Loja): tocar nos produtos monta a venda, mostra o troco e soma no dia. Nada sai da página.
+const caixa = document.querySelector("[data-caixa]");
+if (caixa) {
+  const real = v => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const $ = s => caixa.querySelector(s);
+  const prods = [...caixa.querySelectorAll("[data-p]")];
+  const pix = $("[data-pix]"), dia = $(".cx-dia");
+  let ticket = {}, recebido = 0, entrou = Number(caixa.dataset.entrou), vendas = Number(caixa.dataset.vendas);
+  const itens = () => prods.filter(b => ticket[b.dataset.p]).map(b => ({ nome: b.dataset.p, v: Number(b.dataset.v), q: ticket[b.dataset.p] }));
+  const total = () => Math.round(itens().reduce((s, i) => s + i.v * i.q, 0) * 100) / 100;
+  const pintar = () => {
+    const its = itens(), t = total(), n = its.reduce((s, i) => s + i.q, 0);
+    prods.forEach(b => { const q = ticket[b.dataset.p] || 0, i = b.querySelector("i"); i.hidden = !q; i.textContent = q; });
+    $("[data-itens]").replaceChildren(...its.map(i => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "ap-linha"; b.dataset.tira = i.nome; b.setAttribute("aria-label", `Tirar um ${i.nome}`);
+      b.innerHTML = `<span><b>${i.q}×</b> ${i.nome}</span><b>${real(i.v * i.q)}</b>`;
+      return b;
+    }));
+    $("[data-vazio]").hidden = n > 0;
+    $("[data-n]").textContent = `${n} ${n === 1 ? "item" : "itens"}`;
+    $("[data-total]").textContent = real(t);
+    const tr = $("[data-troco]");
+    tr.textContent = recebido && n ? (recebido >= t ? `Troco ${real(recebido - t)}` : `Faltam ${real(t - recebido)}`) : "";
+    tr.className = "cx-troco " + (recebido >= t ? "up" : "dn");
+    caixa.querySelectorAll("[data-rec]").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.rec) === recebido)));
+    caixa.querySelectorAll("[data-pag]").forEach(b => { b.disabled = !n; });
+  };
+  const registrar = pag => {
+    const its = itens(), t = total(); if (!its.length) return;
+    entrou = Math.round((entrou + t) * 100) / 100; vendas++;
+    const agora = new Date(), li = document.createElement("li");
+    li.className = "ap-venda nova";
+    li.innerHTML = `<span>${String(agora.getHours()).padStart(2, "0")}:${String(agora.getMinutes()).padStart(2, "0")}</span><span><b>${its.map(i => `${i.q > 1 ? i.q + "× " : ""}${i.nome}`).join(", ")}</b><small>${pag} · você</small></span><b>${real(t)}</b>`;
+    const lista = $("[data-lista]");
+    lista.prepend(li);
+    while (lista.children.length > 5) lista.lastElementChild.remove();
+    $("[data-entrou]").textContent = real(entrou);
+    $("[data-vendas]").textContent = `${vendas} vendas`;
+    dia.classList.add("somou"); setTimeout(() => dia.classList.remove("somou"), 1200);
+    ticket = {}; recebido = 0; pintar();
+  };
+  prods.forEach(b => b.addEventListener("click", () => { ticket[b.dataset.p] = (ticket[b.dataset.p] || 0) + 1; pintar(); }));
+  $("[data-itens]").addEventListener("click", e => {
+    const b = e.target.closest("[data-tira]"); if (!b) return;
+    if (!--ticket[b.dataset.tira]) delete ticket[b.dataset.tira];
+    pintar();
+  });
+  caixa.querySelectorAll("[data-rec]").forEach(b => b.addEventListener("click", () => { const v = Number(b.dataset.rec); recebido = recebido === v ? 0 : v; pintar(); }));
+  caixa.querySelectorAll("[data-pag]").forEach(b => b.addEventListener("click", () => {
+    if (b.dataset.pag !== "Pix") return registrar(b.dataset.pag);
+    // Pix: primeiro o QR code para o cliente ler, depois "Já pagou"
+    $("[data-pix-v]").textContent = real(total());
+    pix.hidden = false; $("[data-pago]").focus();
+  }));
+  const fecharPix = () => { pix.hidden = true; $('[data-pag="Pix"]').focus(); };
+  $("[data-pago]").addEventListener("click", () => { pix.hidden = true; registrar("Pix"); });
+  $("[data-pix-fechar]").addEventListener("click", fecharPix);
+  pix.addEventListener("keydown", e => { if (e.key === "Escape") fecharPix(); });
+  pintar();
+}
+
 // Planos: os preços vêm de src/plano.js (os mesmos do app). O botão Anual/Mensal troca os valores (o anual aparece dividido por 12).
 const secPlanos = document.querySelector(".planos");
 if (secPlanos) {
