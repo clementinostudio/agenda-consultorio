@@ -1722,7 +1722,7 @@ function Sheet({ title, sub, onClose, children }) {
   const tIni = e => {
     const s = ref.current; if (!s) return;
     const naAlca = !!e.target.closest(".grab, .sheet-head");
-    if (!naAlca && (s.scrollTop > 0 || e.target.closest("input, textarea, select, [contenteditable], .clima-horas, .chips, .cats, .abas, .vozb-chat"))) { toque.current = null; return; }
+    if (!naAlca && (s.scrollTop > 0 || e.target.closest("input, textarea, select, [contenteditable], .clima-horas, .chips, .cats, .abas, .vozb-chat, .transp-subs, .vz-trilho, .casa-chips"))) { toque.current = null; return; }
     toque.current = { y: e.touches[0].clientY, x: e.touches[0].clientX, vivo: naAlca };
     if (naAlca) ini(e);
   };
@@ -1748,7 +1748,7 @@ function Sheet({ title, sub, onClose, children }) {
   }, []);
   return (
     <div className="scrim" ref={scrim} onClick={sair}>
-      <div className="sheet" ref={ref} role="dialog" aria-modal="true" aria-label={title || "Painel"} onClick={e => e.stopPropagation()} onTouchStart={tIni} onTouchMove={tMov} onTouchEnd={tFim} onTouchCancel={tFim}>
+      <div className="sheet" ref={ref} role="dialog" aria-modal="true" aria-label={title || "Painel"} onClick={e => e.stopPropagation()} onScroll={e => e.currentTarget.classList.toggle("rolou", e.currentTarget.scrollTop > 6)} onTouchStart={tIni} onTouchMove={tMov} onTouchEnd={tFim} onTouchCancel={tFim}>
         <div className="grab" />
         {title && (
           <div className="sheet-head">
@@ -4725,6 +4725,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     },
     trocarTema: () => tema.setModo(tema.escuro ? "light" : "dark"),
   };
+  // só no computador de desenvolvimento (npm run dev): deixa abrir qualquer tela pelo console, para testar
+  if (import.meta.env.DEV) window.__avina = { act, setSheet };
 
   const t = todayISO(), ch = t.slice(0, 7);
   const atrasados = db.patients.filter(p => p.active && p.nextDate && p.nextDate < t).length;
@@ -4847,8 +4849,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {paineis}
       {foco && <Agora db={db} conta={conta} now={now} onClose={() => setFoco(false)} act={act} />}
 
-      {toast && (
       {tourVisto && !tourVisto[modoEf] && tabEf === inicioDo(modoEf) && !sheet && !festa.length && !foco && !vozAtiva && <Suspense fallback={null}><Tour key={modoEf} modo={modoEf} termo={TERMO} doisModos={doisModos} onFim={() => fimTour(modoEf)} /></Suspense>}
+      {toast && (
         <div className={"toast" + (toast.undo ? "" : " solo")} role="status">
           <span>{toast.msg}</span>
           {toast.undo && <button onClick={() => { toast.undo(); setToast(null); }}>Desfazer</button>}

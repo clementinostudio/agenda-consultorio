@@ -14,6 +14,7 @@ import "@fontsource/sora/600.css";
 import "@fontsource/sora/700.css";
 
 import "./styles.css";
+import "./modais.css"; // modais: topo e botão à vista, sem rolar de lado
 import App from "./App.jsx";
 import AvisosSistema, { avisarNovaVersao } from "./avisos.jsx";
 

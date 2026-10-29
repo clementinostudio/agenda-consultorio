@@ -1,0 +1,72 @@
+/* =========================================================
+   Modais (o componente Sheet de src/App.jsx), para todos de uma vez.
+   - nada vaza para o lado (e os campos não dão zoom no iPhone)
+   - o título e o X ficam no topo ao rolar; o botão principal fica sempre à vista embaixo
+   - as categorias usam o ícone novo (bolinha cheia; a escolhida ganha anel e brilho)
+   ========================================================= */
+
+/* ---------- nunca rola para o lado ---------- */
+.sheet { overflow-x: hidden; overscroll-behavior: contain; scroll-padding-bottom: 110px; --sheet-bg: var(--surface); }
+.shell.glass .sheet { --sheet-bg: var(--surface); }
+.sheet .stack { min-width: 0; }
+.sheet .stack > * { min-width: 0; max-width: 100%; }
+.sheet img, .sheet svg, .sheet video, .sheet canvas { max-width: 100%; }
+.sheet .fields, .sheet .field { min-width: 0; }
+/* no celular, campo com letra menor que 16px faz o iPhone dar zoom ao tocar (e a tela passa a rolar de lado) */
+@media (pointer: coarse) {
+  /* :where não tem peso: os campos que já têm letra própria (como o valor grande) continuam como estão */
+  :where(.sheet) :where(input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select) { font-size: 16px; }
+  /* os que usavam letra menor que 16px */
+  .nota-link input, .casa-compras-add input, .ob-add input, .ob-conta input, .carro-app-in input { font-size: 16px; }
+}
+
+/* ---------- topo: o título e o X ficam à vista ao rolar ---------- */
+.sheet-head {
+  position: sticky; top: -8px; z-index: 5;
+  margin: 0 -20px 12px; padding: 8px 20px 10px;
+  background: color-mix(in srgb, var(--sheet-bg) 94%, transparent);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  transition: box-shadow .2s ease;
+}
+.sheet.rolou .sheet-head { box-shadow: 0 1px 0 var(--line), 0 10px 18px -12px rgba(0, 0, 0, .35); }
+.sheet-head h2 { font-size: 21px; }
+.sheet-x { flex: none; }
+
+/* ---------- o botão principal fica sempre à vista embaixo ---------- */
+.sheet .stack > .btn.mode, .sheet .stack > form > .btn[type=submit], .sheet form.stack > .btn[type=submit] {
+  position: sticky; bottom: 0; z-index: 4;
+  box-shadow: 0 0 0 10px var(--sheet-bg), 0 46px 0 10px var(--sheet-bg), 0 -22px 22px 2px var(--sheet-bg);
+}
+/* desativado (falta preencher): cor apagada, mas sem transparência, para não deixar ver o que passa por trás */
+.sheet .stack > .btn.mode:disabled { opacity: 1; background: color-mix(in srgb, var(--mode) 32%, var(--surface-2)); color: color-mix(in srgb, var(--mode-ink) 55%, var(--surface-2)); }
+
+/* ---------- o conteúdo entra em sequência ao abrir ---------- */
+.sheet .stack > * { animation: modal-item .38s cubic-bezier(.2, .8, .2, 1) both; }
+.sheet .stack > :nth-child(2) { animation-delay: .03s; } .sheet .stack > :nth-child(3) { animation-delay: .06s; }
+.sheet .stack > :nth-child(4) { animation-delay: .09s; } .sheet .stack > :nth-child(5) { animation-delay: .12s; }
+.sheet .stack > :nth-child(n+6) { animation-delay: .15s; }
+@keyframes modal-item { from { opacity: 0; transform: translateY(10px); } }
+
+/* ---------- categorias: o ícone novo ---------- */
+.cat { position: relative; gap: 8px; padding: 12px 4px 10px; border-radius: 20px; border: 1.5px solid transparent; transition: background .18s, border-color .18s, color .18s, transform .12s; }
+.cat .ci { width: 42px; height: 42px; border-radius: 50%; background: var(--cc); color: var(--ci, #fff); transition: box-shadow .25s ease, transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+.cat .ci svg { width: 19px; height: 19px; stroke-width: 2.2; }
+.cat.on { border-color: color-mix(in srgb, var(--cc) 70%, transparent); background: color-mix(in srgb, var(--cc) 12%, var(--surface-2)); color: var(--fg); }
+.cat.on .ci { background: var(--cc); color: var(--ci, #fff); transform: scale(1.06); box-shadow: 0 0 0 3px var(--surface-2), 0 0 0 5.5px var(--cc), 0 0 18px 2px color-mix(in srgb, var(--cc) 45%, transparent); }
+.cat:active { transform: scale(.95); }
+
+/* ---------- tipos de gasto do transporte: uma linha que rola de lado ---------- */
+.sheet .transp-subs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -20px; padding: 2px 20px 4px; scroll-padding: 0 20px; }
+.sheet .transp-subs::-webkit-scrollbar { display: none; }
+.sheet .transp-subs button { flex: none; white-space: nowrap; }
+
+/* ---------- conversor de moeda (modo viagem): cabe em qualquer largura ---------- */
+.conversor { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.conv-campo, .conv-res { min-width: 0; }
+.conv-campo input { width: 100%; }
+.conv-res b { overflow: hidden; text-overflow: ellipsis; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet .stack > * { animation: none !important; }
+  .cat .ci { transition: none; }
+}
