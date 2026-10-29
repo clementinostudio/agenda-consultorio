@@ -14,7 +14,7 @@ import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cot
 import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro } from "./nuvem.js";
 import { lerBoleto } from "./boleto.js";
 import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
-import { AVATARES, ehAvatarPronto } from "./avatares.js";
+import { AVATARES, ehAvatarPronto, avatarAtualizado } from "./avatares.js";
 import { precosGuardados, veiculosDe } from "./transporte.js";
 import { useCasa, K_CONVITE, pesosDe } from "./casa.js";
 import { janelasDoDia } from "./horarios.js";
@@ -3824,6 +3824,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const [db, setDb] = useState(() => carregarDb(conta));
   const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem
   const casa = useCasa(conta, db, setDb); // gastos da casa divididos com quem mora junto
+  // bolinha de perfil de um desenho antigo: troca sozinha pela nova parecida (e a casa acompanha)
+  useEffect(() => { const nova = avatarAtualizado(conta.foto); if (nova) onAtualizar({ foto: nova }); }, [conta.foto]);
   const linkAg = useLinkAgendamento({
     conta, db, setDb, servidor: servidorAvisos(), horariosLivres, hoje: todayISO(),
     pushId: pushLigado() ? lerJSON(K_PUSH, {}).id : "",
