@@ -4658,10 +4658,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     // PDF compartilhado: boleto (acha o código no texto) ou comprovante (a 1ª página vira foto para a IA)
     lerPdf: async blob => {
       clearTimeout(tRef.current); setToast({ msg: "Abrindo o PDF…" });
+      // fatura do cartão (ou PDF com senha, que quase sempre é fatura ou extrato): vai para a importação
+      const paraImportar = () => { if (!usaPessoal) { notify("A fatura entra no Pessoal: ligue o Pessoal no Perfil."); return; } if (modo !== "pessoal") act.setModo("pessoal"); setSheet({ type: "importar", arquivo: new File([blob], "fatura.pdf", { type: "application/pdf" }), n: Date.now() }); };
       let r;
       try { r = await (await import("./pdf.js")).lerPdf(blob); }
-      catch (e) { setToast(null); vibrar("aviso"); notify("Não consegui abrir esse PDF."); return; }
+      catch (e) { setToast(null); if (e && /senha/.test(e.codigo || "")) return paraImportar(); vibrar("aviso"); notify("Não consegui abrir esse PDF."); return; }
       setToast(null);
+      const { faturaParaImportar } = await import("./extrato.js");
+      if (faturaParaImportar(r.linhas).length >= 3) return paraImportar();
       const cod = acharBoleto(r.texto);
       if (cod) return act.boletoCompartilhado(cod);
       if (r.imagem) return act.lerComprovante(r.imagem);
@@ -4789,7 +4793,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "boleto" && <Suspense fallback={null}><BoletoSheet key={sheet.n || "boleto"} texto={sheet.texto} act={act} onClose={close} /></Suspense>}
-      {sheet && sheet.type === "importar" && <Suspense fallback={null}><ImportarSheet db={db} act={act} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "importar" && <Suspense fallback={null}><ImportarSheet key={sheet.n} db={db} act={act} onClose={close} arquivo={sheet.arquivo} /></Suspense>}
       {sheet && sheet.type === "caixinha" && <Suspense fallback={null}><CaixinhaSheet key={sheet.id || "nova"} cx={(db.pessoal.caixinhas || []).find(x => x.id === sheet.id) || null} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "parcelado" && <Suspense fallback={null}><ParceladoSheet onClose={close} /></Suspense>}
       {sheet && sheet.type === "aluguel" && <Suspense fallback={null}><AluguelSheet onClose={close} /></Suspense>}

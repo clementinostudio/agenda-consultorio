@@ -5,6 +5,7 @@ import { PAGAMENTOS, pagDe, CATS_LOJA, catLoja, CEDULAS, CORES_PRODUTO, MAX_AJUD
 import { lerItem, nomeLoja } from "../nota.js";
 import { LIMITE_GRATIS } from "../plano.js";
 import { NotaSheet } from "./casa.jsx";
+import { usePrecosPerto, PrecoItem, PrecosPainel } from "./precos.jsx";
 const LIMITE_GRATIS_LOJA = LIMITE_GRATIS.lojaDias;
 // gerador de QR code (zxing, o mesmo do leitor): só carrega quando alguém pede o QR do Pix
 import wasmEscritor from "zxing-wasm/writer/zxing_writer.wasm?url";
@@ -278,8 +279,9 @@ export function LojaGastos({ loja: L, conta, act, tema }) {
    ========================================================= */
 export function LojaLista({ loja: L, conta, act, tema }) {
   const [txt, setTxt] = useState("");
+  const abertos = L.loja ? L.faltas.filter(x => !x.feito).sort((a, b) => (a.criado || 0) - (b.criado || 0)) : [];
+  const perto = usePrecosPerto(abertos); // onde o insumo está mais barato (Nota Paraná)
   if (!L.loja) return <SemLoja L={L} conta={conta} act={act} tema={tema} />;
-  const abertos = L.faltas.filter(x => !x.feito).sort((a, b) => (a.criado || 0) - (b.criado || 0));
   const feitos = L.faltas.filter(x => x.feito).sort((a, b) => (a.criado || 0) - (b.criado || 0));
   // o que sempre falta (já esteve na lista e foi comprado): sugestão de "acabou?"
   const sempre = Object.values(L.config.faltou || {}).sort((a, b) => b.n - a.n).map(x => x.texto).filter(t => !L.faltas.some(x => x.texto.toLowerCase() === t.toLowerCase())).slice(0, 8);
@@ -293,7 +295,7 @@ export function LojaLista({ loja: L, conta, act, tema }) {
   const Item = ({ x }) => (
     <div className={"casa-item" + (x.feito ? " feito" : "")}>
       <button className={"box " + (x.feito ? "done" : "up")} onClick={() => { vibrar("toque"); L.salvar("falta", { ...x, feito: !x.feito, por: L.eu }); }} aria-label={x.feito ? `Desmarcar ${x.texto}` : `Comprei ${x.texto}`}>{x.feito && <I.check />}</button>
-      <span>{x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== L.eu ? <small> · {nomeDe(L, x.autor)}</small> : null}</span>
+      <span>{x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== L.eu ? <small> · {nomeDe(L, x.autor)}</small> : null}{!x.feito && <PrecoItem r={perto.res[x.id]} />}</span>
       <button className="casa-item-x" onClick={() => L.apagar("falta", x.id)} aria-label={`Tirar ${x.texto}`}><I.x /></button>
     </div>
   );
@@ -309,6 +311,7 @@ export function LojaLista({ loja: L, conta, act, tema }) {
             <button type="submit" className="icon-btn" aria-label="Adicionar" disabled={!txt.trim()}><I.plus /></button>
           </form>
           {sempre.length > 0 && <div className="casa-sug"><small>Sempre falta. Acabou?</small>{sempre.map(s => <button key={s} type="button" onClick={() => { adicionar([s]); vibrar("toque"); }}><I.plus />{s}</button>)}</div>}
+          <PrecosPainel p={perto} n={abertos.length} />
           {L.faltas.length === 0 && <div className="hint">Acabou alguma coisa? Coloque aqui: aparece na hora no celular de quem vai comprar. Na volta, marque o que comprou e coloque o preço: vira gasto da loja sozinho.</div>}
           {abertos.map(x => <Item key={x.id} x={x} />)}
           {feitos.length > 0 && <div className="casa-secao feitos"><small className="casa-secao-t">Comprado</small>{feitos.map(x => <Item key={x.id} x={x} />)}</div>}

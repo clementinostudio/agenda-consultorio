@@ -109,6 +109,57 @@ export function limparDescricao(s) {
 // Movimentação entre as próprias contas: vem desmarcada (não é gasto de verdade)
 export const ehInterno = s => /(pagamento (de )?fatura|pagamento recebido|fatura (do )?cartao|aplicacao|resgate|\brdb\b|\bcdb\b|investimento|poupanca|mesma titularidade|entre contas|saldo (anterior|do dia)|estorno de pagamento)/.test(semAcento(s));
 
+/* ---------- fatura do cartão em PDF ----------
+   As linhas do PDF (src/pdf.js) → compras. Cada compra é "data  descrição  valor":
+     "17/10 UBER *TRIP 23,90" (Itaú, Bradesco, BB, Santander, C6), "17 OUT •••• 1234 Uber *Trip R$ 23,90" (Nubank).
+   Numa página de duas colunas, a mesma linha tem duas compras: depois de cada valor pode começar outra data.
+   Compra em dólar ("US$ 10,00  52,30"): vale o último valor, o em reais. */
+const MESES = { jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12 };
+const DATA_F = String.raw`(\d{2})[/.](\d{2})(?:[/.](\d{2,4}))?|(\d{2})\s?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b`;
+const VALOR_F = String.raw`(-\s?)?(?:r\$\s?)?(-\s?)?(\d{1,3}(?:\.\d{3})*,\d{2})(\s?-)?`;
+const COMPRA = new RegExp(String.raw`(?:^|\s)(?:${DATA_F})\s+(.+?)\s+${VALOR_F}(?=\s+(?:${DATA_F})\s|\s*$)`, "gi");
+// linhas do resumo da fatura, que têm data e valor mas não são compra
+const RESUMO = /\b(total|subtotal|vencimento|venc\b|pagamento minimo|valor minimo|minimo|limite|saldo|fatura anterior|valor da fatura|fechamento|melhor dia|cet\b|taxa de juros|juros do rotativo|credito rotativo|encargos|proxima fatura|proximas faturas|demais faturas|lancamentos futuros)\b/;
+
+export function lerFatura(linhas, hoje = new Date().toISOString().slice(0, 10)) {
+  const ano = Number(hoje.slice(0, 4)), lim = new Date(Date.parse(hoje) + 7 * 864e5).toISOString().slice(0, 10);
+  const achados = [];
+  (linhas || []).forEach(l0 => {
+    const l = String(l0 || "").replace(/[•*]{2,}\s*\d{4}/g, " ").replace(/−/g, "-").replace(/\s+/g, " ").trim();
+    if (!l) return;
+    COMPRA.lastIndex = 0;
+    for (let m; (m = COMPRA.exec(l));) {
+      const dia = Number(m[1] || m[4]), mes = m[2] ? Number(m[2]) : MESES[semAcento(m[5]).slice(0, 3)];
+      if (!(dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12)) continue;
+      let y = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : ano;
+      let data = `${y}-${pad(mes)}-${pad(dia)}`;
+      if (!m[3] && data > lim) data = `${y - 1}-${pad(mes)}-${pad(dia)}`; // fatura de dezembro lida em janeiro
+      const desc = m[6].replace(/\s*(us\$|u\$|usd|eur|€)\s*[\d.,]+\s*$/i, "").trim();
+      const v = lerValor(m[9]);
+      if (!(v > 0) || !desc || RESUMO.test(semAcento(desc))) continue;
+      const credito = !!(m[7] || m[8] || m[10]) || /\b(estorno|credito|pagamento|reembolso|cashback|devolucao)\b/.test(semAcento(desc));
+      achados.push({ data, desc, valor: credito ? v : -v });
+    }
+  });
+  if (achados.length < 2) return [];
+  // parcela 3/10 de uma compra antiga: entra na data da fatura (a compra de verdade foi lá atrás)
+  const ultima = achados.filter(x => x.valor < 0).reduce((a, x) => (x.data > a ? x.data : a), "");
+  const vezes = {};
+  return achados.map(x => {
+    const p = x.desc.match(/(?:parc(?:ela)?\.?\s*)?\b(\d{1,2})\s?\/\s?(\d{1,2})\b/i);
+    const k0 = p ? Number(p[1]) : 0, n = p ? Number(p[2]) : 0, parcela = p && k0 >= 1 && k0 <= n && n > 1;
+    const data = parcela && k0 > 1 && ultima ? ultima : x.data;
+    // "MAGAZINE LUIZA PARC 03/10" → "MAGAZINE LUIZA (3 de 10)"
+    const desc = parcela ? `${limparDescricao(x.desc.replace(p[0], "").replace(/\s{2,}/g, " ").trim())} (${k0} de ${n})` : x.desc;
+    const k = `${data}|${x.valor}|${semAcento(desc)}`; vezes[k] = (vezes[k] || 0) + 1;
+    return { data, valor: x.valor, desc, fid: `pdf:${k}|${vezes[k]}`, cartao: true };
+  });
+}
+
+// O mesmo formato do extrato (tipo, valor positivo, descrição limpa)
+const arrumar = itens => itens.map(x => ({ ...x, tipo: x.valor < 0 ? "saida" : "entrada", valor: Math.round(Math.abs(x.valor) * 100) / 100, bruto: `${x.hist || ""} ${x.desc}`.trim(), desc: limparDescricao(x.desc) || limparDescricao(x.hist) || x.desc }));
+export const faturaParaImportar = (linhas, hoje) => arrumar(lerFatura(linhas, hoje));
+
 export async function lerExtrato(file) {
   const texto = await lerTextoArquivo(file);
   const ofx = /<OFX>|OFXHEADER/i.test(texto);

@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { I, Sheet, Field, brlReal, dm, todayISO, diffDias, uid, catDe, CATEGORIAS, CAT_ENTRADA, interpretarFala, MarcaLogo, vibrar, copiarTexto, relativo, Ilustra } from "../App.jsx";
 import { normalizar, marcaPorId } from "../marcas.js";
 import { lerBoleto } from "../boleto.js";
-import { lerExtrato, ehInterno } from "../extrato.js";
+import { lerExtrato, ehInterno, faturaParaImportar } from "../extrato.js";
 // O leitor de código de barras (zxing) vem junto com o app: funciona sem internet e não depende de CDN
 import wasmLeitor from "zxing-wasm/reader/zxing_reader.wasm?url";
 
@@ -152,12 +152,15 @@ const COMO = [
   ["Nubank", "Conta: Extrato > ícone de compartilhar > Exportar extrato (OFX ou CSV). Cartão: Fatura > Exportar fatura (CSV)."],
   ["Inter", "Extrato > Exportar > OFX ou CSV."],
   ["Itaú, Bradesco, BB, Caixa, Santander", "No site ou app: Extrato > Salvar/Exportar > OFX (Money) ou CSV/Excel."],
+  ["Fatura em PDF (qualquer banco)", "Escolha o PDF da fatura do cartão. Se ele tiver senha (quase sempre os primeiros números do CPF), eu peço aqui."],
 ];
 
-export function ImportarSheet({ db, act, onClose }) {
+export function ImportarSheet({ db, act, onClose, arquivo }) {
   const [itens, setItens] = useState(null);
   const [erro, setErro] = useState("");
   const [lendo, setLendo] = useState(false);
+  const [comSenha, setComSenha] = useState(null); // { f, errou }: PDF com senha esperando a senha
+  const [senha, setSenha] = useState("");
   const arq = useRef(null);
   // o que você já corrigiu antes vale para as próximas importações (mesma loja -> mesma categoria)
   const aprendido = useMemo(() => {
@@ -173,7 +176,8 @@ export function ImportarSheet({ db, act, onClose }) {
       const lista0 = x.tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
       let cat = ap && lista0.some(c => c.id === ap.cat) ? ap.cat : r.cat && lista0.some(c => c.id === r.cat) ? r.cat : x.tipo === "entrada" ? "outros-e" : "outros";
       const marca = (ap && ap.marca) || r.marca || null;
-      const desc = marca && marcaPorId(marca) ? marcaPorId(marca).nome : x.desc;
+      const parcela = (String(x.desc).match(/\(\d+ de \d+\)$/) || [""])[0]; // fatura em PDF: "Magalu (3 de 10)"
+      const desc = marca && marcaPorId(marca) ? `${marcaPorId(marca).nome}${parcela ? ` ${parcela}` : ""}` : x.desc;
       const ja = ids.has(importId);
       // já anotado à mão: mesmo valor, até 2 dias de diferença e a mesma categoria (ou nome parecido)
       const nx = normalizar(desc);
@@ -183,16 +187,35 @@ export function ImportarSheet({ db, act, onClose }) {
       return { k: i, ...x, desc, cat, marca, importId, ja, parecido, interno, on: !ja && !parecido && !interno };
     }).sort((a, b) => b.data.localeCompare(a.data));
   };
-  const escolher = async e => {
-    const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return;
+  const escolher = e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) ler(f); };
+  // fatura em PDF: as linhas do PDF viram compras (src/extrato.js, lerFatura)
+  const lerPdf = async (f, s) => {
+    try {
+      const { linhasPdf } = await import("../pdf.js");
+      const lista = faturaParaImportar(await linhasPdf(f, s), todayISO());
+      setComSenha(null); setSenha("");
+      if (!lista.length) setErro("Não reconheci as compras nesse PDF. Se o banco tiver a fatura em CSV ou OFX, use esse arquivo.");
+      else setItens(preparar(lista));
+    } catch (e2) {
+      if (e2 && (e2.codigo === "senha" || e2.codigo === "senha-errada")) { setComSenha({ f, errou: e2.codigo === "senha-errada" }); return; }
+      setErro("Não consegui abrir esse PDF.");
+    }
+  };
+  const ler = async f => {
     setErro(""); setLendo(true);
     try {
-      const lista = await lerExtrato(f);
-      if (!lista.length) setErro("Não achei lançamentos nesse arquivo. Use o OFX ou o CSV exportado pelo app do banco.");
-      else setItens(preparar(lista));
-    } catch (e2) { setErro("Não consegui ler esse arquivo. Use o OFX ou o CSV exportado pelo app do banco."); }
+      if (/pdf/i.test(f.type) || /\.pdf$/i.test(f.name || "")) await lerPdf(f);
+      else {
+        const lista = await lerExtrato(f);
+        if (!lista.length) setErro("Não achei lançamentos nesse arquivo. Use o OFX, o CSV ou o PDF da fatura.");
+        else setItens(preparar(lista));
+      }
+    } catch (e2) { setErro("Não consegui ler esse arquivo. Use o OFX, o CSV ou o PDF da fatura."); }
     setLendo(false);
   };
+  const comASenha = async e => { e.preventDefault(); if (!senha.trim() || !comSenha) return; setLendo(true); await lerPdf(comSenha.f, senha.trim()); setLendo(false); };
+  // chegou pelo "Compartilhar" do celular: já começa lendo
+  useEffect(() => { if (arquivo) ler(arquivo); }, []);
   const mudar = (k, patch) => setItens(l => l.map(x => (x.k === k ? { ...x, ...patch } : x)));
   const inverter = () => setItens(l => l.map(x => { const tipo = x.tipo === "saida" ? "entrada" : "saida"; return { ...x, tipo, cat: tipo === "entrada" ? "outros-e" : "outros" }; }));
   const marcados = (itens || []).filter(x => x.on && !x.ja);
@@ -200,8 +223,18 @@ export function ImportarSheet({ db, act, onClose }) {
   if (!itens) return (
     <Sheet title="Importar extrato" sub="Traz os lançamentos do banco de uma vez. O arquivo é lido aqui no aparelho e não vai para lugar nenhum." onClose={onClose}>
       <Ilustra n="arquivo" className="sheet-ilustra" />
-      <button className="btn mode" onClick={() => arq.current && arq.current.click()} disabled={lendo}><I.upload /> {lendo ? "Lendo…" : "Escolher o arquivo do extrato"}</button>
-      <input ref={arq} type="file" accept=".ofx,.qfx,.csv,.txt,text/csv,application/x-ofx,application/vnd.intu.qfx" hidden onChange={escolher} />
+      {comSenha ? (
+        <form className="fields" onSubmit={comASenha}>
+          <div className="note"><I.lock /><span>Esse PDF tem senha. Nos bancos, quase sempre são os primeiros números do CPF (5 ou 6). Ela só é usada aqui no aparelho.</span></div>
+          <Field label="Senha do PDF" htmlFor="imp-senha"><input id="imp-senha" type="password" inputMode="numeric" autoComplete="off" autoFocus value={senha} onChange={e => setSenha(e.target.value)} /></Field>
+          {comSenha.errou && <div className="error">Essa senha não abriu o PDF. Confira e tente de novo.</div>}
+          <button className="btn mode" type="submit" disabled={lendo || !senha.trim()}><I.check /> {lendo ? "Abrindo…" : "Abrir a fatura"}</button>
+          <button className="btn text" type="button" onClick={() => { setComSenha(null); setSenha(""); }}>Escolher outro arquivo</button>
+        </form>
+      ) : <>
+        <button className="btn mode" onClick={() => arq.current && arq.current.click()} disabled={lendo}><I.upload /> {lendo ? "Lendo…" : "Escolher o extrato ou a fatura"}</button>
+        <input ref={arq} type="file" accept=".ofx,.qfx,.csv,.txt,.pdf,text/csv,application/pdf,application/x-ofx,application/vnd.intu.qfx" hidden onChange={escolher} />
+      </>}
       {erro && <div className="error">{erro}</div>}
       <div className="imp-como">
         <b>Como baixar o arquivo</b>

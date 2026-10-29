@@ -5,6 +5,7 @@ import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
 import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja, cnpjDaChave } from "../nota.js";
 import { buscarCnpj } from "../cnpj.js";
 import { lerQRs } from "./ferramentas.jsx";
+import { usePrecosPerto, PrecoItem, PrecosPainel } from "./precos.jsx";
 import { Anel, CatBolinha, Linha, useContagem } from "./visual.jsx";
 // gerador de QR code (zxing, o mesmo do leitor): só carrega quando alguém pede o QR do convite
 import wasmEscritor from "zxing-wasm/writer/zxing_writer.wasm?url";
@@ -432,6 +433,7 @@ function ListaCompras({ C, act }) {
   const abertos = C.compras.filter(x => !x.feito).map(x => ({ ...x, secao: x.secao || secaoDe(x.texto) })).sort((a, b) => ordem[a.secao] - ordem[b.secao] || (a.criado || 0) - (b.criado || 0));
   const feitos = C.compras.filter(x => x.feito).sort((a, b) => (a.criado || 0) - (b.criado || 0));
   const comPreco = abertos.map(preco).filter(Boolean), estimado = comPreco.reduce((s, p) => s + p.total, 0);
+  const perto = usePrecosPerto(abertos); // onde está mais barato (Nota Paraná)
   // o que a casa sempre compra e não está na lista (pelas notas): sugestão de "acabou?"
   const sugestoes = useMemo(() => Object.entries(hist).filter(([, v]) => v.length >= 2).sort((a, b) => b[1].length - a[1].length)
     .map(([k]) => k.split(" ")[0]).filter((w, i, arr) => arr.indexOf(w) === i && !C.compras.some(x => combina(x.texto, w) || combina(w, x.texto))).slice(0, 6), [hist, C.compras]);
@@ -448,7 +450,7 @@ function ListaCompras({ C, act }) {
   const Item = ({ x }) => { const p = !x.feito && preco(x); return (
     <div className={"casa-item" + (x.feito ? " feito" : "")}>
       <button className={"box " + (x.feito ? "done" : "up")} onClick={() => { vibrar("toque"); C.salvar("compra", { ...x, feito: !x.feito, por: C.eu }); }} aria-label={x.feito ? `Desmarcar ${x.texto}` : `Marcar ${x.texto}`}>{x.feito && <I.check />}</button>
-      <span>{x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== C.eu ? <small> · {nomeDe(C, x.autor)}</small> : null}</span>
+      <span>{x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== C.eu ? <small> · {nomeDe(C, x.autor)}</small> : null}{!x.feito && <PrecoItem r={perto.res[x.id]} />}</span>
       {p && <small className="casa-item-p" title={`Último preço: ${brlReal(p.unit)} em ${p.loja}, ${dm(p.data)}`}>~{brl(p.total)}</small>}
       <button className="casa-item-x" onClick={() => C.apagar("compra", x.id)} aria-label={`Tirar ${x.texto}`}><I.x /></button>
     </div>
@@ -461,6 +463,7 @@ function ListaCompras({ C, act }) {
         <button type="submit" className="icon-btn" aria-label="Adicionar" disabled={!txt.trim()}><I.plus /></button>
       </form>
       {sugestoes.length > 0 && <div className="casa-sug"><small>Vocês sempre compram. Acabou?</small>{sugestoes.map(s => <button key={s} type="button" onClick={() => { adicionar([s]); vibrar("toque"); }}><I.plus />{s}</button>)}</div>}
+      <PrecosPainel p={perto} n={abertos.length} />
       {C.compras.length === 0 && <div className="hint">O que um coloca aparece na hora para os outros, já separado por corredor. Depois da compra, leia a nota: os itens da lista se riscam sozinhos e os preços ficam guardados.</div>}
       {grupos.map(g => (
         <div key={g.secao} className="casa-secao">
