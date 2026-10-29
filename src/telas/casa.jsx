@@ -6,6 +6,8 @@ import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, e
 import { lerQRs } from "./ferramentas.jsx";
 // gerador de QR code (zxing, o mesmo do leitor): só carrega quando alguém pede o QR do convite
 import wasmEscritor from "zxing-wasm/writer/zxing_writer.wasm?url";
+// visual da página da casa (fica junto com esta parte do app, que carrega sob demanda)
+import "../casa.css";
 
 const VAGAS = ["Parceiro(a)", "Mãe ou pai", "Filho(a)", "Amigo(a)"];
 const Pessoa = ({ m, grande }) => <span className={"casa-av" + (grande ? " grande" : "")}>{m.foto ? <img src={m.foto} alt="" /> : iniciais(m.nome || "?")}</span>;
@@ -16,50 +18,73 @@ const mesDe = off => { const d = new Date(); const m = new Date(d.getFullYear(),
 const Mai = s => s.charAt(0).toUpperCase() + s.slice(1);
 const pct = (v, t) => (t > 0 ? Math.round((v / t) * 100) : 0);
 
-/* ---------- a página da casa (aba do modo Pessoal, com o fundo do app) ---------- */
+/* ---------- a página da casa (aba do modo Pessoal, com o fundo do app) ----------
+   No celular, uma coluna na ordem do que mais importa: o mês (total, ritmo e o gráfico), quem deve quanto,
+   os atalhos, para onde foi, contas, lista de compras e os gastos do dia a dia. No computador, duas colunas:
+   o mês e os gastos à esquerda; contas, compras e a casa em si à direita. (As colunas viram "display: contents"
+   no celular e cada bloco tem a sua posição em "order": ver src/casa.css.) */
+const soma = ls => ls.reduce((s, l) => s + (Number(l.valor) || 0), 0);
+const diaDe = iso => Number(String(iso).slice(8, 10));
+const diasNoMes = ch => { const [a, m] = ch.split("-").map(Number); return new Date(a, m, 0).getDate(); };
+const menosMovimento = () => !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+// Número que corre até o valor novo (ao abrir e ao trocar de mês)
+function useContagem(alvo, ms = 700) {
+  const [v, setV] = useState(() => (menosMovimento() ? alvo : 0));
+  const de = React.useRef(menosMovimento() ? alvo : 0);
+  useEffect(() => {
+    const ini = de.current; de.current = alvo;
+    if (ini === alvo || menosMovimento()) { setV(alvo); return; }
+    let raf, t0;
+    const passo = t => { if (!t0) t0 = t; const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3); setV(ini + (alvo - ini) * e); if (k < 1) raf = requestAnimationFrame(passo); };
+    raf = requestAnimationFrame(passo);
+    return () => cancelAnimationFrame(raf);
+  }, [alvo]);
+  return v;
+}
+// Cada bloco da página: a posição no celular (order) e o atraso da entrada (--i)
+const Bloco = ({ o, children, className = "" }) => <div className={"c2-bloco " + className} style={{ order: o, "--i": Math.min(o, 9) }}>{children}</div>;
+
 export function CasaPagina({ casa: C, conta, pix, act, tema }) {
   useCamada(() => act.setTab("p-home"), { escurece: false }); // voltar do Android volta ao Início
   const voltar = () => act.setTab("p-home");
   const [nomeCasa, setNomeCasa] = useState("Nossa casa");
   const [link, setLink] = useState("");
   const [off, setOff] = useState(0);
+  const [cat, setCat] = useState(null); // categoria escolhida nos cartões: filtra os gastos
   const [ocupado, setOcupado] = useState(""), [erro, setErro] = useState("");
   const [novoNome, setNovoNome] = useState(null); // null = não está mudando o nome
   const [verQR, setVerQR] = useState(false);
   const faz = async (k, fn) => { setOcupado(k); setErro(""); try { await fn(); } catch (e) { setErro(erroDe(e)); vibrar("erro"); } setOcupado(""); };
 
   if (!C.casa) return (
-    <div className="page casa-pg">
+    <div className="page casa-pg c2">
       <TopBar eyebrow="Dinheiro a dois" title="Nossa casa" act={act} tema={tema} voltar={voltar} />
-      <div className="cols"><div className="col">
-        <section className="panel casa-criar">
-          {C.estado === "carregando" ? <p className="hint">Abrindo a casa…</p> : <>
-            <div className="casa-intro">
-              <Ilustra n="dinheiro" />
-              <ul>
-                <li><b>Cada um anota</b> o que pagou da casa: mercado, aluguel, luz…</li>
-                <li><b>O app divide</b>, igual ou pela renda de cada um, e mostra quem deve quanto.</li>
-                <li><b>Contas, lista de compras e gráficos</b> da casa num lugar só.</li>
-                <li><b>Você escolhe</b> quais gastos seus vão para a casa. O resto continua só seu.</li>
-                <li><b>De graça para todos:</b> quem você convidar não paga nada para usar a casa.</li>
-              </ul>
-            </div>
-            <div className="fields"><Field label="Nome da casa" htmlFor="c-nome"><input id="c-nome" value={nomeCasa} onChange={e => setNomeCasa(e.target.value)} placeholder="Ex.: Nossa casa, Apê" maxLength={60} /></Field></div>
-            {erro && <div className="error">{erro}</div>}
-            <button className="btn mode" disabled={!!ocupado} onClick={() => faz("criar", () => C.criar(nomeCasa.trim()))}><I.check /> {ocupado ? "Criando…" : "Criar a casa"}</button>
-            {!C.nuvem && <div className="hint">Na demonstração a casa fica só neste aparelho. Com a sua conta, ela fica na nuvem e cada pessoa usa o próprio celular.</div>}
-          </>}
-        </section>
-      </div></div>
+      <section className="panel casa-criar c2-criar">
+        {C.estado === "carregando" ? <p className="hint">Abrindo a casa…</p> : <>
+          <div className="c2-criar-topo"><Ilustra n="dinheiro" /><div><b>As contas da casa, sem planilha</b><small>Cada um anota o que pagou e o app mostra quem deve quanto.</small></div></div>
+          <ul className="c2-criar-lista">
+            <li><i><I.users /></i><span><b>Até 5 pessoas</b>, cada uma no próprio celular</span></li>
+            <li><i><I.check /></i><span><b>Divide igual ou pela renda</b> e faz as contas sozinho</span></li>
+            <li><i><I.receipt /></i><span><b>Contas, lista de compras</b> e notas do mercado num lugar só</span></li>
+            <li><i><I.lock /></i><span><b>Seus gastos continuam seus.</b> Só vai para a casa o que você escolher</span></li>
+            <li><i><I.star /></i><span><b>De graça para todos</b> que você convidar</span></li>
+          </ul>
+          <div className="fields"><Field label="Nome da casa" htmlFor="c-nome"><input id="c-nome" value={nomeCasa} onChange={e => setNomeCasa(e.target.value)} placeholder="Ex.: Nossa casa, Apê" maxLength={60} /></Field></div>
+          {erro && <div className="error">{erro}</div>}
+          <button className="btn mode" disabled={!!ocupado} onClick={() => faz("criar", () => C.criar(nomeCasa.trim()))}><I.check /> {ocupado ? "Criando…" : "Criar a casa"}</button>
+          {!C.nuvem && <div className="hint">Sem a nuvem, a casa fica só neste aparelho. Com a sua conta, ela fica na nuvem e cada pessoa usa o próprio celular.</div>}
+        </>}
+      </section>
     </div>
   );
 
   const souDono = C.casa.dono === C.eu;
-  const mes = mesDe(off);
+  const mes = mesDe(off), ant = mesDe(off - 1);
   const doMes = C.lanc.filter(l => (l.data || "").startsWith(mes.ch)).sort((a, b) => b.data.localeCompare(a.data) || (b.criado || 0) - (a.criado || 0));
-  const totalMes = doMes.reduce((s, l) => s + l.valor, 0);
+  const doAnt = C.lanc.filter(l => (l.data || "").startsWith(ant.ch));
   const { dividas } = saldos(C.lanc, C.acertos, C.membros);
   const sozinho = C.membros.length < 2;
+  const trocarMes = k => { setOff(k); setCat(null); vibrar("toque"); };
   const convidar = () => faz("convite", async () => {
     const url = await C.convidar(); setLink(url); setVerQR(false);
     if (navigator.share && C.nuvem) { try { await navigator.share({ title: "Convite para a casa", text: textoConvite(), url }); } catch (e) {} }
@@ -75,114 +100,217 @@ ${link}`)}`, "_blank", "noopener");
     const msg = `Oi, ${nomeDe(C, d.de)}! Pelas contas da casa "${C.casa.nome}", ficou ${brlReal(d.valor)} para você me passar.${pix ? ` Meu Pix: ${pix}` : ""} Obrigado(a)! 💚`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank", "noopener");
   };
+  const pessoas = (
+    <section className="panel c2-pessoas">
+      <div className="panel-head"><h3>{sozinho ? "Chame quem mora com você" : "Quem mora aqui"}</h3>{!sozinho && <small>{C.membros.length} de {MAX_PESSOAS}</small>}</div>
+      {sozinho && <p className="c2-pessoas-txt">A casa fica boa com mais gente: cada um anota o que pagou e o app divide. Quem você chamar entra de graça.</p>}
+      <div className="c2-gente">
+        {C.membros.map(m => (
+          <div key={m.id} className="c2-gente-p">
+            <span className="c2-gente-av"><Pessoa m={m} grande />{m.papel === "dono" && <i aria-label="Criou a casa"><I.star /></i>}</span>
+            <small>{m.id === C.eu ? "Você" : m.nome}</small>
+          </div>
+        ))}
+        {C.membros.length < MAX_PESSOAS && <button className="c2-gente-p vaga" onClick={convidar} aria-label="Convidar alguém"><span className="c2-gente-av"><span className="casa-av grande"><I.plus /></span></span><small>Convidar</small></button>}
+      </div>
+      {C.membros.length < MAX_PESSOAS && <div className="c2-convite">
+        <button className="c2-convite-b" onClick={convidar} disabled={ocupado === "convite"}><I.share /><span><b>{ocupado === "convite" && !verQR ? "Criando…" : "Mandar link"}</b><small>pelo WhatsApp</small></span></button>
+        <button className={"c2-convite-b" + (verQR ? " on" : "")} onClick={mostrarQR} disabled={ocupado === "convite"} aria-expanded={verQR}><I.scan /><span><b>{verQR ? "Esconder QR" : "QR code"}</b><small>pessoalmente</small></span></button>
+      </div>}
+      {verQR && link && <QRConvite link={link} casa={C.casa.nome} quem={conta.nome} act={act} />}
+      {link && <div className="casa-link"><span>{link}</span><button className="bub-act" onClick={() => { try { navigator.clipboard.writeText(link); act.toast("Link copiado"); } catch (e) {} }}>Copiar</button>{C.nuvem && <button className="bub-act" onClick={mandarZap}>WhatsApp</button>}</div>}
+      {!C.nuvem && link && C.membros.length < MAX_PESSOAS && <button className="link" onClick={C.simularEntrada}>Teste: simular alguém aceitando o convite</button>}
+      {C.membros.length < MAX_PESSOAS && <small className="c2-nota">O convite vale 7 dias. Quem entra só vê os gastos da casa, nunca os seus pessoais.</small>}
+      {erro && <div className="error">{erro}</div>}
+    </section>
+  );
 
   return (
-    <div className="page casa-pg">
-      <TopBar eyebrow={sozinho ? "Dinheiro a dois" : `${C.membros.length} pessoas`} title={C.casa.nome} act={act} tema={tema} voltar={voltar} />
-      <div className="cols">
-        <div className="col">
-          {/* pessoas da casa e as vagas */}
-          <section className="panel casa-gente">
-            <div className="casa-pessoas">
-              {C.membros.map(m => (
-                <div key={m.id} className="casa-pessoa">
-                  <Pessoa m={m} grande />{m.papel === "dono" && <i className="casa-estrela" aria-label="Criou a casa"><I.star /></i>}
-                  <small>{m.id === C.eu ? "Você" : m.nome}</small>
-                </div>
-              ))}
-              {Array.from({ length: MAX_PESSOAS - C.membros.length }).map((_, k) => (
-                <button key={k} className="casa-pessoa vaga" onClick={convidar} aria-label="Convidar alguém">
-                  <span className="casa-av grande"><I.plus /></span><small>ex.: {VAGAS[(C.membros.length - 1 + k) % VAGAS.length]}</small>
-                </button>
-              ))}
+    <div className="page casa-pg c2">
+      <TopBar eyebrow={sozinho ? "Dinheiro a dois" : `${C.membros.length} pessoas`} title={C.casa.nome} act={act} tema={tema} voltar={voltar}
+        extra={!sozinho && <span className="c2-rostos" aria-label={C.membros.map(m => nomeDe(C, m.id)).join(", ")}>{C.membros.slice(0, 4).map(m => <Pessoa key={m.id} m={m} />)}</span>} />
+      <div className="c2-grade">
+        <div className="c2-col">
+          <Bloco o={1}><MesDaCasa mes={mes} ant={ant} off={off} itens={doMes} doAnt={doAnt} onMes={trocarMes} /></Bloco>
+          {sozinho ? <Bloco o={2}>{pessoas}</Bloco>
+            : <Bloco o={2}><CartaoSaldo C={C} mes={mes} itens={doMes} dividas={dividas} ocupado={ocupado} onAcertar={acertar} onLembrar={lembrar} /></Bloco>}
+          <Bloco o={3}>
+            <div className="c2-acoes">
+              <button className="c2-acao principal" onClick={() => act.abrirGastoCasa()}><I.plus /><span>Anotar gasto</span></button>
+              <button className="c2-acao" onClick={() => act.lerNotaCasa()}><I.receipt /><span>Ler nota</span></button>
+              <button className="c2-acao" onClick={() => act.trazerParaCasa()}><I.upload /><span>Dos meus gastos</span></button>
             </div>
-            {C.membros.length < MAX_PESSOAS && (
-              <button className="casa-convite" onClick={convidar} disabled={ocupado === "convite"}>
-                <span className="ic"><I.share /></span>
-                <span className="tx"><b>{ocupado === "convite" ? "Criando o link…" : "Convidar por link"}</b><small>Mande pelo WhatsApp. Quem abrir entra na casa, de graça (o link vale 7 dias).</small></span>
-                <I.chev />
-              </button>
-            )}
-            {C.membros.length < MAX_PESSOAS && (
-              <button className="casa-convite" onClick={mostrarQR} disabled={ocupado === "convite"} aria-expanded={verQR}>
-                <span className="ic"><I.scan /></span>
-                <span className="tx"><b>{verQR ? "Esconder o QR code" : "Mostrar QR code"}</b><small>Sem link: a pessoa aponta a câmera do celular e entra na casa.</small></span>
-                <I.chev />
-              </button>
-            )}
-            {verQR && link && <QRConvite link={link} casa={C.casa.nome} quem={conta.nome} act={act} />}
-            {link && <div className="casa-link"><span>{link}</span><button className="bub-act" onClick={() => { try { navigator.clipboard.writeText(link); act.toast("Link copiado"); } catch (e) {} }}>Copiar</button>{C.nuvem && <button className="bub-act" onClick={mandarZap}>WhatsApp</button>}</div>}
-            {!C.nuvem && link && C.membros.length < MAX_PESSOAS && <button className="link" onClick={C.simularEntrada}>Demonstração: simular alguém aceitando o convite</button>}
-            {erro && <div className="error">{erro}</div>}
-          </section>
-
-          {/* quem deve quanto */}
-          {!sozinho && <section className="panel casa-saldo">
-            <div className="panel-head"><h3>Quem deve quanto</h3></div>
-            {dividas.length === 0 ? <div className="casa-ok"><I.check /><span>Tudo acertado entre vocês.</span></div> : dividas.map((d, k) => (
-              <div key={k} className="casa-divida">
-                <span><b>{nomeDe(C, d.de)}</b> deve <b className="num">{brl(d.valor)}</b> para <b>{d.para === C.eu ? "você" : nomeDe(C, d.para)}</b></span>
-                {(d.de === C.eu || d.para === C.eu) && <span className="casa-divida-acts">
-                  {d.para === C.eu && <button className="bub-act" onClick={() => lembrar(d)}>Lembrar</button>}
-                  <button className="bub-act" disabled={!!ocupado} onClick={() => acertar(d)}>{d.de === C.eu ? "Paguei" : "Recebi"}</button>
-                </span>}
-              </div>
-            ))}
-            <Acertos C={C} />
-          </section>}
-
-          <div className="casa-acoes">
-            <button className="btn mode" onClick={() => act.abrirGastoCasa()}><I.plus /> Anotar gasto da casa</button>
-            <button className="btn ghost" onClick={() => act.trazerParaCasa()}><I.upload /> Trazer dos meus gastos</button>
-          </div>
-
-          <ContasDaCasa C={C} act={act} />
-          <ListaCompras C={C} act={act} />
+          </Bloco>
+          {doMes.length > 0 && <Bloco o={4}><Categorias itens={doMes} doAnt={doAnt} ant={ant} sel={cat} onSel={c => { setCat(cat === c ? null : c); vibrar("toque"); }} /></Bloco>}
+          <Bloco o={7}><GastosDoMes C={C} mes={mes} itens={doMes} cat={cat} onCat={setCat} act={act} sozinho={sozinho} /></Bloco>
         </div>
 
-        <div className="col">
-          {/* o mês da casa: total, para onde foi, quem pagou e os gastos */}
-          <section className="panel casa-mes">
-            <div className="casa-mes-nav">
-              <button className="icon-btn" onClick={() => setOff(off - 1)} aria-label="Mês anterior"><I.chevL /></button>
-              <span>{Mai(mes.nome)} de {mes.ano}</span>
-              <button className="icon-btn" onClick={() => setOff(off + 1)} aria-label="Próximo mês" disabled={off >= 0}><I.chev /></button>
-            </div>
-            <div className="casa-total"><Money v={totalMes} /><small>{doMes.length} {doMes.length === 1 ? "gasto" : "gastos"} da casa</small></div>
-            <GraficoMeses C={C} off={off} onEscolher={setOff} />
-            {totalMes > 0 && <GraficoCategorias itens={doMes} />}
-            {totalMes > 0 && !sozinho && <GraficoQuem C={C} itens={doMes} />}
-          </section>
-
-          <section className="panel casa-lista">
-            <div className="panel-head"><h3>Gastos de {mes.nome}</h3></div>
-            {doMes.length === 0 && <div className="empty">Nenhum gasto da casa em {mes.nome}. {sozinho ? "Convide alguém e anotem juntos." : "Quem pagar, anota aqui."}</div>}
-            {doMes.map(l => { const cat = catDe(l.cat || "casa"); const so = l.participantes && l.participantes.length === 1; return (
-              <button key={l.id} className="casa-gasto" onClick={() => act.abrirGastoCasa(l)}>
-                <span className="ci" style={catVars(cat)}><CatIcon cat={cat} /></span>
-                <span className="mid"><b>{l.desc || cat.nome}</b><small>{nomeDe(C, l.pagou)} pagou · {dm(l.data)}{so ? " · só para mostrar" : l.pesos ? " · proporcional" : l.participantes && l.participantes.length < C.membros.length ? ` · dividido entre ${l.participantes.length}` : ""}{l.origem ? " · dos gastos pessoais" : ""}{l.contaId ? " · conta da casa" : ""}</small></span>
-                <span className="amt num"><Money v={l.valor} /></span>
-              </button>
-            ); })}
-          </section>
-
-          <MercadoCasa C={C} act={act} />
-          {!sozinho && <ComoDividem C={C} />}
-
-          <div className="casa-fim">
-            {souDono && (novoNome === null
-              ? <button className="link" onClick={() => setNovoNome(C.casa.nome)}>Mudar o nome da casa</button>
-              : <form className="nota-link" onSubmit={e => { e.preventDefault(); faz("nome", async () => { await C.renomear(novoNome); setNovoNome(null); act.toast("Nome da casa mudado"); }); }}>
-                  <input value={novoNome} onChange={e => setNovoNome(e.target.value)} maxLength={60} aria-label="Nome da casa" autoFocus />
-                  <button type="submit" className="bub-act" disabled={!novoNome.trim() || ocupado === "nome"}>Salvar</button>
-                  <button type="button" className="bub-act" onClick={() => setNovoNome(null)}>Cancelar</button>
-                </form>)}
-            {souDono && C.membros.filter(m => m.id !== C.eu).map(m => <ConfirmButton key={m.id} label={`Tirar ${m.nome} da casa`} titulo={`Tirar ${m.nome}?`} texto="A pessoa deixa de ver os gastos da casa. O que ela anotou continua." acao="Tirar" onConfirm={() => faz("tirar", () => C.tirar(m.id))} />)}
-            <ConfirmButton label="Sair da casa" titulo="Sair da casa?" texto={sozinho ? "A casa e os gastos dela somem." : souDono ? "Você deixa de ver os gastos da casa. Quem entrou primeiro passa a cuidar dela." : "Você deixa de ver os gastos da casa."} acao="Sair" onConfirm={() => faz("sair", () => C.sair())} />
-          </div>
+        <div className="c2-col">
+          <Bloco o={5}><ContasDaCasa C={C} act={act} /></Bloco>
+          <Bloco o={6}><ListaCompras C={C} act={act} /></Bloco>
+          <Bloco o={8}><MercadoCasa C={C} act={act} /></Bloco>
+          {!sozinho && doMes.length > 0 && <Bloco o={9}><section className="panel"><div className="panel-head"><h3>Quem pagou em {mes.nome}</h3></div><GraficoQuem C={C} itens={doMes} /></section></Bloco>}
+          <Bloco o={10}><GraficoMeses C={C} off={off} onEscolher={trocarMes} /></Bloco>
+          {!sozinho && <Bloco o={11}><ComoDividem C={C} /></Bloco>}
+          {!sozinho && <Bloco o={12}>{pessoas}</Bloco>}
+          <Bloco o={13}>
+            <section className="c2-ajustes">
+              {souDono && (novoNome === null
+                ? <button className="c2-ajuste" onClick={() => setNovoNome(C.casa.nome)}><I.pencil /> Mudar o nome da casa</button>
+                : <form className="nota-link" onSubmit={e => { e.preventDefault(); faz("nome", async () => { await C.renomear(novoNome); setNovoNome(null); act.toast("Nome da casa mudado"); }); }}>
+                    <input value={novoNome} onChange={e => setNovoNome(e.target.value)} maxLength={60} aria-label="Nome da casa" autoFocus />
+                    <button type="submit" className="bub-act" disabled={!novoNome.trim() || ocupado === "nome"}>Salvar</button>
+                    <button type="button" className="bub-act" onClick={() => setNovoNome(null)}>Cancelar</button>
+                  </form>)}
+              {souDono && C.membros.filter(m => m.id !== C.eu).map(m => <ConfirmButton key={m.id} label={`Tirar ${m.nome} da casa`} titulo={`Tirar ${m.nome}?`} texto="A pessoa deixa de ver os gastos da casa. O que ela anotou continua." acao="Tirar" onConfirm={() => faz("tirar", () => C.tirar(m.id))} />)}
+              <ConfirmButton label="Sair da casa" titulo="Sair da casa?" texto={sozinho ? "A casa e os gastos dela somem." : souDono ? "Você deixa de ver os gastos da casa. Quem entrou primeiro passa a cuidar dela." : "Você deixa de ver os gastos da casa."} acao="Sair" onConfirm={() => faz("sair", () => C.sair())} />
+            </section>
+          </Bloco>
         </div>
       </div>
     </div>
+  );
+}
+
+/* ---------- o mês da casa: total grande, comparação justa com o mês passado e a linha do mês ---------- */
+// No mês atual, compara com o mês passado até o mesmo dia (senão o mês corrente sempre "gasta menos").
+function MesDaCasa({ mes, ant, off, itens, doAnt, onMes }) {
+  const atual = off === 0, hoje = todayISO();
+  const ateDia = atual ? diaDe(hoje) : 31;
+  const total = soma(itens), totalAnt = soma(doAnt.filter(l => diaDe(l.data) <= ateDia));
+  const dif = total - totalAnt;
+  const v = useContagem(total);
+  // gasto acumulado dia a dia: este mês (até hoje) e o mês passado inteiro, para ver o ritmo
+  const acum = (ls, n) => { const p = Array(n).fill(0); ls.forEach(l => { const d = diaDe(l.data); if (d >= 1 && d <= n) p[d - 1] += Number(l.valor) || 0; }); let s = 0; return p.map(x => (s += x)); };
+  const nA = diasNoMes(mes.ch), nB = diasNoMes(ant.ch);
+  const serieA = acum(itens, nA).slice(0, atual ? diaDe(hoje) : nA), serieB = acum(doAnt, nB);
+  const W = 340, H = 118, N = Math.max(nA, nB), max = Math.max(1, serieA[serieA.length - 1] || 0, serieB[nB - 1] || 0);
+  const x = i => (N > 1 ? (i / (N - 1)) * W : 0), y = val => H - 6 - (val / max) * (H - 18);
+  // curva suave entre os dias (degraus arredondados, como um gasto que acontece aos saltos)
+  const linha = s => s.map((val, i) => (i === 0 ? `M${x(0)},${y(val)}` : `C${(x(i - 1) + x(i)) / 2},${y(s[i - 1])} ${(x(i - 1) + x(i)) / 2},${y(val)} ${x(i)},${y(val)}`)).join(" ");
+  const temA = serieA.length > 1 && total > 0, temB = (serieB[nB - 1] || 0) > 0;
+  const fim = temA ? { cx: x(serieA.length - 1), cy: y(serieA[serieA.length - 1]) } : null;
+  const frase = !total && !totalAnt ? "Nada anotado ainda"
+    : !totalAnt ? `Primeiro mês com gastos da casa`
+    : Math.abs(dif) < 1 ? `Igual a ${ant.nome}${atual ? ` até o dia ${ateDia}` : ""}`
+    : `${brl(Math.abs(dif))} ${dif > 0 ? "a mais" : "a menos"} que ${ant.nome}${atual ? ` até o dia ${ateDia}` : ""}`;
+  return (
+    <section className="c2-mes" aria-label={`Gastos da casa em ${mes.nome}`}>
+      <div className="c2-mes-nav">
+        <button className="icon-btn" onClick={() => onMes(off - 1)} aria-label="Mês anterior"><I.chevL /></button>
+        <span>Gasto da casa em <b>{mes.nome}</b>{mes.ano !== new Date().getFullYear() ? ` de ${mes.ano}` : ""}</span>
+        <button className="icon-btn" onClick={() => onMes(off + 1)} aria-label="Próximo mês" disabled={off >= 0}><I.chev /></button>
+      </div>
+      <div className="c2-total"><Money v={v} /></div>
+      <div className={"c2-dif" + (totalAnt && Math.abs(dif) >= 1 ? (dif > 0 ? " sobe" : " desce") : "")}>
+        {totalAnt > 0 && Math.abs(dif) >= 1 && <i aria-hidden="true">{dif > 0 ? "↑" : "↓"}</i>}<span>{frase}</span>
+      </div>
+      {(temA || temB) && <div className="c2-linha" key={mes.ch}>
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Ritmo de gastos: ${brlReal(total)} em ${mes.nome}${temB ? `, contra ${brlReal(serieB[nB - 1])} no mês de ${ant.nome} inteiro` : ""}`}>
+          <defs><linearGradient id="c2-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="var(--mode)" stopOpacity=".34" /><stop offset="1" stopColor="var(--mode)" stopOpacity="0" /></linearGradient></defs>
+          {temB && <path className="c2-linha-ant" d={linha(serieB)} vectorEffect="non-scaling-stroke" />}
+          {temA && <path className="c2-linha-area" d={`${linha(serieA)} L${x(serieA.length - 1)},${H} L0,${H} Z`} fill="url(#c2-area)" />}
+          {temA && <path className="c2-linha-mes" d={linha(serieA)} pathLength="1" vectorEffect="non-scaling-stroke" />}
+        </svg>
+        {fim && <span className="c2-linha-pt" style={{ left: `${(fim.cx / W) * 100}%`, top: `${(fim.cy / H) * 100}%` }} />}
+        <div className="c2-linha-leg"><span><i className="a" />{Mai(mes.nome)}</span>{temB && <span><i className="b" />{Mai(ant.nome)}</span>}<span className="dir">{atual ? "hoje" : `${nA} ${mes.curto}`}</span></div>
+      </div>}
+    </section>
+  );
+}
+
+/* ---------- quem deve quanto, no jeito de um cartão de orçamento: o anel é quanto você pagou da casa no mês ---------- */
+function Anel({ p, children, cor = "var(--mode)", tam = 64, esp = 6 }) {
+  const r = (tam - esp) / 2, c = 2 * Math.PI * r, k = Math.max(0, Math.min(1, p));
+  return (
+    <span className="c2-anel" style={{ width: tam, height: tam }}>
+      <svg viewBox={`0 0 ${tam} ${tam}`} aria-hidden="true">
+        <circle cx={tam / 2} cy={tam / 2} r={r} className="trilho" strokeWidth={esp} />
+        <circle cx={tam / 2} cy={tam / 2} r={r} className="cheio" strokeWidth={esp} style={{ stroke: cor, strokeDasharray: c, "--c": c, strokeDashoffset: c * (1 - k) }} transform={`rotate(-90 ${tam / 2} ${tam / 2})`} />
+      </svg>
+      <span className="c2-anel-in">{children}</span>
+    </span>
+  );
+}
+function CartaoSaldo({ C, mes, itens, dividas, ocupado, onAcertar, onLembrar }) {
+  const total = soma(itens);
+  let pagou = 0, justo = 0;
+  itens.forEach(l => { if (l.pagou === C.eu) pagou += l.valor; justo += (partes(l, C.membros)[C.eu] || 0); });
+  const p = total > 0 ? pagou / total : 0;
+  const minhas = dividas.filter(d => d.de === C.eu || d.para === C.eu), outras = dividas.filter(d => !minhas.includes(d));
+  const principal = minhas[0];
+  const titulo = principal ? (principal.para === C.eu ? <><b>{nomeDe(C, principal.de)}</b> te deve <b className="num">{brl(principal.valor)}</b></> : <>Você deve <b className="num">{brl(principal.valor)}</b> para <b>{nomeDe(C, principal.para)}</b></>)
+    : dividas.length ? <>Com você, <b>tudo certo</b></> : <><b>Tudo acertado</b> entre vocês</>;
+  const sub = total > 0 ? `Em ${mes.nome}, você pagou ${pct(pagou, total)}% dos gastos da casa. A sua parte é ${pct(justo, total)}%.` : `Nenhum gasto da casa em ${mes.nome} ainda.`;
+  return (
+    <section className="c2-saldo">
+      <div className="c2-saldo-topo">
+        <Anel p={total > 0 ? p : dividas.length ? 0 : 1} cor={principal && principal.de === C.eu ? "var(--amber)" : "var(--mode)"}>{total > 0 ? <b>{pct(pagou, total)}%</b> : <I.check />}</Anel>
+        <div className="c2-saldo-tx"><span className="c2-saldo-t">{titulo}</span><small>{sub}</small></div>
+      </div>
+      {minhas.map((d, k) => (
+        <div key={k} className="c2-saldo-acts">
+          {k > 0 && <span className="c2-saldo-mais">{d.para === C.eu ? `${nomeDe(C, d.de)} te deve ${brl(d.valor)}` : `Você deve ${brl(d.valor)} para ${nomeDe(C, d.para)}`}</span>}
+          {d.para === C.eu && <button className="c2-btn" onClick={() => onLembrar(d)}>Lembrar no WhatsApp</button>}
+          <button className="c2-btn forte" disabled={!!ocupado} onClick={() => onAcertar(d)}><I.check />{d.de === C.eu ? "Já paguei" : "Recebi"}</button>
+        </div>
+      ))}
+      {outras.map((d, k) => <div key={"o" + k} className="c2-saldo-outra">{nomeDe(C, d.de)} deve {brl(d.valor)} para {nomeDe(C, d.para)}</div>)}
+      <Acertos C={C} />
+    </section>
+  );
+}
+
+/* ---------- para onde foi: cartões que rolam de lado, com o anel da fatia do mês; tocar filtra os gastos ---------- */
+function Categorias({ itens, doAnt, ant, sel, onSel }) {
+  const por = {}, porAnt = {};
+  itens.forEach(l => { const c = l.cat || "casa"; por[c] = (por[c] || 0) + l.valor; });
+  doAnt.forEach(l => { const c = l.cat || "casa"; porAnt[c] = (porAnt[c] || 0) + l.valor; });
+  const cats = Object.entries(por).sort((a, b) => b[1] - a[1]), tot = soma(itens);
+  return (
+    <section className="c2-cats" aria-label="Para onde foi">
+      <div className="c2-sec-head"><h3>Para onde foi</h3>{sel && <button className="link" onClick={() => onSel(sel)}>Ver tudo</button>}</div>
+      <div className="c2-cats-trilho" role="group">
+        {cats.map(([c, v]) => { const ct = catDe(c), a = porAnt[c] || 0; return (
+          <button key={c} type="button" className={"c2-cat" + (sel === c ? " on" : sel ? " apaga" : "")} aria-pressed={sel === c} onClick={() => onSel(c)} style={{ "--gc": `var(--g-${c}, var(--mode))` }}>
+            <Anel p={tot > 0 ? v / tot : 0} cor="var(--gc)" tam={46} esp={4}><span className="c2-cat-ic" style={catVars(ct)}><CatIcon cat={ct} /></span></Anel>
+            <span className="c2-cat-n">{ct.nome}</span>
+            <b className="num c2-cat-v">{brl(v)}</b>
+            <small>{pct(v, tot)}% do mês{a > 0 ? ` · ${v > a ? "↑" : v < a ? "↓" : "="} ${ant.curto}` : ""}</small>
+          </button>
+        ); })}
+      </div>
+    </section>
+  );
+}
+
+/* ---------- gastos do mês, por dia (com o total do mês no título) ---------- */
+function GastosDoMes({ C, mes, itens, cat, onCat, act, sozinho }) {
+  const lista = cat ? itens.filter(l => (l.cat || "casa") === cat) : itens;
+  const dias = []; lista.forEach(l => { const g = dias[dias.length - 1]; if (g && g.data === l.data) g.itens.push(l); else dias.push({ data: l.data, itens: [l] }); });
+  const rotulo = d => { const r = relativo(d); return /^(hoje|ontem)$/i.test(r) ? r : `${diaDe(d)} de ${mes.nome}`; };
+  return (
+    <section className="panel c2-gastos">
+      <div className="c2-gastos-topo">
+        <h3>{Mai(mes.nome)} <span>{mes.ano}</span></h3>
+        <b className="num"><Money v={soma(lista)} /></b>
+      </div>
+      {cat && <button className="c2-filtro" onClick={() => onCat(null)}><span className="ci" style={catVars(catDe(cat))}><CatIcon cat={catDe(cat)} /></span>Só {catDe(cat).nome.toLowerCase()}<I.x /></button>}
+      {lista.length === 0 && <div className="empty">Nenhum gasto da casa em {mes.nome}. {sozinho ? "Convide alguém e anotem juntos." : "Quem pagar, anota aqui."}</div>}
+      {dias.map(g => (
+        <div key={g.data} className="c2-dia">
+          <div className="c2-dia-t"><span>{rotulo(g.data)}</span>{g.itens.length > 1 && <small className="num">{brl(soma(g.itens))}</small>}</div>
+          {g.itens.map(l => { const ct = catDe(l.cat || "casa"); const so = l.participantes && l.participantes.length === 1; const quem = C.membros.find(m => m.id === l.pagou); return (
+            <button key={l.id} className="casa-gasto c2-gasto" onClick={() => act.abrirGastoCasa(l)}>
+              <span className="ci" style={catVars(ct)}><CatIcon cat={ct} /></span>
+              <span className="mid"><b>{l.desc || ct.nome}</b><small>{nomeDe(C, l.pagou)} pagou{so ? " · só para mostrar" : l.pesos ? " · proporcional" : l.participantes && l.participantes.length < C.membros.length ? ` · entre ${l.participantes.length}` : ""}{l.nota ? " · com nota" : ""}{l.contaId ? " · conta da casa" : ""}</small></span>
+              <span className="amt num"><Money v={l.valor} /></span>
+              {!sozinho && quem && <span className="c2-gasto-quem" aria-hidden="true"><Pessoa m={quem} /></span>}
+            </button>
+          ); })}
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -232,43 +360,25 @@ function QRConvite({ link, casa, quem, act }) {
 }
 
 /* ---------- gráficos (cores de gráfico validadas para os dois temas: --g-<categoria>) ---------- */
-// Os últimos 6 meses até o mês escolhido; tocar numa barra abre aquele mês
+// Os últimos meses da casa (só a partir do primeiro com gasto); tocar numa barra abre aquele mês
 function GraficoMeses({ C, off, onEscolher }) {
-  const meses = [-5, -4, -3, -2, -1, 0].map(k => { const m = mesDe(off + k); return { ...m, k: off + k, total: C.lanc.filter(l => (l.data || "").startsWith(m.ch)).reduce((s, l) => s + l.valor, 0) }; });
-  const maior = Math.max(...meses.map(m => m.total), 1);
-  if (meses.every(m => !m.total)) return null;
+  const todos = [-5, -4, -3, -2, -1, 0].map(k => { const m = mesDe(off + k); return { ...m, k: off + k, total: soma(C.lanc.filter(l => (l.data || "").startsWith(m.ch))) }; });
+  const ini = todos.findIndex(m => m.total > 0), meses = ini < 0 ? [] : todos.slice(Math.min(ini, todos.length - 2));
+  if (meses.filter(m => m.total > 0).length < 2) return null; // um mês só não é histórico
+  const maior = Math.max(...meses.map(m => m.total), 1), media = soma(meses.filter(m => m.total > 0).map(m => ({ valor: m.total }))) / meses.filter(m => m.total > 0).length;
   return (
-    <div className="g-meses" role="group" aria-label="Gastos da casa nos últimos 6 meses">
-      {meses.map(m => (
-        <button key={m.ch} type="button" className={"g-mes" + (m.k === off ? " on" : "")} disabled={m.k > 0} onClick={() => onEscolher(m.k)} title={`${Mai(m.nome)}: ${brlReal(m.total)}`} aria-label={`${Mai(m.nome)}: ${brlReal(m.total)}`}>
-          {m.k === off && m.total > 0 && <small className="g-val">{brl(m.total)}</small>}
-          <i style={{ height: `${Math.max(3, (m.total / maior) * 78)}%` }} />
-          <span>{m.curto}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// Para onde foi: barra empilhada por categoria (com espaço entre as partes) e a lista com nome, valor e %
-function GraficoCategorias({ itens }) {
-  const [sel, setSel] = useState(null);
-  const por = {}; itens.forEach(l => { const c = l.cat || "casa"; por[c] = (por[c] || 0) + l.valor; });
-  const cats = Object.entries(por).sort((a, b) => b[1] - a[1]), tot = cats.reduce((s, c) => s + c[1], 0);
-  return (
-    <div className="g-cats">
-      <b className="g-tit">Para onde foi</b>
-      <div className="g-pilha" role="img" aria-label={cats.map(([c, v]) => `${catDe(c).nome} ${pct(v, tot)}%`).join(", ")}>
-        {cats.map(([c, v]) => <i key={c} className={sel && sel !== c ? "apaga" : ""} style={{ width: `${(v / tot) * 100}%`, background: `var(--g-${c}, var(--mode))` }} title={`${catDe(c).nome}: ${brlReal(v)}`} onClick={() => setSel(sel === c ? null : c)} />)}
-      </div>
-      <div className="g-leg">
-        {cats.map(([c, v]) => (
-          <button key={c} type="button" className={"g-leg-l" + (sel === c ? " on" : sel ? " apaga" : "")} onClick={() => setSel(sel === c ? null : c)}>
-            <i style={{ background: `var(--g-${c}, var(--mode))` }} /><span>{catDe(c).nome}</span><b className="num">{brl(v)}</b><small>{pct(v, tot)}%</small>
+    <section className="panel c2-meses">
+      <div className="panel-head"><h3>Mês a mês</h3><small>média {brl(media)}</small></div>
+      <div className="g-meses c2-barras" role="group" aria-label="Gastos da casa mês a mês" style={{ "--n": meses.length }}>
+        {meses.map((m, i) => (
+          <button key={m.ch} type="button" className={"g-mes" + (m.k === off ? " on" : "")} disabled={m.k > 0} onClick={() => onEscolher(m.k)} title={`${Mai(m.nome)}: ${brlReal(m.total)}`} aria-label={`${Mai(m.nome)}: ${brlReal(m.total)}`} style={{ "--i": i }}>
+            <small className="g-val">{m.total > 0 ? brl(m.total).replace(/,\d+$/, "") : ""}</small>
+            <i style={{ height: `${Math.max(4, (m.total / maior) * 100)}%` }} />
+            <span>{m.curto}</span>
           </button>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
