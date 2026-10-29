@@ -80,7 +80,7 @@ const PROFISSOES = [
   { id: "Fisioterapia", termo: "Paciente" }, { id: "Coaching", termo: "Cliente" },
 ];
 const DURACOES = [30, 40, 45, 50, 60];
-const K = { contas: "agenda-contas", sessao: "agenda-sessao", tema: "agenda-tema", oculto: "agenda-oculto", db: e => `agenda-db:${e}`, modo: e => `agenda-modo:${e}`, avisos: e => `agenda-avisos:${e}`, inicial: e => `agenda-inicial:${e}` };
+const K = { contas: "agenda-contas", sessao: "agenda-sessao", tema: "agenda-tema", oculto: "agenda-oculto", db: e => `agenda-db:${e}`, modo: e => `agenda-modo:${e}`, avisos: e => `agenda-avisos:${e}`, inicial: e => `agenda-inicial:${e}`, tour: e => `agenda-tour:${e}` };
 
 /* =========================================================
    2. DATAS, HORAS E DINHEIRO
@@ -3680,6 +3680,7 @@ function SaudeConsultorio({ db, chave, meta }) {
 
 // Perguntas iniciais: uma por tela, com o porquê de cada pergunta
 const Onboarding = lazy(() => import("./telas/inicio.jsx").then(m => ({ default: m.Onboarding })));
+const Tour = lazy(() => import("./telas/tour.jsx").then(m => ({ default: m.Tour })));
 
 /* ---------- Avisos com o app fechado: cartão dos Ajustes ---------- */
 
@@ -4002,6 +4003,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   // Conquistas: calculadas a partir dos dados; as novas ganham comemoração (uma de cada vez)
   const conquistas = useMemo(() => avaliarConquistas(db, ajudaConquistas(), { perfil, usaPessoal, instalado: appInstalado(), push, nuvem: !!conta.uid, av }), [db, push, perfil, usaPessoal, conta.uid, av.nomes]);
   const [festa, setFesta] = useState([]);
+  // Tour da primeira vez: { modo: true } para cada modo já visto. Só quem acabou de fazer o cadastro ganha a chave;
+  // quem já usava o app (ou entrou num aparelho novo) não vê o tour sozinho, só pelo Perfil
+  const [tourVisto, setTourVisto] = useState(() => { const v = lerJSON(K.tour(conta.email), null); if (v || !pronto) return v; gravar(K.tour(conta.email), {}); return {}; });
+  const fimTour = m => setTourVisto(v => { const n = { ...v, [m]: true }; gravar(K.tour(conta.email), n); return n; });
   // Barra de cima que aparece quando a página rola
   const [rolou, setRolou] = useState(false);
   // A barra de baixo fica sempre parada no lugar; só a de cima reage à rolagem
@@ -4690,6 +4695,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     // Conta
     salvarAjustes: (patch, pix) => { setDb(d => ({ ...d, settings: { ...d.settings, pix } })); onAtualizar(patch); if (patch.perfil) { const ms = modosDo(patch.perfil); if (!ms.includes(modoEf)) act.setModo(ms[0]); } close(); notify("Tudo salvo"); },
     refazer: () => { close(); onAtualizar({ perfil: { ...perfil, refazer: true } }); },
+    verTour: () => { close(); setTab(inicioDo(modoEf)); rolarTopo(); setTourVisto(v => ({ ...v, [modoEf]: false })); },
     zerar: () => { setDb(vazio()); close(); notify("Dados apagados"); },
     sair: async () => {
       // a conta saiu deste aparelho: para de mandar os avisos dela
@@ -4842,6 +4848,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {foco && <Agora db={db} conta={conta} now={now} onClose={() => setFoco(false)} act={act} />}
 
       {toast && (
+      {tourVisto && !tourVisto[modoEf] && tabEf === inicioDo(modoEf) && !sheet && !festa.length && !foco && !vozAtiva && <Suspense fallback={null}><Tour key={modoEf} modo={modoEf} termo={TERMO} doisModos={doisModos} onFim={() => fimTour(modoEf)} /></Suspense>}
         <div className={"toast" + (toast.undo ? "" : " solo")} role="status">
           <span>{toast.msg}</span>
           {toast.undo && <button onClick={() => { toast.undo(); setToast(null); }}>Desfazer</button>}
@@ -4940,6 +4947,6 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { Marca, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar };
+export { Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar };
 
 export default App;
