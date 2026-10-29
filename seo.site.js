@@ -2,15 +2,23 @@
 // - dados estruturados (Schema.org) em cada página, a partir do próprio HTML e dos preços de src/plano.js
 // - sitemap.xml com todas as páginas que podem aparecer no Google (as com "noindex" ficam de fora)
 // - robots.txt apontando para o sitemap
+// - llms.txt: resumo do Avina em texto simples, para as IAs (ChatGPT, Perplexity, Claude...) entenderem quem somos
 // - preload das fontes do título e do texto (o título aparece já na fonte certa, sem pular)
 // Página nova: é só criar sobre/<endereço>/index.html com title, description e canonical. O resto sai sozinho.
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { PLANOS } from "./src/plano.js";
+import { LIMITE_GRATIS, PLANOS } from "./src/plano.js";
 
 export const SITE = "https://avina.com.br";
 const APP = "https://app.avina.com.br/";
+
+// Quem é o Avina, numa frase. Vai nos dados estruturados e no llms.txt: é o que o Google e as IAs usam para não
+// confundir a gente com outra marca de nome parecido. Mantenha igual à resposta "O que é o Avina?" das páginas.
+const SOBRE = "O Avina é um app brasileiro, em português, para organizar o dinheiro e a agenda: gastos anotados falando, aviso antes das contas vencerem, contas da casa divididas e, para psicólogos e terapeutas, agenda com sessões que se repetem sozinhas e cobrança no Pix. Funciona no celular e no computador, até sem internet.";
+// Perfis oficiais do Avina em outros sites (Instagram, LinkedIn, YouTube...). Cada endereço aqui ajuda o Google
+// e as IAs a ligarem esses perfis ao site. Coloque só perfis que existem de verdade.
+const PERFIS = [];
 
 // O que cada página vende (vira o bloco "WebApplication" com os preços); "trilha" é o nome curto no caminho do Google.
 // Página fora daqui ganha só WebPage e trilha.
@@ -76,8 +84,11 @@ function grafo(pg) {
 
   // quem faz e qual é o site: em todas as páginas, para cada uma se explicar sozinha
   itens.push({
-    "@type": "Organization", "@id": ORG, name: "Avina", url: `${SITE}/`,
+    "@type": "Organization", "@id": ORG, name: "Avina", alternateName: ["Avina app", "App Avina"], url: `${SITE}/`,
+    description: SOBRE, slogan: "A agenda que lembra por você.", foundingDate: "2026", areaServed: { "@type": "Country", name: "Brasil" },
+    knowsLanguage: "pt-BR",
     logo: { "@type": "ImageObject", url: `${SITE}/icons/icon-512.png`, width: 512, height: 512 },
+    ...(PERFIS.length ? { sameAs: PERFIS } : {}),
   });
   itens.push({ "@type": "WebSite", "@id": WEBSITE, url: `${SITE}/`, name: "Avina", inLanguage: "pt-BR", publisher: { "@id": ORG } });
 
@@ -101,7 +112,7 @@ function grafo(pg) {
     "@type": "WebApplication", "@id": `${url}#app`, name: app.nome, url: APP,
     applicationCategory: app.categoria, operatingSystem: "Android, iOS, Windows, macOS",
     browserRequirements: "Funciona no navegador e pode ser instalado na tela inicial",
-    inLanguage: "pt-BR", description: pg.descricao, image: `${SITE}/screenshots/computador.png`,
+    inLanguage: "pt-BR", countriesSupported: "BR", description: pg.descricao, image: `${SITE}/screenshots/computador.png`,
     offers: ofertas(app.produtos, `${url}#planos`), publisher: { "@id": ORG },
   });
 
@@ -122,6 +133,27 @@ function ultimaMudanca(arquivo) {
 function sitemap(arquivos) {
   const urls = arquivos.map(({ arquivo, url }) => `  <url>\n    <loc>${url}</loc>\n    <lastmod>${ultimaMudanca(arquivo)}</lastmod>\n  </url>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join("\n")}\n</urlset>\n`;
+}
+
+// ---------- llms.txt (formato proposto em llmstxt.org: Markdown simples) ----------
+const reais = v => `R$ ${v.toFixed(2).replace(".", ",").replace(",00", "")}`;
+// "App de controle de gastos... | Avina" → "App de controle de gastos..." (o nome já está no título do arquivo)
+const semMarca = titulo => titulo.replace(/\s[|·]\s*Avina$/, "");
+function llms(paginas) {
+  // só os planos que a landing mostra (os de APLICATIVO); plano novo entra aqui quando ganhar página
+  const vendidos = new Set(Object.values(APLICATIVO).flatMap(a => a.produtos));
+  const planos = Object.values(PLANOS).filter(p => vendidos.has(p.produto)).map(p => `- ${p.nome}: ${reais(p.preco)} por ${p.ciclo}`);
+  return [
+    "# Avina", "",
+    `> ${SOBRE}`, "",
+    "Site: https://avina.com.br/ · App: https://app.avina.com.br/ (funciona no navegador e instala na tela inicial do celular e do computador, sem loja de aplicativos).", "",
+    "## Páginas", "",
+    ...paginas.map(p => `- [${p.titulo}](${p.url}): ${p.descricao}`), "",
+    "## Planos", "",
+    `- Grátis, para sempre e sem cartão: até ${LIMITE_GRATIS.pacientes} pacientes ativos e ${LIMITE_GRATIS.lancMes} lançamentos por mês`,
+    ...planos,
+    "- O plano anual sai pelo preço de 10 meses. Garantia de 7 dias: cancelando nesse prazo, o valor volta inteiro.", "",
+  ].join("\n");
 }
 
 // ---------- o plugin ----------
@@ -151,15 +183,17 @@ export default function seo({ publico }) {
       for (const arquivo of Object.values(entradas)) {
         const pg = ler(readFileSync(arquivo, "utf8"));
         if (pg.semIndice || !pg.canonica) continue;
-        lista.push({ arquivo: relative(process.cwd(), arquivo), url: pg.canonica });
+        lista.push({ arquivo: relative(process.cwd(), arquivo), url: pg.canonica, titulo: semMarca(pg.titulo), descricao: pg.descricao });
       }
       for (const nome of LEGAIS) {
         const arquivo = resolve(publico, nome, "index.html");
-        if (existsSync(arquivo) && !ler(readFileSync(arquivo, "utf8")).semIndice) lista.push({ arquivo: relative(process.cwd(), arquivo), url: `${SITE}/${nome}/` });
+        const pg = existsSync(arquivo) && ler(readFileSync(arquivo, "utf8"));
+        if (pg && !pg.semIndice) lista.push({ arquivo: relative(process.cwd(), arquivo), url: `${SITE}/${nome}/`, titulo: semMarca(pg.titulo), descricao: pg.descricao });
       }
       // a página inicial primeiro, depois em ordem alfabética
       lista.sort((a, b) => (a.url === `${SITE}/` ? -1 : b.url === `${SITE}/` ? 1 : a.url.localeCompare(b.url)));
       this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemap(lista) });
+      this.emitFile({ type: "asset", fileName: "llms.txt", source: llms(lista) });
       this.emitFile({ type: "asset", fileName: "robots.txt", source: `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n` });
     },
   };
