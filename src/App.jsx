@@ -4848,8 +4848,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
 
       {paineis}
       {foco && <Agora db={db} conta={conta} now={now} onClose={() => setFoco(false)} act={act} />}
-
       {tourVisto && !tourVisto[modoEf] && tabEf === inicioDo(modoEf) && !sheet && !festa.length && !foco && !vozAtiva && <Suspense fallback={null}><Tour key={modoEf} modo={modoEf} termo={TERMO} doisModos={doisModos} onFim={() => fimTour(modoEf)} /></Suspense>}
+
       {toast && (
         <div className={"toast" + (toast.undo ? "" : " solo")} role="status">
           <span>{toast.msg}</span>
