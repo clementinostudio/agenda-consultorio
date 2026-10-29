@@ -4,7 +4,8 @@
   "name": "avina-site",
   "main": "src/index.js",
   "compatibility_date": "2026-09-01",
-  "assets": { "directory": "../dist-site", "binding": "ASSETS", "run_worker_first": true },
+  // endereço que não existe: entrega o 404.html com o código 404 (sem isso, o Google vê uma resposta vazia)
+  "assets": { "directory": "../dist-site", "binding": "ASSETS", "run_worker_first": true, "not_found_handling": "404-page" },
   "routes": [
     { "pattern": "avina.com.br", "custom_domain": true },
     { "pattern": "www.avina.com.br", "custom_domain": true }
