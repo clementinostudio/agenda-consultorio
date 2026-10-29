@@ -1,8 +1,9 @@
 // Dinheiro rendendo (modo Pessoal): caixinhas com meta, "à vista ou parcelado?" e modo viagem.
 // Usa as cotações de src/cotacoes.js (CDI, IPCA e câmbio, gratuitos e guardados para funcionar offline).
 import React, { useState } from "react";
-import { I, Sheet, Field, Toggle, ConfirmButton, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, soma, MES_LONGO, diffDias, ESCONDER, Money, relativo, Ilustra } from "../App.jsx";
+import { I, Sheet, Field, Seg, Toggle, ConfirmButton, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, soma, MES_LONGO, diffDias, ESCONDER, Money, relativo, Ilustra } from "../App.jsx";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, fmtPct, quandoTxt, IOF_CARTAO } from "../cotacoes.js";
+import { useInflacao, acumulado, INDICES, nomeMesCurto } from "../inflacao.js";
 
 /* ---------- contas financeiras ---------- */
 const mensal = anual => Math.pow(1 + anual / 100, 1 / 12) - 1;
@@ -60,6 +61,7 @@ export function DinheiroHome({ db, act }) {
           <button className="din-act" onClick={() => act.abrirParcelado()}><i><Ic.balanca /></i><span>À vista ou<br />parcelado?</span></button>
           <button className="din-act" onClick={() => act.abrirViagem()}><i><Ic.aviao /></i><span>{P.viagem ? "Viagem" : "Modo"}<br />{P.viagem ? MOEDAS[P.viagem.moeda].curto.toLowerCase() : "viagem"}</span></button>
           <button className="din-act" onClick={() => act.abrirCaixinha()}><i><I.piggy /></i><span>Nova<br />caixinha</span></button>
+          <button className="din-act" onClick={() => act.abrirAluguel()}><i><I.home /></i><span>Reajuste do<br />aluguel</span></button>
         </div>
         {caixinhas.length === 0 ? (
           <button className="cx-vazia com-ilustra" onClick={() => act.abrirCaixinha()}>
@@ -229,6 +231,48 @@ export function ParceladoSheet({ onClose }) {
             <div><span>Rendimento usado</span><b>{fmtPct(res.liq)} ao ano</b></div>
           </div>
           <p className="vd-nota">Conta feita com 100% do CDI ({fmtPct(cot.cdi)} ao ano, {cot.quandoIndices ? `Banco Central, ${quandoTxt(cot.quandoIndices)}` : "valor de referência"}) já descontado o IR de {String(res.ir).replace(".", ",")}%. Vale para quem já tem o dinheiro: se for tirar da reserva de emergência ou usar o limite, a conta muda.</p>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+/* ---------- reajuste do aluguel ----------
+   O contrato diz o índice (quase sempre IGP-M ou IPCA) e o reajuste vale uma vez por ano, no aniversário.
+   Conta: os 12 meses a partir do mês do último reajuste, com os números do Banco Central. */
+const mesISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+export function AluguelSheet({ onClose }) {
+  const inf = useInflacao();
+  const [valor, setValor] = useState("");
+  const [desde, setDesde] = useState(() => { const d = new Date(); d.setDate(1); d.setFullYear(d.getFullYear() - 1); return mesISO(d); });
+  const [indice, setIndice] = useState("igpm");
+  const v = num(valor), serie = inf[indice] || [];
+  // o período de um reajuste: 12 meses a partir do mês escolhido (menos, se o Banco Central ainda não publicou todos)
+  const ate = (() => { const [a, m] = desde.split("-").map(Number); const d = new Date(a, m - 1 + 11, 1); return mesISO(d); })();
+  const ac = desde ? acumulado(serie, desde, ate) : null;
+  const ultimo = serie.length ? serie[serie.length - 1].m : null;
+  const incompleto = ac && ac.meses < 12;
+  const novo = ac && v > 0 ? Math.round(v * ac.fator * 100) / 100 : 0;
+  const negativo = ac && ac.pct < 0;
+  return (
+    <Sheet title="Reajuste do aluguel" sub="Quanto o aluguel muda no aniversário do contrato, pelo índice que está no contrato." onClose={onClose}>
+      <div className="fields">
+        <Field label="Aluguel hoje (R$)" icon={<I.home />} htmlFor="al-valor"><input id="al-valor" inputMode="decimal" placeholder="0,00" value={valor} onChange={e => setValor(soNumero(e.target.value))} /></Field>
+        <Field label="Mês do último reajuste (ou do começo do contrato)" htmlFor="al-desde"><input id="al-desde" type="month" value={desde} max={mesISO(new Date())} onChange={e => setDesde(e.target.value)} /></Field>
+      </div>
+      <Seg value={indice} onChange={setIndice} options={Object.entries(INDICES).map(([k, x]) => ({ v: k, l: x.nome }))} />
+      <div className="hint">{INDICES[indice].nome}: {INDICES[indice].sobre}. Use o que está escrito no contrato.</div>
+      {!serie.length && <div className="hint">{inf.quando ? "Não consegui buscar os índices agora." : "Buscando os índices no Banco Central…"}</div>}
+      {serie.length > 0 && !ac && <div className="hint">O Banco Central ainda não publicou esse mês.</div>}
+      {ac && (
+        <div className={"veredito " + (negativo ? "neutro" : "avista")}>
+          <span className="vd-tag">{INDICES[indice].nome} de {nomeMesCurto(ac.de)} a {nomeMesCurto(ac.ate)}</span>
+          <b className="vd-big">{ac.pct > 0 ? "+" : ""}{fmtPct(ac.pct)}</b>
+          {v > 0 && (negativo
+            ? <p>O índice ficou negativo. Muitos contratos dizem que, nesse caso, o aluguel continua {brl(v)}; confira o seu.</p>
+            : <p>O aluguel passa de {brl(v)} para <b>{brl(novo)}</b>: {brl(novo - v)} a mais por mês.</p>)}
+          {incompleto && <p className="vd-nota">Só tem {ac.meses} {ac.meses === 1 ? "mês publicado" : "meses publicados"} (o último é {nomeMesCurto(ultimo)}). Se o aniversário do contrato ainda não chegou, a conta final muda um pouco: volte quando sair o próximo índice.</p>}
+          <p className="vd-nota">Números do Banco Central{inf.quando ? `, atualizados ${quandoTxt(inf.quando)}` : ""}. Alguns contratos usam os 12 meses até o mês anterior ao aniversário: se for o seu caso, escolha um mês antes.</p>
         </div>
       )}
     </Sheet>

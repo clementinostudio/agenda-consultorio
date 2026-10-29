@@ -11,7 +11,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       // O React fica num arquivo separado: quase nunca muda, então o celular não precisa baixar de novo a cada atualização
-      output: { manualChunks: id => (/node_modules\/(react|react-dom|scheduler)\//.test(id) ? "react" : undefined) },
+      // O leitor de PDF (pdf.js) também fica separado: só baixa quando alguém compartilha um PDF com o app
+      output: { manualChunks: id => (/node_modules\/(react|react-dom|scheduler)\//.test(id) ? "react" : /node_modules\/pdfjs-dist\//.test(id) ? "leitor-pdf" : undefined) },
     },
   },
   plugins: [
@@ -33,10 +34,10 @@ export default defineConfig({
         categories: ["productivity", "medical", "finance"],
         prefer_related_applications: false,
         launch_handler: { client_mode: ["focus-existing", "auto"] },
-        // Android: o Avina aparece no "Compartilhar" (foto de comprovante, código de boleto, texto)
+        // Android: o Avina aparece no "Compartilhar" (foto de comprovante ou de nota, PDF de boleto ou comprovante, texto)
         share_target: {
           action: "./compartilhar", method: "POST", enctype: "multipart/form-data",
-          params: { title: "title", text: "text", url: "url", files: [{ name: "arquivo", accept: ["image/*"] }] },
+          params: { title: "title", text: "text", url: "url", files: [{ name: "arquivo", accept: ["image/*", "application/pdf", ".pdf"] }] },
         },
         // Fotos que o Android mostra na janela de instalar (fica com cara de loja de apps)
         screenshots: [
@@ -62,7 +63,7 @@ export default defineConfig({
       workbox: {
         // Guarda o app para abrir offline (só as fontes .woff2 dos alfabetos latinos, para ficar leve)
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,webp,woff2}"],
-        globIgnores: ["**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**"],
+        globIgnores: ["**/leitor-pdf-*", "**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**"],
         navigateFallback: "index.html",
         // termos, privacidade e cookies são páginas próprias (public/): o app instalado não pode trocá-las pela tela do app
         navigateFallbackDenylist: [/\/(termos|privacidade|cookies|agendar)\//],
@@ -72,6 +73,11 @@ export default defineConfig({
             urlPattern: /\.wasm$/i,
             handler: "CacheFirst",
             options: { cacheName: "leitor-boleto", expiration: { maxEntries: 3 } },
+          },
+          { // Leitor de PDF (boleto ou comprovante em PDF compartilhado): baixa só quando usado e fica guardado
+            urlPattern: /\/assets\/(leitor-pdf-[^/]+\.js|pdf\.worker[^/]*\.mjs)$/i,
+            handler: "CacheFirst",
+            options: { cacheName: "leitor-pdf", expiration: { maxEntries: 4 } },
           },
           { // Clima (Open-Meteo): tenta a internet, usa o último resultado se estiver offline
             urlPattern: /^https:\/\/(api|geocoding-api)\.open-meteo\.com\/.*/i,

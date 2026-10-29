@@ -12,7 +12,10 @@ import PORQUINHO from "./assets/porquinho.webp";
 import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monograma, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
 import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro } from "./nuvem.js";
-import { lerBoleto } from "./boleto.js";
+import { lerBoleto, acharBoleto } from "./boleto.js";
+import { buscarCnpj, cnpjValido } from "./cnpj.js";
+import { ehLinkNfce } from "./nota.js";
+import { lerInflacao, atualizarInflacao, useInflacao, acumulado, valorSugerido, nomeMesCurto } from "./inflacao.js";
 import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
 import { AVATARES, ehAvatarPronto, avatarAtualizado } from "./avatares.js";
 import { precosGuardados, veiculosDe } from "./transporte.js";
@@ -350,8 +353,10 @@ function conversa(db, now, act, perfil) {
   const dow = fromISO(t).getDay();
   if ((dow === 0 || dow === 1) && !(db.revisoes || {})[semanaKey(t)]) falas.push({ txt: <>Sua revisão da semana está pronta: quanto entrou, faltas e o que vem pela frente.</>, acao: { l: "Ver revisão", ic: <I.chart />, fn: act.revisao } });
   // Reajuste: mais de 12 meses com o mesmo valor
-  const reaj = db.patients.find(p => p.active && (p.reajusteEm || p.desde) && diffDias(p.reajusteEm || p.desde, t) >= 365 && !(p.reajusteAdiado && p.reajusteAdiado > t));
-  if (reaj) falas.push({ txt: <>{primeiro(reaj.name)} está há {Math.floor(diffDias(reaj.reajusteEm || reaj.desde, t) / 30)} meses com o mesmo valor ({brl(reaj.price)}). Talvez seja hora de conversar sobre reajuste.</>, acao: { l: `Ver ${primeiro(reaj.name)}`, ic: <I.user />, fn: () => act.openPatient(reaj.id) } });
+  const reaj = db.patients.find(p => reajusteDe(p));
+  const rj = reaj && reajusteDe(reaj);
+  if (reaj && rj.ac && rj.ac.pct <= 0) { /* inflação zerada ou negativa no período: nada a sugerir */ }
+  else if (reaj) falas.push({ txt: <>{primeiro(reaj.name)} está há {rj.meses} meses com o mesmo valor ({brl(reaj.price)}).{rj.sug > reaj.price ? <> A inflação nesse tempo foi de {pctTxt(rj.ac.pct)}: que tal {brl(rj.sug)}?</> : " Talvez seja hora de conversar sobre reajuste."}</>, acao: { l: `Ver ${primeiro(reaj.name)}`, ic: <I.user />, fn: () => act.openPatient(reaj.id) } });
   // Lista de espera x horário livre
   const esp = (db.espera || [])[0];
   if (esp) { const livres = horariosLivres(db, addDays(t, 1), 7); const bate = livres.map(d => ({ iso: d.iso, m: d.livres.find(m => esp.pref === "qualquer" || periodoDe(m) === esp.pref) })).find(x => x.m !== undefined);
@@ -1181,7 +1186,37 @@ async function lerComprovante(file) {
   let cat = lista.some(c => c.id === d.categoria) ? d.categoria : null;
   if (marca && tipo === "saida" && CATEGORIAS.some(c => c.id === marca.cat)) cat = marca.cat;
   const data = /^\d{4}-\d{2}-\d{2}$/.test(d.data || "") && d.data <= todayISO() && d.data >= addDays(todayISO(), -400) ? d.data : todayISO();
-  return { tipo, valor, cat, desc: marca ? marca.nome : tituloCurto(desc0), data };
+  let desc = marca ? marca.nome : tituloCurto(desc0), catLoja = null;
+  // sem marca conhecida, o CNPJ do comprovante (quando aparece) diz o nome da loja e o ramo dela (BrasilAPI)
+  if (cnpjValido(d.cnpj)) {
+    const q = await buscarCnpj(d.cnpj, 4000).catch(() => null);
+    if (q) { catLoja = q.catLoja; if (!marca) { desc = q.nome; if (tipo === "saida" && q.cat) cat = q.cat; } }
+  }
+  return { tipo, valor, cat, desc, data, pagador: String(d.pagador || "").trim().slice(0, 60), catLoja };
+}
+
+// Pix recebido → as cobranças em aberto que ele paga. Por paciente: o mesmo nome de quem pagou
+// (ou de quem costuma pagar por ele) e/ou o valor batendo com as cobranças mais antigas.
+function cobrancasDoPix(db, pre) {
+  const ws = semAcento(pre.pagador || "").replace(/[^a-z ]/g, " ").split(/\s+/).filter(w => w.length >= 3 && !["dos", "das"].includes(w));
+  const bateNome = p => ws.length > 0 && [p.name, p.pagadorNome].filter(Boolean).some(n => {
+    const nw = semAcento(n).split(/\s+/);
+    return nw[0] === ws[0] || ws.filter(w => nw.includes(w)).length >= 2;
+  });
+  const quase = (a, b) => Math.abs(a - b) < 0.01;
+  const grupos = [];
+  db.patients.forEach(p => {
+    const abertas = db.charges.filter(c => c.patientId === p.id && !c.paid && !c.hidden).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    if (!abertas.length) return;
+    // as mais antigas que somam o valor do Pix (uma sessão, duas, o pacote…); senão, uma com o valor exato
+    let acum = 0, ids = null;
+    for (let i = 0; i < abertas.length && !ids; i++) { acum += abertas[i].amount; if (quase(acum, pre.valor)) ids = abertas.slice(0, i + 1).map(c => c.id); }
+    if (!ids) { const uma = abertas.find(c => quase(c.amount, pre.valor)); if (uma) ids = [uma.id]; }
+    const nome = bateNome(p);
+    if (!ids && !nome) return;
+    grupos.push({ pid: p.id, ids: ids || [], abertas: abertas.length, total: ids ? pre.valor : soma(abertas, c => c.amount), desde: abertas[0].createdAt, nota: (ids ? 2 : 0) + (nome ? 3 : 0) });
+  });
+  return grupos.sort((a, b) => b.nota - a.nota || a.desde.localeCompare(b.desde)).slice(0, 4);
 }
 
 /* ---------- A Bolinha responde falando ----------
@@ -2650,9 +2685,43 @@ function PatientsTab({ db, act, tema, vista = "ativos", setVista }) {
   );
 }
 
+// Pix recebido (foto ou comprovante compartilhado) que bate com sessões em aberto: de quem é?
+function PixSessaoSheet({ db, pre, grupos, onClose, act }) {
+  const pac = id => db.patients.find(p => p.id === id) || { name: "?" };
+  return (
+    <Sheet title={`Pix de ${brlReal(pre.valor)} recebido`} sub={`${pre.pagador ? `De ${pre.pagador} · ` : ""}${pre.data === todayISO() ? "hoje" : dm(pre.data)}. É pagamento de sessão?`} onClose={onClose}>
+      {grupos.map(g => { const p = pac(g.pid), n = g.ids.length; return (
+        <button key={g.pid} className="txn" onClick={() => (n ? act.pixPagou(g.ids, pre.data) : act.openCharge(db.charges.find(c => c.patientId === g.pid && !c.paid && !c.hidden).id))}>
+          <span className="txn-av">{iniciais(p.name)}<i className="cdot" style={{ background: corDe(p).cor }} /></span>
+          <span className="mid"><span className="nm">{p.name}</span><span className="sb">{n ? `${n === 1 ? "1 sessão" : `${n} sessões`} em aberto desde ${dm(g.desde)} · marcar como pago` : `${g.abertas} em aberto (${brl(g.total)}): o valor não bate, ver cobrança`}</span></span>
+          <span className="amt pos">{n ? <I.check /> : <Money v={g.total} />}</span>
+        </button>
+      ); })}
+      <button className="btn ghost" onClick={() => act.pixNaoSessao(pre)}>Não é de sessão{act.usaPessoal ? ": anotar como entrada" : ""}</button>
+    </Sheet>
+  );
+}
+
+// Reajuste da sessão: quanto a inflação (IPCA) andou desde o último valor e o valor novo sugerido
+function reajusteDe(p, inf = lerInflacao()) {
+  const desde = p.reajusteEm || p.desde, t = todayISO();
+  if (!p.active || !desde || diffDias(desde, t) < 365 || (p.reajusteAdiado && p.reajusteAdiado > t)) return null;
+  const ac = acumulado(inf.ipca, desde);
+  return { meses: Math.floor(diffDias(desde, t) / 30), ac, sug: ac && ac.pct > 0 ? valorSugerido(p.price, ac.pct) : null };
+}
+const pctTxt = v => `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+// Recado para o paciente, pronto para mandar (tom de combinado, não de cobrança)
+function recadoReajuste(p, novo, ac) {
+  const prox = new Date(); prox.setMonth(prox.getMonth() + 1, 1);
+  return `Oi, ${primeiro(p.name)}! Tudo bem? Queria combinar com você: a partir de ${MES_LONGO[prox.getMonth()].toLowerCase()}, o valor da sessão passa de ${brlReal(p.price)} para ${brlReal(novo)}. É a correção da inflação desde o último reajuste (${pctTxt(ac.pct)} pelo IPCA). Se quiser, conversamos sobre isso na sessão.`;
+}
+
 function PatientSheet({ db, pid, onClose, act }) {
+  const inf = useInflacao();
   const p = db.patients.find(x => x.id === pid);
   if (!p) return null;
+  const reaj = reajusteDe(p, inf);
+  const foneWa = (d => (d.length >= 10 && d.length <= 11 ? "55" + d : d))((p.phone || "").replace(/\D/g, ""));
   const hist = db.sessions.filter(s => s.patientId === pid).sort((a, b) => b.date.localeCompare(a.date));
   const feitas = hist.filter(s => s.status === "done");
   const ab = sessoesAbertas(db, pid).length;
@@ -2669,8 +2738,21 @@ function PatientSheet({ db, pid, onClose, act }) {
         <div><span>Já recebido</span><b className="num">{brl(recebido)}</b></div>
       </div>
       {p.phone && <div className="hint">WhatsApp: <span style={{ userSelect: "all", color: "var(--fg)" }}>{p.phone}</span></div>}
-      {(p.reajusteEm || p.desde) && diffDias(p.reajusteEm || p.desde, todayISO()) >= 365 && !(p.reajusteAdiado && p.reajusteAdiado > todayISO()) && (
-        <div className="note amber"><I.money /><span>Há {Math.floor(diffDias(p.reajusteEm || p.desde, todayISO()) / 30)} meses com o mesmo valor. Quando reajustar, é só editar o cadastro.<br /><button className="bub-act" style={{ marginTop: 8 }} onClick={() => act.adiarReajuste(p.id)}>Lembrar em 6 meses</button></span></div>
+      {reaj && (
+        <div className="note amber"><I.money /><span>
+          Há {reaj.meses} meses com o mesmo valor ({brlReal(p.price)}).{" "}
+          {reaj.ac ? (reaj.ac.pct > 0
+            ? <>A inflação nesse tempo foi de <b>{pctTxt(reaj.ac.pct)}</b> (IPCA de {nomeMesCurto(reaj.ac.de)} a {nomeMesCurto(reaj.ac.ate)}, Banco Central): corrigido, o valor fica {brlReal(p.price * reaj.ac.fator)}.</>
+            : <>A inflação nesse tempo ficou em {pctTxt(reaj.ac.pct)}: não precisa reajustar agora.</>)
+            : <>Quando reajustar, é só editar o cadastro.</>}
+          <span className="reaj-acts">
+            {reaj.sug > p.price && <button className="bub-act" onClick={() => act.reajustar(p.id, reaj.sug)}><I.check /> Passar para {brl(reaj.sug)}</button>}
+            {reaj.sug > p.price && (foneWa.length >= 12
+              ? <a className="bub-act" href={`https://wa.me/${foneWa}?text=${encodeURIComponent(recadoReajuste(p, reaj.sug, reaj.ac))}`} target="_blank" rel="noopener noreferrer"><I.send /> Avisar {primeiro(p.name)}</a>
+              : <button className="bub-act" onClick={() => copiarTexto(recadoReajuste(p, reaj.sug, reaj.ac), act, "Recado copiado")}><I.send /> Copiar recado</button>)}
+            <button className="bub-act" onClick={() => act.adiarReajuste(p.id)}>Lembrar em 6 meses</button>
+          </span>
+        </span></div>
       )}
       <div className="pac-acoes">
         <button className="pac-acao" onClick={() => act.abrirNotas(p.id)}><Ilustra n="cadeados" /><span><b>Anotações</b><small>{nNotas ? `${nNotas} ${nNotas === 1 ? "anotação" : "anotações"} · trancadas` : "Só você lê"}</small></span></button>
@@ -3513,6 +3595,7 @@ const NotasSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ def
 const BoletoSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.BoletoSheet })));
 const ImportarSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.ImportarSheet })));
 const ParceladoSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ParceladoSheet })));
+const AluguelSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.AluguelSheet })));
 const ViagemSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ViagemSheet })));
 
 // Meta do mês em arco (inspirado no "Retirement")
@@ -3848,6 +3931,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem
   const casa = useCasa(conta, db, setDb); // gastos da casa divididos com quem mora junto
   const loja = useLoja(conta, db, setDb); // o caixa da loja, com quem ajuda
+  // inflação (IPCA) para o lembrete de reajuste: só busca se algum paciente está há 12 meses com o mesmo valor
+  const [, setInfV] = useState(0);
+  useEffect(() => {
+    if (usaConsultorio && db.patients.some(p => reajusteDe(p, { ipca: [] }))) atualizarInflacao().then(() => setInfV(v => v + 1)).catch(() => {});
+  }, [usaConsultorio]);
   // bolinha de perfil de um desenho antigo: troca sozinha pela nova parecida (e a casa acompanha)
   useEffect(() => { const nova = avatarAtualizado(conta.foto); if (nova) onAtualizar({ foto: nova }); }, [conta.foto]);
   const linkAg = useLinkAgendamento({
@@ -4387,6 +4475,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     marcarRevisao: k => setDb(d => ({ ...d, revisoes: { ...(d.revisoes || {}), [k]: true } })),
     toggleRegistro: sid => setDb(d => ({ ...d, sessions: d.sessions.map(x => x.id === sid ? { ...x, registro: !x.registro } : x) })),
     setConfirmado: (pid, iso, v) => setDb(d => ({ ...d, confirmados: { ...(d.confirmados || {}), [`${pid}:${iso}`]: v } })),
+    // Reajuste combinado: as próximas sessões já saem com o valor novo (as que já aconteceram ficam como estão)
+    reajustar: (pid, valor) => {
+      const antes = db.patients.find(p => p.id === pid); if (!antes) return;
+      setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, price: valor, reajusteEm: todayISO(), reajusteAdiado: null } : p) }));
+      vibrar("ok");
+      notify(`${primeiro(antes.name)}: sessão agora é ${brlReal(valor)}`, () => setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? antes : p) })));
+    },
     adiarReajuste: pid => { setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, reajusteAdiado: addDays(todayISO(), 180) } : p) })); notify("Combinado: lembro de novo em 6 meses"); },
     exportar: chave => exportarMes(db, chave, act),
     setFundo: f => onAtualizar({ fundo: f }),
@@ -4474,6 +4569,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       notify(valor > 0 ? `Guardado: ${brlReal(valor)}` : `Retirado: ${brlReal(-valor)}`, () => setP(P => ({ ...P, caixinhas: (P.caixinhas || []).map(x => x.id === id ? { ...x, movs: (x.movs || []).filter(m => m.id !== mov.id) } : x) })));
     },
     abrirParcelado: () => setSheet({ type: "parcelado" }),
+    abrirAluguel: () => setSheet({ type: "aluguel" }),
     abrirViagem: () => setSheet({ type: "viagem" }),
     iniciarViagem: (moeda, iof) => { setP(P => ({ ...P, viagem: { moeda, iof, desde: todayISO() } })); close(); vibrar("ok"); notify(`Modo viagem: ${MOEDAS[moeda].nome}. Pode falar os gastos na moeda de lá.`); },
     encerrarViagem: () => { const v = db.pessoal.viagem; setP(P => { const { viagem, ...resto } = P; return resto; }); close(); notify("Modo viagem desligado", () => setP(P => ({ ...P, viagem: v }))); },
@@ -4523,9 +4619,48 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       try {
         const pre = await lerComprovante(file);
         setToast(null); vibrar("ok");
+        // na loja: Pix recebido vira venda (já paga); o resto, gasto da loja
+        if (modoEf === "loja" && loja) {
+          if (pre.tipo === "entrada") act.abrirLoja("venda", { pre: { valor: pre.valor, pag: "pix", recebido: true, dia: pre.data, desc: pre.pagador ? `Pix de ${primeiro(pre.pagador)}` : "" } });
+          else act.abrirLoja("gasto", { pre: { valor: pre.valor, desc: pre.desc, dia: pre.data, ...(pre.catLoja ? { cat: pre.catLoja } : {}) } });
+          return;
+        }
+        // Pix recebido de quem tem sessão em aberto: oferece marcar como pago
+        if (pre.tipo === "entrada" && usaConsultorio) {
+          const grupos = cobrancasDoPix(db, pre);
+          if (grupos.length) { setSheet({ type: "pix-sessao", pre, grupos, n: Date.now() }); return; }
+        }
         if (usaPessoal && modo !== "pessoal") act.setModo("pessoal");
         setSheet({ type: "lanc", tipo: pre.tipo, pre: { ...pre, daFoto: true }, n: Date.now() });
       } catch (e) { vibrar("aviso"); notify(msgIA(e)); }
+    },
+    // O Pix pagou estas cobranças: ficam pagas na data do comprovante
+    pixPagou: (ids, data) => {
+      const set = new Set(ids), antes = db.charges.filter(c => set.has(c.id)).map(c => ({ ...c }));
+      setDb(d => ({ ...d, charges: d.charges.map(c => set.has(c.id) ? { ...c, paid: true, paidAt: data || todayISO() } : c) }));
+      close(); vibrar("ok");
+      notify(ids.length === 1 ? "Marquei como pago" : `${ids.length} sessões marcadas como pagas`, () => setDb(d => ({ ...d, charges: d.charges.map(c => antes.find(a => a.id === c.id) || c) })));
+    },
+    // Pix que não era de sessão: segue como entrada no Pessoal
+    pixNaoSessao: pre => { if (usaPessoal && modo !== "pessoal") act.setModo("pessoal"); setSheet({ type: "lanc", tipo: "entrada", pre: { ...pre, daFoto: true }, n: Date.now() }); },
+    // PDF compartilhado: boleto (acha o código no texto) ou comprovante (a 1ª página vira foto para a IA)
+    lerPdf: async blob => {
+      clearTimeout(tRef.current); setToast({ msg: "Abrindo o PDF…" });
+      let r;
+      try { r = await (await import("./pdf.js")).lerPdf(blob); }
+      catch (e) { setToast(null); vibrar("aviso"); notify("Não consegui abrir esse PDF."); return; }
+      setToast(null);
+      const cod = acharBoleto(r.texto);
+      if (cod) return act.boletoCompartilhado(cod);
+      if (r.imagem) return act.lerComprovante(r.imagem);
+      notify("Não achei nada para anotar nesse PDF.");
+    },
+    // Boleto que chegou de fora: na loja vira gasto da loja; no resto, a tela do boleto (conta ou gasto pago)
+    boletoCompartilhado: cod => {
+      const b = lerBoleto(cod);
+      if (modoEf === "loja" && loja && b) return act.abrirLoja("gasto", { pre: { valor: b.valor || undefined, desc: b.tipo === "banco" ? "Boleto" : b.emissor, cat: b.cat === "casa" ? "contas" : undefined } });
+      if (usaPessoal && modo !== "pessoal") act.setModo("pessoal");
+      act.lerBoleto(cod);
     },
     // Chegou algo pelo "Compartilhar" do Android (foto de comprovante, código de boleto ou texto)
     receberCompartilhado: async () => {
@@ -4535,8 +4670,20 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         const rf = await c.match(u("arquivo")), rt = await c.match(u("texto"));
         await c.delete(u("arquivo")); await c.delete(u("texto"));
         const texto = rt ? (await rt.text()).trim() : "";
-        if (rf) { const b = await rf.blob(); return act.lerComprovante(new File([b], "comprovante", { type: b.type || "image/jpeg" })); }
-        if (texto && lerBoleto(texto)) { if (usaPessoal && modo !== "pessoal") act.setModo("pessoal"); return act.lerBoleto(texto); }
+        if (rf) {
+          const b = await rf.blob();
+          if (/pdf/i.test(b.type)) return act.lerPdf(b);
+          const f = new File([b], "comprovante", { type: b.type || "image/jpeg" });
+          // na loja, foto de nota com QR code: lê a nota inteira (itens e preços), como pelo botão "Ler nota do fornecedor"
+          if (modoEf === "loja" && loja) {
+            const { lerQRs } = await import("./telas/ferramentas.jsx");
+            const temNota = await lerQRs(f).then(ts => ts.some(ehLinkNfce)).catch(() => false);
+            if (temNota) return act.abrirLoja("nota", { arquivo: f });
+          }
+          return act.lerComprovante(f);
+        }
+        const cod = texto && (lerBoleto(texto) ? texto : acharBoleto(texto));
+        if (cod) return act.boletoCompartilhado(cod);
         if (texto && vozApi.current.texto) vozApi.current.texto(texto);
       } catch (e) { notify("Não consegui abrir o que foi compartilhado."); }
     },
@@ -4590,6 +4737,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     <>
       {sheet && sheet.type === "session" && <SessionSheet key={sheet.item.patient.id + sheet.item.date + sheet.item.kind} db={db} item={sheet.item} onClose={close} act={act} />}
       {sheet && sheet.type === "patient" && <PatientSheet db={db} pid={sheet.pid} onClose={close} act={act} />}
+      {sheet && sheet.type === "pix-sessao" && <PixSessaoSheet key={sheet.n} db={db} pre={sheet.pre} grupos={sheet.grupos} onClose={close} act={act} />}
       {sheet && sheet.type === "form" && <PatientForm total={db.patients.length} perfil={perfil} pre={sheet.pre} initial={sheet.pid ? db.patients.find(p => p.id === sheet.pid) : null} onSave={act.salvarPaciente} onClose={close} />}
       {sheet && sheet.type === "charge" && <ChargeSheet key={sheet.cid} db={db} cid={sheet.cid} fresh={sheet.fresh} nomeProf={conta.nome} onClose={close} act={act} />}
       {sheet && sheet.type === "settings" && <Suspense fallback={null}><PerfilPage db={db} conta={conta} tema={tema} inicio={sheet.aba} onClose={close} act={act} nuvem={nuvem} /></Suspense>}
@@ -4629,6 +4777,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "importar" && <Suspense fallback={null}><ImportarSheet db={db} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "caixinha" && <Suspense fallback={null}><CaixinhaSheet key={sheet.id || "nova"} cx={(db.pessoal.caixinhas || []).find(x => x.id === sheet.id) || null} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "parcelado" && <Suspense fallback={null}><ParceladoSheet onClose={close} /></Suspense>}
+      {sheet && sheet.type === "aluguel" && <Suspense fallback={null}><AluguelSheet onClose={close} /></Suspense>}
       {sheet && sheet.type === "viagem" && <Suspense fallback={null}><ViagemSheet viagem={db.pessoal.viagem} lanc={db.pessoal.lanc} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "conta" && <Suspense fallback={null}><ContaSheet key={sheet.id || "nova" + (sheet.n || "")} inicial={contaSel} pre={sheet.pre} onLogo={act.salvarLogo} onBoleto={act.lerBoleto} onCopiar={t => copiarTexto(t.replace(/\D/g, ""), act, "Código copiado. É só colar no app do banco.")} onSave={act.salvarConta} onDelete={act.apagarConta} onClose={close} /></Suspense>}
     </>

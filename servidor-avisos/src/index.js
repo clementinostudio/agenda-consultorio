@@ -109,11 +109,11 @@ Some e compare com cuidado. Se a resposta não estiver nos dados, diga isso em u
 Não dê conselhos financeiros ou clínicos longos.`;
 
 const PROMPT_IMAGEM = `Esta é uma foto de comprovante, nota fiscal, recibo, cupom ou print de pagamento (Pix, cartão, boleto).
-Responda SÓ com JSON: {"valor":número total pago em reais,"descricao":"nome curto da loja ou de quem recebeu","data":"AAAA-MM-DD" ou "","tipo":"saida"|"entrada","categoria":uma das categorias}
+Responda SÓ com JSON: {"valor":número total pago em reais,"descricao":"nome curto da loja ou de quem recebeu","data":"AAAA-MM-DD" ou "","tipo":"saida"|"entrada","categoria":uma das categorias,"pagador":"nome de quem PAGOU (só em entrada)" ou "","cnpj":"CNPJ da loja ou de quem recebeu, se aparecer" ou ""}
 "entrada" só se a foto mostrar dinheiro RECEBIDO (Pix recebido, transferência recebida). Use o valor TOTAL. Se não der para ler, use valor 0.`;
 
 const PROMPT_NOTA = `Esta é uma foto de nota fiscal ou cupom de supermercado, padaria, farmácia ou loja.
-Responda SÓ com JSON: {"loja":"nome do estabelecimento","data":"AAAA-MM-DD" ou "","total":número total pago,"itens":[{"nome":"descrição do produto como está na nota","qtd":número,"valor":número total do item em reais}]}
+Responda SÓ com JSON: {"loja":"nome do estabelecimento","cnpj":"CNPJ do estabelecimento (14 números)" ou "","data":"AAAA-MM-DD" ou "","total":número total pago,"itens":[{"nome":"descrição do produto como está na nota","qtd":número,"valor":número total do item em reais}]}
 Liste TODOS os itens que der para ler, na ordem da nota. Não invente itens nem valores. Use ponto como separador decimal. Se não for uma nota, responda {"itens":[]}.`;
 
 async function rodarTexto(env, sistema, usuario, max = 400) {

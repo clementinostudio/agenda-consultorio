@@ -2,7 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, ConfirmButton, iniciais, CATEGORIAS, catDe, catVars, CatIcon, TopBar, useCamada } from "../App.jsx";
 import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
-import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja } from "../nota.js";
+import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja, cnpjDaChave } from "../nota.js";
+import { buscarCnpj } from "../cnpj.js";
 import { lerQRs } from "./ferramentas.jsx";
 import { Anel, CatBolinha, Linha, useContagem } from "./visual.jsx";
 // gerador de QR code (zxing, o mesmo do leitor): só carrega quando alguém pede o QR do convite
@@ -522,17 +523,20 @@ const MOTIVOS = {
   "ainda-nao": () => "Essa nota ainda não chegou na Sefaz (acontece logo depois da compra, ou quando o caixa estava sem internet). Tente pelo QR mais tarde, ou leia pela foto agora.",
 };
 // Também serve à loja: sem casa (C nulo), com a lista dela (lista) e o que fazer ao salvar (onSalvar)
-export function NotaSheet({ casa: C, servidor, onClose, act, lista: listaExt, onSalvar, titulo, onSemNota }) {
+export function NotaSheet({ casa: C, servidor, onClose, act, lista: listaExt, onSalvar, titulo, onSemNota, arquivo }) {
   const [etapa, setEtapa] = useState("escolher"); // escolher | camera | lendo | revisar
   const [nota, setNota] = useState(null), [erro, setErro] = useState(null), [link, setLink] = useState(""), [lendo, setLendo] = useState("");
   const [dica, setDica] = useState(""), [luz, setLuz] = useState(null); // luz: null = aparelho sem lanterna
   const [pagou, setPagou] = useState(C ? C.eu : null), [modo, setModo] = useState("dividir");
+  // quem: a loja pelo CNPJ (BrasilAPI): o nome que as pessoas conhecem e o ramo, que escolhe a categoria
+  const [quem, setQuem] = useState(null);
+  const descobrir = cnpj => { if (cnpj) buscarCnpj(cnpj).then(i => { if (i && vivo.current) setQuem(i); }).catch(() => {}); };
   const video = React.useRef(null), stream = React.useRef(null), vivo = React.useRef(true), fotoRef = React.useRef(null);
   const parar = () => { if (stream.current) stream.current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} }); stream.current = null; setLuz(null); };
   useEffect(() => { vivo.current = true; return () => { vivo.current = false; parar(); }; }, []);
   // erro: { t: texto, foto: mostra o botão de tirar foto, sefaz: link para abrir a nota no site da Sefaz }
   const falhou = (t, extra = {}) => { if (!vivo.current) return; setErro({ t, ...extra }); setEtapa("escolher"); vibrar("erro"); };
-  const pronto = n => { if (!n.itens.length) return falhou("Não achei os itens dessa nota. Tire a foto de perto, com a nota inteira e reta.", { foto: true }); setNota(n); setEtapa("revisar"); vibrar("ok"); };
+  const pronto = n => { if (!n.itens.length) return falhou("Não achei os itens dessa nota. Tire a foto de perto, com a nota inteira e reta.", { foto: true }); setNota(n); setEtapa("revisar"); vibrar("ok"); descobrir(n.cnpj); };
 
   // foto: a IA lê a nota inteira (motivo: por que caiu aqui em vez do QR)
   const pelaIA = async (f, motivo) => {
@@ -555,7 +559,8 @@ export function NotaSheet({ casa: C, servidor, onClose, act, lista: listaExt, on
     if (q.erro) return falhou(q.erro === "chave" ? "O QR code saiu cortado ou borrado (a chave da nota não confere). Tente de novo, mais de perto e com a nota esticada." : "Esse QR code não é o da nota fiscal. Procure o do fim do cupom, perto de “Consulte pela chave de acesso”.");
     if (!servidor) return falhou("Para ler a nota, ligue o servidor de avisos (Perfil → Avisos).");
     const uf = ufDaChave(q.chave);
-    setEtapa("lendo"); setLendo(""); setErro(null);
+    setEtapa("lendo"); setLendo(""); setErro(null); setQuem(null);
+    descobrir(cnpjDaChave(q.chave)); // o CNPJ está na chave: mesmo se a Sefaz não deixar ler, já sei de que loja é
     let motivo = "", extra = { foto: true };
     try {
       const r = await fetch(`${servidor}/nfce`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: q.url }), signal: AbortSignal.timeout(30000) });
@@ -607,23 +612,28 @@ export function NotaSheet({ casa: C, servidor, onClose, act, lista: listaExt, on
   };
   const lanterna = async () => { const t = stream.current && stream.current.getVideoTracks()[0]; if (!t) return; try { await t.applyConstraints({ advanced: [{ torch: !luz }] }); setLuz(!luz); } catch (e) {} };
   // foto: primeiro procura o QR code nela (mais preciso); se não tiver, ou a Sefaz não deixar, a IA lê a nota inteira
-  const daFoto = async e => {
-    const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return;
-    parar(); setErro(null); setEtapa("lendo"); setLendo("");
+  const daFoto = e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) lerFoto(f); };
+  const lerFoto = async f => {
+    parar(); setErro(null); setEtapa("lendo"); setLendo(""); setQuem(null);
     let t = null; try { t = (await lerQRs(f)).find(ehLinkNfce); } catch (e2) {}
     if (t) return buscar(t, f);
     pelaIA(f);
   };
   const tirarFoto = () => fotoRef.current && fotoRef.current.click();
+  // chegou uma foto de fora (o "Compartilhar" do celular): já começa lendo
+  useEffect(() => { if (arquivo) lerFoto(arquivo); }, []);
   const tirar = i => setNota(n => { const it = n.itens[i]; return { ...n, itens: n.itens.filter((_, k) => k !== i), total: Math.max(0, Math.round((n.total - it.valor) * 100) / 100) }; });
   const lista = listaExt || C.compras;
   const naNota = nota ? lista.filter(x => nota.itens.some(i => combina(x.texto, i.nome))) : [];
   const ficou = nota ? lista.filter(x => !x.feito && !naNota.includes(x)) : [];
+  // a loja pelo CNPJ (quando achou) dá o nome e a categoria; sem ela, fica como antes
+  const nomeNota = n => (quem && quem.nome) || nomeLoja(n.loja);
+  const comQuem = n => (quem ? { ...n, loja: quem.nome, cnpj: quem.cnpj } : n);
   const salvar = async () => {
-    if (onSalvar) { const { _tr, recusa, bloqueio, ...n } = nota; await onSalvar(n, naNota); onClose(); return; }
+    if (onSalvar) { const { _tr, recusa, bloqueio, ...n } = nota; await onSalvar(comQuem(n), naNota, quem); onClose(); return; }
     const parts = modo === "dividir" ? C.membros.map(m => m.id) : [pagou];
-    const { _tr, recusa, bloqueio, ...n } = nota;
-    await C.salvar("lanc", { valor: n.total, desc: nomeLoja(n.loja) || "Mercado", cat: "mercado", data: n.data || todayISO(), pagou, participantes: parts, pesos: modo === "dividir" ? pesosDe(C.config, parts) : undefined, nota: n, criado: Date.now(), autor: C.eu });
+    const { _tr, recusa, bloqueio, ...n0 } = nota, n = comQuem(n0);
+    await C.salvar("lanc", { valor: n.total, desc: nomeLoja(n.loja) || "Mercado", cat: (quem && quem.cat) || "mercado", data: n.data || todayISO(), pagou, participantes: parts, pesos: modo === "dividir" ? pesosDe(C.config, parts) : undefined, nota: n, criado: Date.now(), autor: C.eu });
     naNota.forEach(x => C.apagar("compra", x.id));
     vibrar("ok"); act.toast(naNota.length ? `Compra salva · ${naNota.length} ${naNota.length === 1 ? "item da lista riscado" : "itens da lista riscados"}` : "Compra salva com a nota");
     onClose();
@@ -632,7 +642,7 @@ export function NotaSheet({ casa: C, servidor, onClose, act, lista: listaExt, on
     <Sheet title={titulo || "Nota do mercado"} sub={etapa === "revisar" ? "Confira e salve" : "Os itens e os preços ficam guardados"} onClose={onClose}>
       {(etapa === "escolher" || etapa === "camera") && <>
         {erro && <div className="nota-erro" role="alert">
-          <span>{erro.t}</span>
+          <span>{quem && <b>{quem.nome}: </b>}{erro.t}</span>
           {(erro.foto || erro.sefaz) && <div className="btn-row">
             {erro.foto && <button type="button" className="btn mode" onClick={tirarFoto}><I.camera /> Tirar foto da nota</button>}
             {erro.sefaz && <a className="btn ghost" href={erro.sefaz} target="_blank" rel="noopener noreferrer">Ver no site da Sefaz</a>}
@@ -653,12 +663,12 @@ export function NotaSheet({ casa: C, servidor, onClose, act, lista: listaExt, on
           <input value={link} onChange={e => setLink(e.target.value)} placeholder="Ou cole o link, ou digite a chave (44 números)" aria-label="Link do QR code ou chave de acesso da nota" autoComplete="off" />
           <button type="submit" className="bub-act" disabled={!link.trim()}>Buscar</button>
         </form>
-        <button className="btn text" onClick={() => onSemNota ? onSemNota() : act.abrirGastoCasa(null, { desc: "Mercado", cat: "mercado" })}>Sem nota? Anotar só o total</button>
+        <button className="btn text" onClick={() => onSemNota ? onSemNota(quem) : act.abrirGastoCasa(null, { desc: (quem && quem.nome) || "Mercado", cat: (quem && quem.cat) || "mercado" })}>{quem ? `Anotar só o total (${quem.nome})` : "Sem nota? Anotar só o total"}</button>
       </>}
       {etapa === "lendo" && <div className="nota-lendo"><Ilustra n="carrinho" /><b>Lendo a nota…</b><small>{lendo || "Isso leva alguns segundos."}</small></div>}
       {etapa === "revisar" && nota && <>
         <div className="nota-topo">
-          <span><b>{nomeLoja(nota.loja) || "Mercado"}</b><small>{nota.data ? dm(nota.data) : "Hoje"} · {nota.itens.length} itens · {nota.fonte === "qr" ? "lida pelo QR code" : "lida pela foto (confira os valores)"}</small></span>
+          <span><b>{nomeNota(nota) || "Mercado"}</b><small>{nota.data ? dm(nota.data) : "Hoje"} · {nota.itens.length} itens · {nota.fonte === "qr" ? "lida pelo QR code" : "lida pela foto (confira os valores)"}{C && quem && quem.cat && quem.cat !== "mercado" ? ` · vai em ${catDe(quem.cat).nome}` : ""}</small></span>
           <b className="num nota-total">{brl(nota.total)}</b>
         </div>
         {lista.length > 0 && <div className={"nota-bate" + (ficou.length ? "" : " tudo")}>

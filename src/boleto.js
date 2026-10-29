@@ -92,5 +92,17 @@ export function lerBoleto(texto) {
   return null;
 }
 
+// O código do boleto no meio de um texto comprido (PDF do boleto, e-mail): devolve os números que lerBoleto aceita.
+// Procura trechos de números (com pontos e espaços no meio) e confere os dígitos de cada pedaço.
+// Só a linha digitável (47 ou 48, com 3 ou 4 dígitos verificadores), que pode estar grudada em outros números.
+// O código de barras (44) fica de fora: tem 1 verificador só, e a chave de uma NF-e (também 44) passaria 1 vez em 11.
+export function acharBoleto(texto) {
+  const trechos = (String(texto || "").match(/\d[\d .\-]{40,90}\d/g) || []).map(so);
+  for (const tam of [47, 48]) for (const n of trechos) {
+    for (let i = 0; i + tam <= n.length; i++) { const p = n.slice(i, i + tam); if (lerBoleto(p)) return p; }
+  }
+  return "";
+}
+
 // Para os testes e para a tela: só os dígitos
 export const digitosBoleto = so;

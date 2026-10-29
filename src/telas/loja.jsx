@@ -458,18 +458,19 @@ function ProdutoSheet({ L, inicial, onClose, act }) {
 }
 
 // Venda só com o valor (sem produto), ou corrigir/apagar uma venda
-function VendaSheet({ L, inicial, onClose, act }) {
-  const [valor, setValor] = useState(inicial ? fmtNum(inicial.total) : "");
-  const [desc, setDesc] = useState(inicial ? inicial.desc || "" : "");
-  const [pag, setPag] = useState(inicial ? inicial.pag : "dinheiro");
+function VendaSheet({ L, inicial, pre, onClose, act }) {
+  // pre: venda que chegou de um comprovante (Pix recebido, compartilhado do WhatsApp)
+  const [valor, setValor] = useState(inicial ? fmtNum(inicial.total) : pre && pre.valor ? fmtNum(pre.valor) : "");
+  const [desc, setDesc] = useState(inicial ? inicial.desc || "" : (pre && pre.desc) || "");
+  const [pag, setPag] = useState(inicial ? inicial.pag : (pre && pre.pag) || "dinheiro");
   const comItens = inicial && inicial.itens && inicial.itens.length > 0;
   const v = num(valor), ok = v > 0;
   const salvar = async () => {
-    if (!inicial && pag === "pix") { onClose(); setTimeout(() => act.abrirLoja("pix", { total: v, onPago: () => salvarJa("pix") }), 250); return; }
+    if (!inicial && pag === "pix" && !(pre && pre.recebido)) { onClose(); setTimeout(() => act.abrirLoja("pix", { total: v, onPago: () => salvarJa("pix") }), 250); return; }
     await salvarJa(pag); onClose();
   };
   const salvarJa = async pg => {
-    const base = inicial || { dia: todayISO(), hora: horaAgora(), itens: [], autor: L.eu, criado: Date.now() };
+    const base = inicial || { dia: (pre && pre.dia) || todayISO(), hora: horaAgora(), itens: [], autor: L.eu, criado: Date.now() };
     await L.salvar("venda", { ...base, total: comItens ? inicial.total : v, desc: desc.trim(), pag: pg });
     vibrar("ok"); act.toast(inicial ? "Venda corrigida" : `Venda de ${brlReal(v)} anotada`);
   };
@@ -479,7 +480,7 @@ function VendaSheet({ L, inicial, onClose, act }) {
         : <label className="big-amt" htmlFor="lv-v"><span>R$</span><input id="lv-v" inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="0,00" autoFocus={!inicial} aria-label="Valor" /></label>}
       <div className="fields"><Field label="O que foi (se quiser)" htmlFor="lv-d"><input id="lv-d" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Ex.: Encomenda de bolo" autoComplete="off" /></Field></div>
       <div className="casa-chips" role="radiogroup" aria-label="Como pagou">{PAGAMENTOS.map(x => <button key={x.id} type="button" className={pag === x.id ? "on" : ""} onClick={() => setPag(x.id)}>{x.curto}</button>)}</div>
-      <button className="btn mode" disabled={!comItens && !ok} onClick={salvar}><I.check /> {inicial ? "Salvar" : pag === "pix" ? "Mostrar o Pix" : "Anotar a venda"}</button>
+      <button className="btn mode" disabled={!comItens && !ok} onClick={salvar}><I.check /> {inicial ? "Salvar" : pag === "pix" && !(pre && pre.recebido) ? "Mostrar o Pix" : "Anotar a venda"}</button>
       {inicial && <ConfirmButton label="Apagar esta venda" titulo="Apagar a venda?" texto="Ela some do caixa para todos da loja." acao="Apagar" onConfirm={async () => { await L.apagar("venda", inicial.id); onClose(); act.toast("Venda apagada"); }} />}
     </Sheet>
   );
@@ -518,7 +519,7 @@ function GastoSheet({ L, inicial, pre, onClose, act }) {
   const [valor, setValor] = useState(inicial ? fmtNum(inicial.valor) : (pre && pre.valor ? fmtNum(pre.valor) : ""));
   const [desc, setDesc] = useState(inicial ? inicial.desc || "" : (pre && pre.desc) || "");
   const [cat, setCat] = useState(inicial ? inicial.cat || "outros" : (pre && pre.cat) || "insumos");
-  const [dia, setDia] = useState(inicial ? inicial.dia : todayISO());
+  const [dia, setDia] = useState(inicial ? inicial.dia : (pre && pre.dia) || todayISO());
   const [daGaveta, setDaGaveta] = useState(inicial ? !!inicial.daGaveta : false);
   const v = num(valor), ok = v > 0;
   const salvar = async () => {
@@ -763,12 +764,13 @@ function ConviteSheet({ L, token, onClose, onEntrou }) {
 }
 
 // Nota do fornecedor (QR code ou foto): vira um gasto de insumos com os itens; o que estava faltando sai da lista
-function NotaLoja({ L, servidor, onClose, act }) {
+function NotaLoja({ L, servidor, onClose, act, arquivo }) {
   const lista = L.faltas.map(x => ({ ...x, texto: x.texto }));
-  const salvar = async (n, naNota) => {
-    await L.salvar("gasto", { valor: n.total, desc: nomeLoja(n.loja) || "Compra com nota", cat: "insumos", dia: n.data || todayISO(), nota: n, autor: L.eu, criado: Date.now() });
+  // quem: o fornecedor pelo CNPJ da nota (o ramo dele diz se é insumo, embalagem, gás…)
+  const salvar = async (n, naNota, quem) => {
+    await L.salvar("gasto", { valor: n.total, desc: nomeLoja(n.loja) || "Compra com nota", cat: (quem && quem.catLoja) || "insumos", dia: n.data || todayISO(), nota: n, autor: L.eu, criado: Date.now() });
     naNota.forEach(x => L.apagar("falta", x.id));
     vibrar("ok"); act.toast(naNota.length ? `Compra salva · ${naNota.length} ${naNota.length === 1 ? "item saiu" : "itens saíram"} da lista` : "Compra salva com a nota");
   };
-  return <NotaSheet casa={null} servidor={servidor} onClose={onClose} act={act} lista={lista} onSalvar={salvar} titulo="Nota do fornecedor" onSemNota={() => { onClose(); setTimeout(() => act.abrirLoja("gasto", {}), 250); }} />;
+  return <NotaSheet casa={null} servidor={servidor} onClose={onClose} act={act} lista={lista} onSalvar={salvar} titulo="Nota do fornecedor" arquivo={arquivo} onSemNota={quem => { onClose(); setTimeout(() => act.abrirLoja("gasto", quem ? { pre: { desc: quem.nome, cat: quem.catLoja || "insumos" } } : {}), 250); }} />;
 }

@@ -30,7 +30,7 @@ self.addEventListener("notificationclick", event => {
 // Se o aparelho trocar a inscrição sozinho, o app refaz na próxima vez que abrir
 self.addEventListener("pushsubscriptionchange", () => {});
 
-// "Compartilhar com o Avina" (Android): foto de comprovante, código de boleto ou texto.
+// "Compartilhar com o Avina" (Android): foto de comprovante ou de nota, PDF (boleto, comprovante) ou texto.
 // Guarda o que chegou e abre o app, que lê e mostra para você conferir.
 self.addEventListener("fetch", event => {
   const req = event.request;

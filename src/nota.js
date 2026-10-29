@@ -24,6 +24,8 @@ export function chaveDe(texto) {
 // Endereço do QR code de cada estado (código da UF → página de consulta), para montar o link a partir da chave digitada
 const UF = { 11: ["RO", "http://www.nfce.sefin.ro.gov.br/consultanfce/consulta.jsp"], 12: ["AC", "http://www.sefaznet.ac.gov.br/nfce/qrcode"], 13: ["AM", "http://sistemas.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp"], 14: ["RR", "https://www.sefaz.rr.gov.br/nfce/servlet/qrcode"], 15: ["PA", "https://appnfc.sefa.pa.gov.br/portal/view/consultas/nfce/nfceForm.seam"], 16: ["AP", "https://www.sefaz.ap.gov.br/nfce/nfcep.php"], 17: ["TO", "http://www.sefaz.to.gov.br/nfce/qrcode"], 21: ["MA", "http://www.nfce.sefaz.ma.gov.br/portal/consultarNFCe.jsp"], 22: ["PI", "http://www.sefaz.pi.gov.br/nfce/qrcode"], 23: ["CE", "http://nfce.sefaz.ce.gov.br/pages/ShowNFCe.html"], 24: ["RN", "https://nfce.sefaz.rn.gov.br/consultarNFCe.aspx"], 25: ["PB", "http://www.sefaz.pb.gov.br/nfce"], 26: ["PE", "http://nfce.sefaz.pe.gov.br/nfce-web/consultarNFCe"], 27: ["AL", "http://nfce.sefaz.al.gov.br/QRCode/consultarNFCe.jsp"], 28: ["SE", "http://www.nfce.se.gov.br/portal/consultarNFCe.jsp"], 29: ["BA", "http://nfe.sefaz.ba.gov.br/servicos/nfce/modulos/geral/NFCEC_consulta_chave_acesso.aspx"], 31: ["MG", "https://portalsped.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml"], 32: ["ES", "http://app.sefaz.es.gov.br/ConsultaNFCe/qrcode.aspx"], 33: ["RJ", "https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode"], 35: ["SP", "https://www.nfce.fazenda.sp.gov.br/qrcode"], 41: ["PR", "http://www.fazenda.pr.gov.br/nfce/qrcode"], 42: ["SC", "https://sat.sef.sc.gov.br/nfce/consulta"], 43: ["RS", "https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx"], 50: ["MS", "http://www.dfe.ms.gov.br/nfce/qrcode"], 51: ["MT", "http://www.sefaz.mt.gov.br/nfce/consultanfce"], 52: ["GO", "https://nfeweb.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe"], 53: ["DF", "http://www.fazenda.df.gov.br/nfce/qrcode"] };
 export const ufDaChave = k => (UF[String(k).slice(0, 2)] || [""])[0];
+// CNPJ da loja que emitiu a nota (posições 7 a 20 da chave): serve mesmo quando a Sefaz não deixa ler os itens
+export const cnpjDaChave = k => (/^\d{44}$/.test(String(k || "")) ? String(k).slice(6, 20) : "");
 // Link de consulta montado com a chave (formato do QR code versão 3: só a chave, sem o código da loja)
 export const linkPelaChave = k => { const u = UF[k.slice(0, 2)]; return u && k.slice(34, 35) === "1" ? `${u[1]}?p=${k}|3|1` : ""; };
 
@@ -136,7 +138,7 @@ export function arrumarNotaIA(n) {
   }).filter(x => x.nome && x.valor > 0 && x.valor < 100000);
   const soma = Math.round(itens.reduce((s, x) => s + x.valor, 0) * 100) / 100;
   const total = Number(n && n.total) > 0 ? Number(n.total) : soma;
-  return { loja: String((n && n.loja) || "").trim().slice(0, 60), cnpj: "", data: /^\d{4}-\d{2}-\d{2}$/.test(n && n.data) ? n.data : "", total, itens };
+  return { loja: String((n && n.loja) || "").trim().slice(0, 60), cnpj: String((n && n.cnpj) || "").replace(/[^0-9A-Za-z]/g, "").slice(0, 14), data: /^\d{4}-\d{2}-\d{2}$/.test(n && n.data) ? n.data : "", total, itens };
 }
 
 // Palavras de um produto (sem acento, sem marca de tamanho), para combinar "leite" com "LEITE UHT INTEGRAL 1L"
