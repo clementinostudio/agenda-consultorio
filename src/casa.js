@@ -77,6 +77,24 @@ export function useCasa(conta, db, setDb) {
     return () => { vivo = false; removeEventListener("online", on); if (canal.current && sbRef.current) sbRef.current.removeChannel(canal.current); };
   }, [conta.uid, dados && dados.casa && dados.casa.id]);
 
+  // A casa guarda uma cópia do meu nome e da minha foto (é o que os outros veem). Quando mudo no Perfil,
+  // atualizo a cópia; os outros recebem na hora (a mudança em casa_membros chega pelo tempo real).
+  const eu0 = nuvem ? dados && dados.casa && dados.membros.find(m => m.id === conta.uid) : local && local.membros.find(m => m.id === "eu");
+  const meuNome = String(conta.nome || "").slice(0, 60) || (eu0 && eu0.nome) || "", minhaFoto = fotoPequena(conta.foto);
+  const desatualizado = !!eu0 && ((eu0.nome || "") !== meuNome || (eu0.foto || null) !== minhaFoto);
+  useEffect(() => {
+    if (!desatualizado) return;
+    const trocar = ms => ms.map(m => m.id === eu0.id ? { ...m, nome: meuNome, foto: minhaFoto } : m);
+    if (!nuvem) { setLocal(c => c && ({ ...c, membros: trocar(c.membros) })); return; }
+    let vivo = true;
+    (async () => {
+      const sb = sbRef.current || (sbRef.current = await cliente());
+      const { error } = await sb.from("casa_membros").update({ nome: meuNome, foto: minhaFoto }).eq("casa_id", dados.casa.id).eq("user_id", conta.uid);
+      if (!error && vivo) setDados(d => { if (!d) return d; const n = { ...d, membros: trocar(d.membros) }; gravar(K_CACHE(conta.uid), n); return n; });
+    })().catch(() => {}); // sem internet: tenta de novo na próxima vez que a casa carregar
+    return () => { vivo = false; };
+  }, [desatualizado, meuNome, minhaFoto]);
+
   // ---------- o que as telas usam ----------
   const atual = nuvem ? dados : local && { casa: { id: "local", nome: local.nome, dono: "eu" }, membros: local.membros, itens: local.itens || {} };
   const lista = col => Object.entries((atual && atual.itens) || {}).filter(([k]) => k.startsWith(col + "|")).map(([, v]) => v).filter(Boolean);
