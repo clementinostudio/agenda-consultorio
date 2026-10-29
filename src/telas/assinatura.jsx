@@ -4,16 +4,23 @@
 import React, { useState, useEffect } from "react";
 import { I, Marca, Seg, Field, Ilustra, Sheet, BASE, todayISO, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
 import { cliente } from "../nuvem.js";
-import { PLANOS, PRODUTOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso, linkSuporte, LANCAMENTO_ATE, emLancamento, GRUPOS, grupoDe } from "../plano.js";
+import { PLANOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso, linkSuporte, LANCAMENTO_ATE, emLancamento, AREAS, produtoDasAreas, areasDoProduto, areasDoPerfil, separadoMensal } from "../plano.js";
 
-const INCLUI = {
-  completo: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Lançamentos pessoais sem limite: gastos, contas, caixinhas e a casa", "O líquido do consultório entrando no seu dinheiro pessoal", "Avisos no celular, voz e cópia na nuvem"],
-  consultorio: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Link de agendamento para o paciente marcar sozinho", "Lembretes de sessão, faltas e reajuste", "Avisos no celular, voz e cópia na nuvem"],
-  pessoal: ["Lançamentos sem limite todo mês", "Contas, caixinhas, transporte e a casa a dois", "Quanto dá para gastar hoje e a previsão do mês", "Avisos no celular, voz e cópia na nuvem"],
-  loja: [`Equipe: até 5 ajudantes anotando, cada um no seu celular`, "Você escolhe quem vê o lucro e quem só anota", "Resumo e gastos de todos os meses, sem limite", "Caixa, Pix com QR code, nota do fornecedor e cópia na nuvem"],
-  lojapessoal: ["Tudo do Pro Loja: equipe, resumo e gastos sem limite", "Lançamentos pessoais sem limite: gastos, contas, caixinhas e a casa", "A retirada da loja entrando no seu dinheiro pessoal", "Avisos no celular, voz e cópia na nuvem"],
+// O que o plano inclui: as linhas de cada área marcada, mais o que só existe quando as áreas andam juntas
+const INCLUI_AREA = {
+  consultorio: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Link de agendamento para o paciente marcar sozinho"],
+  loja: ["Loja com equipe: até 5 ajudantes, cada um no seu celular", "Resumo e gastos da loja de todos os meses"],
+  pessoal: ["Lançamentos pessoais sem limite: gastos, contas, caixinhas e a casa"],
 };
-const GRATIS_TXT = `Grátis: até ${LIMITE_GRATIS.pacientes} pacientes e ${LIMITE_GRATIS.lancMes} lançamentos por mês.`;
+const incluiDe = produto => {
+  const a = areasDoProduto(produto);
+  return [...AREAS.filter(x => a[x.id]).flatMap(x => INCLUI_AREA[x.id]),
+    ...(a.consultorio && a.pessoal ? ["O líquido do consultório entrando no seu dinheiro pessoal"] : []),
+    ...(a.loja && a.pessoal ? ["A retirada da loja entrando no seu dinheiro pessoal"] : []),
+    "Avisos no celular, voz e cópia na nuvem"];
+};
+// o que a versão grátis permite, só nas áreas que a pessoa usa
+const gratisTxt = perfil => { const a = areasDoPerfil(perfil); const t = [a.consultorio && `até ${LIMITE_GRATIS.pacientes} pacientes`, a.pessoal && `${LIMITE_GRATIS.lancMes} lançamentos pessoais por mês`, a.loja && `a loja sem equipe, com o resumo dos últimos ${LIMITE_GRATIS.lojaDias} dias`].filter(Boolean); return `Grátis: ${t.length > 1 ? t.slice(0, -1).join(", ") + " e " + t[t.length - 1] : t[0]}.`; };
 const nomeCompleto = p => p ? `${p.nome} ${p.meses > 1 ? "anual" : "mensal"}` : "Avina Pro";
 const MOTIVOS = ["Ficou caro", "Não estou usando", "Faltou alguma coisa", "Vou usar outro app", "Outro motivo"];
 const TITULO_ASSIN = { planos: "Escolha seu plano", pagar: "Pagamento", pronto: "Assinatura", forma: "Forma de pagamento", historico: "Pagamentos", pausar: "Pausar assinatura", cancelar: "Cancelar assinatura" };
@@ -191,8 +198,10 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   const [meses, setMeses] = useState(1);
   const [motivo, setMotivo] = useState(null);
   const P = planoDe(plano), atual = planoDe(a.plano) || P, produto = P.produto;
-  // os pacotes da loja e os do consultório/pessoal ficam em grupos separados (quem tem loja vê os da loja primeiro)
-  const grupo = grupoDe(produto), outroGrupo = grupo === "loja" ? "consultorio" : "loja";
+  // o plano é montado pelas áreas: marcar ou desmarcar uma área troca o plano (pelo menos uma fica marcada)
+  const areas = areasDoProduto(produto), uso = areasDoPerfil(conta.perfil), ciclo = plano.endsWith("_mensal") ? "mensal" : "anual";
+  const marcarArea = id => { const n = { ...areas, [id]: !areas[id] }; if (!AREAS.some(x => n[x.id])) return; vibrar("toque"); setPlano(`${produtoDasAreas(n)}_${ciclo}`); };
+  const separado = separadoMensal(produto), mensal = PLANOS[`${produto}_mensal`].preco;
   const produtoPadrao = produtoDoUso(conta.perfil);
   // Quem já assina só troca o plano para a próxima renovação (sem cobrar a diferença)
   const trocando = sit.s === "ativa";
@@ -218,9 +227,17 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
       <i className="assin-logo"><Marca /></i>
       <h2>{sit.s === "sem" ? "Assine o Avina Pro" : "Continue com o Avina Pro"}</h2>
       {!trocando && emLancamento(hoje) && <div className="lanc-faixa"><b>Preço de lançamento</b><span>Assinando até {dataLonga(LANCAMENTO_ATE)}, você mantém este valor enquanto a assinatura estiver ativa.</span></div>}
-      <Seg big value={produto} onChange={v => setPlano(`${v}_${plano.endsWith("_mensal") ? "mensal" : "anual"}`)} options={GRUPOS[grupo].map(v => ({ v, l: PRODUTOS[v].nome }))} />
-      <ul className="assin-inclui">{INCLUI[produto].map(t => <li key={t}><I.check />{t}</li>)}</ul>
-      <button className="btn text" onClick={() => setPlano(`${GRUPOS[outroGrupo][0]}_${plano.endsWith("_mensal") ? "mensal" : "anual"}`)}>{grupo === "loja" ? "Ver os pacotes de consultório e vida pessoal" : "Tem uma loja? Ver os pacotes da Loja"}</button>
+      <div className="assin-areas-t"><b>O que entra no seu plano</b><small>Já marquei o que você usa no app. Pague só pelo que usar.</small></div>
+      <div className="assin-areas" role="group" aria-label="Áreas do plano">
+        {AREAS.map(x => (
+          <button key={x.id} type="button" className={"assin-area" + (areas[x.id] ? " on" : "")} aria-pressed={!!areas[x.id]} onClick={() => marcarArea(x.id)}>
+            <i className="assin-check">{areas[x.id] && <I.check />}</i>
+            <span><b>{x.nome}{uso[x.id] && <em>você usa</em>}</b><small>{x.texto}</small></span>
+          </button>
+        ))}
+      </div>
+      <div className="assin-nome"><b>{P.nome}</b>{separado > mensal && <small>Separadas, estas áreas sairiam {brlReal(separado)} por mês. Juntas: {brlReal(mensal)}.</small>}</div>
+      <ul className="assin-inclui">{incluiDe(produto).map(t => <li key={t}><I.check />{t}</li>)}</ul>
       <div className="assin-planos" role="radiogroup" aria-label="Plano">
         {["anual", "mensal"].map(c => {
           const id = `${produto}_${c}`, p = PLANOS[id];
@@ -325,7 +342,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
           <small>Assinatura</small>
           <b>{sit.s === "acabou" ? "Sua assinatura terminou" : "Escolha seu plano"}</b>
           <p>{sit.s === "acabou" ? "Seus dados continuam guardados. Escolha um plano para continuar anotando." : `A partir de ${porMes(PLANOS.pessoal_anual)} por mês. Garantia de 7 dias: não gostou, devolvemos tudo.`}</p>
-          {sit.s === "sem" && <p className="assin-gratis">{GRATIS_TXT}</p>}
+          {sit.s === "sem" && <p className="assin-gratis">{gratisTxt(conta.perfil)}</p>}
           {s.cortesiaAte && hoje < s.cortesiaAte && <div className="note mint"><I.star /><span>O Pro completo está liberado de presente até {dataLonga(s.cortesiaAte)}. Depois, você escolhe se quer assinar.</span></div>}
           <button className="btn mode" onClick={() => setTela("planos")}>Escolher meu plano</button>
           {codigoAcesso}
@@ -359,7 +376,7 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
       {(sit.s === "sem" || sit.s === "acabou") && (
         <div className="perfil-grupo">
           <h3>O que vem no Avina Pro</h3>
-          <ul className="assin-inclui">{INCLUI[produtoPadrao].map(t => <li key={t}><I.check />{t}</li>)}</ul>
+          <ul className="assin-inclui">{incluiDe(produtoPadrao).map(t => <li key={t}><I.check />{t}</li>)}</ul>
         </div>
       )}
 
@@ -386,13 +403,13 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
 // Passou do limite da versão grátis: mostra o que o Pro libera (nada do que já está anotado se perde)
 function ProSheet({ motivo, sugerido, onClose, act }) {
   const pac = motivo === "pac", lj = String(motivo || "").startsWith("loja");
-  // quem usa as duas áreas vê o pacote com as duas; senão, só a área que travou
-  const produto = lj ? (sugerido === "lojapessoal" ? "lojapessoal" : "loja") : sugerido === "completo" ? "completo" : pac ? "consultorio" : "pessoal", P = PLANOS[`${produto}_anual`];
+  // o plano das áreas que a pessoa usa (o que travou sempre está entre elas)
+  const produto = PLANOS[`${sugerido}_anual`] ? sugerido : lj ? "loja" : pac ? "consultorio" : "pessoal", P = PLANOS[`${produto}_anual`];
   return (
     <Sheet title={lj ? (motivo === "loja-equipe" ? "Sua equipe no caixa" : "Todo o histórico da loja") : pac ? `Você chegou a ${LIMITE_GRATIS.pacientes} pacientes` : `Você chegou a ${LIMITE_GRATIS.lancMes} lançamentos este mês`}
       sub={lj ? (motivo === "loja-equipe" ? "Na versão grátis, a loja é só sua. No Pro Loja, quem ajuda anota junto, cada um no seu celular." : `Na versão grátis, o resumo e os gastos mostram os últimos ${LIMITE_GRATIS.lojaDias} dias. Nada do que foi anotado se perde.`) : pac ? `Na versão grátis, dá para acompanhar até ${LIMITE_GRATIS.pacientes} pacientes ativos.` : `Na versão grátis, dá para anotar até ${LIMITE_GRATIS.lancMes} lançamentos por mês. No mês que vem, o contador zera.`} onClose={onClose}>
       <div className="pro-topo"><i className="assin-logo"><Marca /></i><b>Avina Pro</b><span className="pro-selo">PRO</span></div>
-      <ul className="assin-inclui">{INCLUI[produto].map(t => <li key={t}><I.check />{t}</li>)}</ul>
+      <ul className="assin-inclui">{incluiDe(produto).map(t => <li key={t}><I.check />{t}</li>)}</ul>
       <div className="note mint"><I.star /><span>{P.nome}: {porMes(P)} por mês no plano anual.{emLancamento(todayISO()) ? ` Preço de lançamento até ${dataLonga(LANCAMENTO_ATE)}: quem assina agora mantém o valor.` : ""} Garantia de 7 dias: não gostou, devolvemos tudo.</span></div>
       <button className="btn mode" onClick={() => { onClose(); setTimeout(() => act.openSettings("assinatura"), 250); }}>Conhecer o Avina Pro</button>
       <button className="btn text" onClick={onClose}>Agora não</button>

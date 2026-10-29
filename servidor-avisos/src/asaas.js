@@ -18,18 +18,22 @@
   e sub:<id da assinatura> -> id do usuário (para o webhook achar de quem é).
 */
 
-// Mesmos preços do app (src/plano.js): mudou lá, mude aqui. O anual sai 10 mensalidades.
+// Mesmos preços do app (src/plano.js): mudou lá, mude aqui. Um plano para cada combinação de áreas; o anual sai 10 mensalidades.
 const PLANOS = {
-  completo_anual: { nome: "Pro Completo anual", valor: 399, ciclo: "YEARLY" },
-  completo_mensal: { nome: "Pro Completo mensal", valor: 39.9, ciclo: "MONTHLY" },
-  consultorio_anual: { nome: "Pro Consultório anual", valor: 299, ciclo: "YEARLY" },
-  consultorio_mensal: { nome: "Pro Consultório mensal", valor: 29.9, ciclo: "MONTHLY" },
   pessoal_anual: { nome: "Pro Pessoal anual", valor: 199, ciclo: "YEARLY" },
   pessoal_mensal: { nome: "Pro Pessoal mensal", valor: 19.9, ciclo: "MONTHLY" },
+  consultorio_anual: { nome: "Pro Consultório anual", valor: 299, ciclo: "YEARLY" },
+  consultorio_mensal: { nome: "Pro Consultório mensal", valor: 29.9, ciclo: "MONTHLY" },
   loja_anual: { nome: "Pro Loja anual", valor: 299, ciclo: "YEARLY" },
   loja_mensal: { nome: "Pro Loja mensal", valor: 29.9, ciclo: "MONTHLY" },
+  completo_anual: { nome: "Pro Consultório + Pessoal anual", valor: 399, ciclo: "YEARLY" },
+  completo_mensal: { nome: "Pro Consultório + Pessoal mensal", valor: 39.9, ciclo: "MONTHLY" },
   lojapessoal_anual: { nome: "Pro Loja + Pessoal anual", valor: 399, ciclo: "YEARLY" },
   lojapessoal_mensal: { nome: "Pro Loja + Pessoal mensal", valor: 39.9, ciclo: "MONTHLY" },
+  consultorioloja_anual: { nome: "Pro Consultório + Loja anual", valor: 499, ciclo: "YEARLY" },
+  consultorioloja_mensal: { nome: "Pro Consultório + Loja mensal", valor: 49.9, ciclo: "MONTHLY" },
+  tudo_anual: { nome: "Pro Completo anual", valor: 599, ciclo: "YEARLY" },
+  tudo_mensal: { nome: "Pro Completo mensal", valor: 59.9, ciclo: "MONTHLY" },
 };
 const ALIAS = { anual: "completo_anual", mensal: "completo_mensal" }; // planos de antes dos três pacotes (incluíam as duas áreas)
 const idPlano = id => ALIAS[id] || id;

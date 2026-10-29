@@ -2,47 +2,53 @@
 // Os preços também ficam no servidor (servidor-avisos/src/asaas.js, PLANOS): mudou aqui, mude lá.
 
 // Grátis: dá para usar de verdade, com limite em cada área.
-// Loja grátis: caixa, gastos e lista sem limite, mas só a dona (sem ajudantes) e o resumo dos últimos 30 dias.
+// Loja grátis: caixa, gastos e lista sem limite, mas sem ajudantes e com o resumo dos últimos 30 dias.
 export const LIMITE_GRATIS = { pacientes: 3, lancMes: 30, lojaDias: 30 };
 
-// Três pacotes: os dois juntos, só o consultório ou só a vida pessoal. O anual sai 10 mensalidades (2 meses grátis).
+// O Pro é montado pelas áreas que a pessoa usa: Consultório, Pessoal e Loja. Cada combinação é um plano
+// (assim cada um paga só o que usa). Regra de preço: cada área de trabalho (consultório ou loja) R$ 29,90;
+// o Pessoal sozinho R$ 19,90 e, junto com uma área de trabalho, + R$ 10. O anual sai 10 mensalidades (2 meses grátis).
+// Os ids antigos (completo, consultorio, pessoal) continuam valendo para quem já assina.
+const plano = (produto, nome, mensal) => ({
+  [`${produto}_anual`]: { produto, nome, preco: Math.round(mensal * 10), ciclo: "ano", meses: 12, selo: "2 meses grátis" },
+  [`${produto}_mensal`]: { produto, nome, preco: mensal, ciclo: "mês", meses: 1 },
+});
 export const PLANOS = {
-  completo_anual: { produto: "completo", nome: "Pro Completo", preco: 399, ciclo: "ano", meses: 12, selo: "2 meses grátis" },
-  completo_mensal: { produto: "completo", nome: "Pro Completo", preco: 39.9, ciclo: "mês", meses: 1 },
-  consultorio_anual: { produto: "consultorio", nome: "Pro Consultório", preco: 299, ciclo: "ano", meses: 12, selo: "2 meses grátis" },
-  consultorio_mensal: { produto: "consultorio", nome: "Pro Consultório", preco: 29.9, ciclo: "mês", meses: 1 },
-  pessoal_anual: { produto: "pessoal", nome: "Pro Pessoal", preco: 199, ciclo: "ano", meses: 12, selo: "2 meses grátis" },
-  pessoal_mensal: { produto: "pessoal", nome: "Pro Pessoal", preco: 19.9, ciclo: "mês", meses: 1 },
-  // Loja: pacotes à parte (não mudam nada nos três de cima)
-  loja_anual: { produto: "loja", nome: "Pro Loja", preco: 299, ciclo: "ano", meses: 12, selo: "2 meses grátis" },
-  loja_mensal: { produto: "loja", nome: "Pro Loja", preco: 29.9, ciclo: "mês", meses: 1 },
-  lojapessoal_anual: { produto: "lojapessoal", nome: "Pro Loja + Pessoal", preco: 399, ciclo: "ano", meses: 12, selo: "2 meses grátis" },
-  lojapessoal_mensal: { produto: "lojapessoal", nome: "Pro Loja + Pessoal", preco: 39.9, ciclo: "mês", meses: 1 },
+  ...plano("pessoal", "Pro Pessoal", 19.9),
+  ...plano("consultorio", "Pro Consultório", 29.9),
+  ...plano("loja", "Pro Loja", 29.9),
+  ...plano("completo", "Pro Consultório + Pessoal", 39.9),
+  ...plano("lojapessoal", "Pro Loja + Pessoal", 39.9),
+  ...plano("consultorioloja", "Pro Consultório + Loja", 49.9),
+  ...plano("tudo", "Pro Completo", 59.9),
 };
-// o que cada pacote libera sem limite
+// o que cada plano libera sem limite
 const LIBERA = { completo: { consultorio: true, pessoal: true }, consultorio: { consultorio: true }, pessoal: { pessoal: true },
-  loja: { loja: true }, lojapessoal: { loja: true, pessoal: true }, tudo: { consultorio: true, pessoal: true, loja: true } };
-// planos antigos (antes dos três pacotes) incluíam as duas áreas
+  loja: { loja: true }, lojapessoal: { loja: true, pessoal: true }, consultorioloja: { consultorio: true, loja: true }, tudo: { consultorio: true, pessoal: true, loja: true } };
+// planos antigos (antes dos pacotes) incluíam o consultório e o pessoal
 const ALIAS = { anual: "completo_anual", mensal: "completo_mensal" };
 export const idPlano = id => ALIAS[id] || id;
 export const planoDe = id => PLANOS[idPlano(id)] || null;
 
-export const PRODUTOS = {
-  completo: { nome: "Os dois", texto: "Consultório e vida pessoal juntos, sem limite" },
-  consultorio: { nome: "Consultório", texto: "Agenda, pacientes, cobranças, recibos e imposto" },
-  pessoal: { nome: "Pessoal", texto: "Gastos, contas, caixinhas, transporte e a casa" },
-  loja: { nome: "Loja", texto: "Caixa, gastos da loja, equipe e relatórios" },
-  lojapessoal: { nome: "Loja + Pessoal", texto: "A loja e o seu dinheiro pessoal, cada um no seu lugar" },
-};
-// Os pacotes aparecem em dois grupos: quem tem loja vê os da loja; quem não tem, os do consultório e pessoal
-export const GRUPOS = { loja: ["loja", "lojapessoal"], consultorio: ["completo", "consultorio", "pessoal"] };
-export const grupoDe = produto => (GRUPOS.loja.includes(produto) ? "loja" : "consultorio");
-const usaLoja = p => (p || {}).loja === true;
-// pacote que combina com o jeito que a pessoa usa o app
-export const produtoDoUso = perfil => usaLoja(perfil) ? ((perfil || {}).pessoal === false ? "loja" : "lojapessoal")
-  : (perfil || {}).consultorio === false ? "pessoal" : (perfil || {}).pessoal === false ? "consultorio" : "completo";
+// As três áreas do app (as mesmas do seletor de modo e do Perfil)
+export const AREAS = [
+  { id: "consultorio", nome: "Consultório", texto: "Agenda, pacientes, cobranças, recibos e imposto" },
+  { id: "loja", nome: "Loja", texto: "Caixa do dia, gastos da loja, equipe e resumo" },
+  { id: "pessoal", nome: "Pessoal", texto: "Gastos, contas, caixinhas, transporte e a casa" },
+];
+const ORDEM = ["consultorio", "loja", "pessoal"];
+const COMBO = { consultorio: "consultorio", loja: "loja", pessoal: "pessoal", "consultorio+pessoal": "completo", "loja+pessoal": "lojapessoal", "consultorio+loja": "consultorioloja", "consultorio+loja+pessoal": "tudo" };
+// { consultorio, pessoal, loja } -> id do plano, e o contrário
+export const produtoDasAreas = a => COMBO[ORDEM.filter(k => a && a[k]).join("+")] || "pessoal";
+export const areasDoProduto = produto => LIBERA[produto] || {};
+// as áreas que a pessoa usa (do jeito que o app decide os modos: pelo menos uma)
+export const areasDoPerfil = p => { p = p || {}; const consultorio = p.consultorio !== false, loja = p.loja === true; return { consultorio, loja, pessoal: p.pessoal !== false || (!consultorio && !loja) }; };
+// plano que combina com o jeito que a pessoa usa o app
+export const produtoDoUso = perfil => produtoDasAreas(areasDoPerfil(perfil));
+// quanto sairia cada área num plano separado (para mostrar a economia de juntar)
+export const separadoMensal = produto => { const a = areasDoProduto(produto); return Math.round(ORDEM.filter(k => a[k]).reduce((s, k) => s + PLANOS[`${k}_mensal`].preco, 0) * 100) / 100; };
 
-// O que está liberado hoje: { consultorio, pessoal }. A cortesia (contas de antes da cobrança) libera tudo.
+// O que está liberado hoje: { consultorio, pessoal, loja }. A cortesia (contas de antes da cobrança) libera tudo.
 export function liberadoDe(estado, cortesiaAte, hoje) {
   if (cortesiaAte && hoje < cortesiaAte) return LIBERA.tudo;
   if (!estado) return {};

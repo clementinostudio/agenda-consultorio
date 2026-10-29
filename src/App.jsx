@@ -17,7 +17,9 @@ import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquis
 import { AVATARES, ehAvatarPronto, avatarAtualizado } from "./avatares.js";
 import { precosGuardados, veiculosDe } from "./transporte.js";
 import { useCasa, K_CONVITE, pesosDe } from "./casa.js";
-import { useLoja, K_CONVITE_LOJA } from "./loja.js";
+import { useLoja, K_CONVITE_LOJA, CORES_PRODUTO } from "./loja.js";
+// a loja respondida no cadastro, esperando a nuvem para ser criada
+const K_LOJA_INICIAL = e => `agenda-loja-inicial:${e}`;
 import { janelasDoDia } from "./horarios.js";
 import { LIMITE_GRATIS, liberadoDe, ehPro, produtoDoUso } from "./plano.js";
 import { useLinkAgendamento, linkDo } from "./link.js";
@@ -4016,9 +4018,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   }, [usaPessoal]);
   // Respostas do cadastro (contas fixas, veículo, caixinha, entrada do mês): entram uma vez no db
   useEffect(() => {
-    const ini = lerJSON(K.inicial(conta.email), null);
-    if (!ini) return;
+    const ini0 = lerJSON(K.inicial(conta.email), null);
+    if (!ini0) return;
     localStorage.removeItem(K.inicial(conta.email));
+    // a parte da loja espera a loja da nuvem responder (efeito logo abaixo)
+    const { loja: lojaIni, ...ini } = ini0;
+    if (lojaIni) gravar(K_LOJA_INICIAL(conta.email), lojaIni);
+    if (!Object.keys(ini).length) return;
     setDb(d => {
       const P = d.pessoal || pessoalVazio(), nomes = new Set(P.contas.map(c => c.nome.toLowerCase()));
       const contas = [...P.contas, ...(ini.contas || []).filter(c => !nomes.has(c.nome.toLowerCase())).map(c => { const m = acharMarca(c.nome); return { ...c, marca: m ? m.id : null }; })];
@@ -4030,6 +4036,20 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         ...(ini.renda ? { renda: ini.renda } : {}) } };
     });
   }, []);
+  // A loja do cadastro: quando a nuvem diz que ainda não tem loja, abre com o nome, os botões do caixa, o Pix e o troco
+  const montandoLoja = useRef(false);
+  useEffect(() => {
+    const ini = lerJSON(K_LOJA_INICIAL(conta.email), null);
+    if (!ini || loja.estado !== "sem" || montandoLoja.current) return;
+    montandoLoja.current = true;
+    (async () => {
+      await loja.criar(ini.nome);
+      for (const [k, p] of (ini.produtos || []).entries()) await loja.salvar("produto", { nome: p.nome, preco: p.preco, cor: CORES_PRODUTO[k % CORES_PRODUTO.length], ativo: true, ordem: k, criado: Date.now() + k });
+      if (ini.pix || ini.tipo) await loja.salvar("config", { id: "loja", tipo: ini.tipo, pix: ini.pix || "", cidade: (ini.cidade || "").slice(0, 15) });
+      if (ini.troco > 0) await loja.salvar("caixa", { id: todayISO(), dia: todayISO(), troco: ini.troco, criado: Date.now() });
+      localStorage.removeItem(K_LOJA_INICIAL(conta.email));
+    })().catch(() => {}).finally(() => { montandoLoja.current = false; });
+  }, [loja.estado]);
   // Entrada do mês (salário): no dia combinado, vira um lançamento sozinho (uma vez por mês, mesmo que apaguem)
   useEffect(() => {
     const R = db.pessoal && db.pessoal.renda; if (!usaPessoal || !R || !R.auto || !(R.valor > 0)) return;

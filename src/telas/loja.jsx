@@ -114,6 +114,10 @@ export function LojaCaixa({ loja: L, conta, act, tema }) {
         <button className="icon-btn" onClick={() => act.abrirLoja("ajustes")} aria-label="Ajustes e equipe da loja"><I.gear /></button>
       </header>
       <AvisoEquipe L={L} act={act} />
+      {/* disse no cadastro que tem ajuda: lembra de chamar a equipe */}
+      {L.souDona && L.membros.length < 2 && L.nuvem && conta.perfil && conta.perfil.lojaEquipe && <button className="casa-convite lj-chamar" onClick={() => act.abrirLoja("ajustes")}>
+        <span className="ic"><I.users /></span><span className="tx"><b>Chame quem te ajuda</b><small>Cada um anota as vendas no próprio celular, e você vê tudo na hora.</small></span><I.chev />
+      </button>}
       <div className="cols">
         <div className="col">
           {/* o dia até agora */}
