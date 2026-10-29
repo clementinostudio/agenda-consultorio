@@ -4,7 +4,7 @@ import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
 import { DinheiroHome } from "./dinheiro.jsx";
-import { CatBolinha, Linha, useContagem } from "./visual.jsx";
+import { CatBolinha, Linha, useContagem, Topo, Comparacao } from "./visual.jsx";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
 import { logoPropria, lerArquivo } from "../App.jsx";
 import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos, Confirmar, vibrar } from "../App.jsx";
@@ -506,59 +506,92 @@ function ParaOndeFoi({ db, chave, act }) {
   );
 }
 
+// Gasto acumulado dia a dia num mês (saídas e contas pagas), para a linha do ritmo
+function acumuladoMes(db, ch, n) {
+  const p = Array(n).fill(0), dia = iso => Math.min(n, Math.max(1, Number(String(iso).slice(8, 10)) || 1));
+  db.pessoal.lanc.forEach(l => { if (l.tipo === "saida" && l.data.startsWith(ch)) p[dia(l.data) - 1] += l.valor; });
+  // conta paga: no dia em que foi paga (paga em outro mês: no começo ou no fim deste)
+  db.pessoal.contas.forEach(c => { const pg = c.pagas && c.pagas[ch]; if (!pg) return; const d = typeof pg === "string" && pg.startsWith(ch) ? dia(pg) : typeof pg === "string" && pg > ch ? n : 1; p[d - 1] += c.valor; });
+  let s = 0; return p.map(x => (s += x));
+}
+const diasDoMes = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+
 function GastosTab({ db, act, tema }) {
   const [off, setOff] = useState(0);
   const [filtro, setFiltro] = useState("tudo");
+  const [cat, setCat] = useState(null); // categoria escolhida nos cartões: filtra os lançamentos
   const base = new Date();
-  const m = new Date(base.getFullYear(), base.getMonth() + off, 1);
-  const chave = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
+  const m = new Date(base.getFullYear(), base.getMonth() + off, 1), pm = new Date(m.getFullYear(), m.getMonth() - 1, 1);
+  const chave = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`, chAnt = `${pm.getFullYear()}-${pad(pm.getMonth() + 1)}`;
   const r = resumoPessoal(db, chave);
   const tetos = db.pessoal.limites || {};
   // categorias com gasto no mês + as que têm teto (mesmo sem gasto ainda)
   const cats = [...Object.entries(r.porCat), ...Object.keys(tetos).filter(id => tetos[id] > 0 && !r.porCat[id]).map(id => [id, 0])].sort((a, b) => b[1] - a[1]);
   const totalCat = soma(cats, c => c[1]) || 1;
-  const maior = Math.max(...cats.map(c => c[1]), 1);
+  // o ritmo do mês: no mês atual, compara com o anterior até o mesmo dia
+  const atual = off === 0, hojeD = Number(todayISO().slice(8, 10));
+  const nM = diasDoMes(m), nA = diasDoMes(pm);
+  const serieA = acumuladoMes(db, chave, nM).slice(0, atual ? hojeD : nM), serieB = acumuladoMes(db, chAnt, nA);
+  const antAte = serieB[Math.min(atual ? hojeD : nA, nA) - 1] || 0, agoraAte = serieA[serieA.length - 1] || 0;
+  const mudarMes = k => { setOff(k); setCat(null); vibrar("toque"); };
   let lista = db.pessoal.lanc.filter(l => l.data.startsWith(chave));
-  if (filtro === "saida") lista = lista.filter(l => l.tipo === "saida");
-  if (filtro === "entrada") lista = lista.filter(l => l.tipo === "entrada");
+  if (cat) lista = lista.filter(l => l.tipo === "saida" && l.cat === cat);
+  else if (filtro === "saida") lista = lista.filter(l => l.tipo === "saida");
+  else if (filtro === "entrada") lista = lista.filter(l => l.tipo === "entrada");
   lista.sort((a, b) => b.data.localeCompare(a.data));
   const grupos = []; lista.forEach(l => { const g = grupos[grupos.length - 1]; if (g && g.d === l.data) g.itens.push(l); else grupos.push({ d: l.data, itens: [l] }); });
   // Seleção para apagar vários de uma vez
   const [sel, setSel] = useState(null); // null = modo normal; Set de ids = selecionando
   const [confirmar, setConfirmar] = useState(false);
-  useEffect(() => { setSel(null); }, [off, filtro]);
+  useEffect(() => { setSel(null); }, [off, filtro, cat]);
   const marcar = id => setSel(s => { const n = new Set(s || []); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const segurar = id => { vibrar("toque"); setSel(s => new Set([...(s || []), id])); };
   const todos = sel && lista.length > 0 && lista.every(l => sel.has(l.id));
-  const nav = <>
-    <button className="icon-btn" onClick={() => setOff(off - 1)} aria-label="Mês anterior"><I.chevL /></button>
-    <button className="icon-btn" onClick={() => setOff(off + 1)} aria-label="Próximo mês"><I.chev /></button>
-  </>;
+  const nomeMes = MES_LONGO[m.getMonth()], ano = m.getFullYear() !== base.getFullYear() ? ` de ${m.getFullYear()}` : "";
+  const ct = cat && catDe(cat), teto = cat ? tetos[cat] || 0 : 0, gastoCat = cat ? r.porCat[cat] || 0 : 0;
   return (
-    <div className="page">
-      <TopBar eyebrow={`${MES_LONGO[m.getMonth()]} de ${m.getFullYear()}`} title="Gastos" act={act} tema={tema} extra={nav} />
+    <div className="page g4">
+      <TopBar eyebrow={`${nomeMes} de ${m.getFullYear()}`} title="Gastos" act={act} tema={tema} />
       <div className="cols">
         <div className="col">
-          <section className="bal">
-            <div className="bal-top"><span className="lab">Saiu no mês</span><span className="trend">{r.sobra >= 0 ? `Sobra ${brl(r.sobra)}` : `Faltam ${brl(-r.sobra)}`}</span></div>
-            <div className="bal-amt"><Money v={r.saiu} /></div>
-            {cats.length > 0 && <div className="catbar" aria-hidden="true">{cats.filter(c => c[1] > 0).map(([id, v]) => <i key={id} style={{ width: `${v / totalCat * 100}%`, background: (CORES.find(c => c.id === catDe(id).cor) || CORES[0]).cor }} />)}</div>}
-            {cats.length === 0 ? <div className="empty">Nenhum gasto neste mês.</div> : cats.map(([id, v]) => {
-              const cat = catDe(id), teto = tetos[id] > 0 ? tetos[id] : 0, pct = teto ? v / teto : 0;
-              return (
-                <button className={"catrow" + (teto ? pct >= 1 ? " estourou" : pct >= .8 ? " perto" : " com-teto" : "")} key={id} style={catVars(cat)} onClick={() => id === "transporte" ? act.abrirTransporte() : act.abrirTeto(id)} aria-label={id === "transporte" ? "Abrir Meu transporte" : `${cat.nome}: ${teto ? "mudar teto" : "definir teto"}`}>
-                  <span className="ci"><CatIcon cat={cat} /></span>
-                  <div style={{ minWidth: 0 }}><b>{cat.nome}{teto ? <small className="teto-txt">{pct >= 1 ? ` · passou ${brl(v - teto)}` : ` · ${Math.round(pct * 100)}% do teto`}</small> : null}</b><div className="bar"><i style={{ width: `${teto ? Math.min(100, pct * 100) : v / maior * 100}%` }} /></div></div>
-                  <span className="v"><Money v={v} />{teto ? <small className="teto-de">de {brl(teto)}</small> : null}</span>
+          <Topo rotulo={<>Saiu em <b>{nomeMes}</b>{ano}</>} valor={r.saiu} nav={{ ant: () => mudarMes(off - 1), prox: () => mudarMes(off + 1), podeProx: true }}
+            apoio={<Comparacao agora={atual ? agoraAte : r.saiu} antes={atual ? antAte : serieB[nA - 1] || 0} nomeAnt={MES_LONGO[pm.getMonth()]} ateDia={atual ? hojeD : null} />}>
+            {(serieA.length > 1 && agoraAte > 0) || serieB[nA - 1] > 0 ? <Linha key={chave} n={Math.max(nM, nA)} series={[...(serieB[nA - 1] > 0 ? [{ v: serieB, fantasma: true }] : []), ...(serieA.length > 1 ? [{ v: serieA }] : [])]}
+              legenda={[{ t: nomeMes }, ...(serieB[nA - 1] > 0 ? [{ t: MES_LONGO[pm.getMonth()], fantasma: true }] : [])]} rotuloDir={atual ? "hoje" : `${nM} ${nomeMes.slice(0, 3)}`} rotulo={`Gastos acumulados em ${nomeMes}`} /> : null}
+            <div className="g4-resumo">
+              <span><small>Entrou</small><b className="mais">+{brl(r.entrou)}</b></span>
+              <span><small>{r.sobra >= 0 ? "Sobra" : "Faltam"}</small><b className={r.sobra >= 0 ? "" : "menos"}>{brl(Math.abs(r.sobra))}</b></span>
+              <span><small>Contas a pagar</small><b>{brl(r.aPagar)}</b></span>
+            </div>
+          </Topo>
+
+          {cats.length > 0 && <section aria-label="Gastos por categoria">
+            <div className="vz-head"><h3>Por categoria</h3><button className="link" onClick={() => act.abrirTeto()}>{Object.values(tetos).some(v => v > 0) ? "Tetos" : "Definir tetos"}</button></div>
+            <div className="vz-trilho">
+              {cats.map(([id, v]) => { const c = catDe(id), t = tetos[id] > 0 ? tetos[id] : 0, sobra = t - v; return (
+                <button key={id} type="button" className={"vz-card" + (cat === id ? " on" : cat ? " apaga" : "")} aria-pressed={cat === id} style={{ "--gc": `var(--g-${id}, var(--mode))` }} onClick={() => { setCat(cat === id ? null : id); vibrar("toque"); }}>
+                  <CatBolinha cat={c} p={t ? v / t : v / totalCat} />
+                  <span className="vz-card-n">{c.nome}</span>
+                  <b className="num vz-card-v"><Money v={v} /></b>
+                  {t ? <small className={sobra < 0 ? "acima" : ""}>{sobra >= 0 ? `/ ${brl(sobra)} sobrando` : `${brl(-sobra)} acima do teto`}</small> : <small>{Math.round((v / totalCat) * 100)}% do mês</small>}
                 </button>
-              );
-            })}
-            <button className="link teto-link" onClick={() => act.abrirTeto()}><I.gauge /> {Object.values(tetos).some(v => v > 0) ? "Mudar tetos do mês" : "Definir um teto por categoria"}</button>
-          </section>
+              ); })}
+            </div>
+          </section>}
+
+          {cat && <section className="g4-foco">
+            <CatBolinha cat={ct} p={teto ? gastoCat / teto : 1} tam={44} />
+            <span className="mid"><b>{ct.nome}: {brl(gastoCat)} em {nomeMes}</b><small>{teto ? (gastoCat > teto ? `Passou ${brl(gastoCat - teto)} do teto de ${brl(teto)}` : `${Math.round((gastoCat / teto) * 100)}% do teto de ${brl(teto)}`) : "Sem teto. Com um teto, eu aviso quando chegar perto."}</small></span>
+            <span className="g4-foco-acts">
+              {cat === "transporte" ? <button className="c2-btn forte" onClick={act.abrirTransporte}>Abrir</button> : <button className="c2-btn forte" onClick={() => act.abrirTeto(cat)}>{teto ? "Mudar teto" : "Pôr teto"}</button>}
+              <button className="icon-btn" onClick={() => setCat(null)} aria-label="Ver todas as categorias"><I.x /></button>
+            </span>
+          </section>}
+
           <ParaOndeFoi db={db} chave={chave} act={act} />
         </div>
         <div className="col">
-          <div className="panel">
+          <div className="panel g4-lanc">
             {sel ? (
               <div className="panel-head sel-head">
                 <h3>{sel.size ? `${sel.size} ${sel.size === 1 ? "selecionado" : "selecionados"}` : "Toque para selecionar"}</h3>
@@ -568,29 +601,33 @@ function GastosTab({ db, act, tema }) {
                 </span>
               </div>
             ) : (
-              <div className="panel-head"><h3>Lançamentos</h3><span className="panel-acts">
-                {lista.length > 0 && <button className="link" onClick={() => setSel(new Set())}><I.check /> Selecionar</button>}
-                <button className="link" onClick={act.importar}><I.upload /> Importar</button>
-                <button className="link" onClick={() => act.novoLanc("saida")}>+ Novo</button>
-              </span></div>
+              <div className="g4-lanc-topo">
+                <h3>{cat ? ct.nome : <>{nomeMes} <span>{m.getFullYear()}</span></>}</h3>
+                <span className="panel-acts">
+                  {lista.length > 0 && <button className="link" onClick={() => setSel(new Set())}><I.check /> Selecionar</button>}
+                  <button className="link" onClick={act.importar}><I.upload /> Importar</button>
+                  <button className="link" onClick={() => act.novoLanc("saida")}>+ Novo</button>
+                </span>
+              </div>
             )}
-            <div className="chips" role="tablist">
+            {!cat && <div className="chips" role="tablist">
               {[["tudo", "Tudo"], ["saida", "Gastos"], ["entrada", "Entradas"]].map(([v, l]) => <button key={v} role="tab" aria-selected={filtro === v} className={"fchip" + (filtro === v ? " on" : "")} onClick={() => setFiltro(v)}>{l}</button>)}
-            </div>
-            {r.consult > 0 && filtro !== "saida" && (
+            </div>}
+            {cat && <button className="c2-filtro" onClick={() => setCat(null)}><span className="ci" style={catVars(ct)}><CatIcon cat={ct} /></span>Só {ct.nome.toLowerCase()}<I.x /></button>}
+            {r.consult > 0 && filtro !== "saida" && !cat && (
               <div className="txn">
                 <span className="txn-av cat" style={catVars({ cor: "azul" })}><I.logo /></span>
                 <span className="mid"><span className="nm">Consultório</span><span className="sb">Líquido das sessões do mês</span></span>
                 <span className="amt pos">+<Money v={r.consult} /></span>
               </div>
             )}
-            {grupos.length === 0 && !(r.consult > 0 && filtro !== "saida") && <div className="empty com-ilustra"><Ilustra n="arquivo" /><b>Nada por aqui neste mês</b>Anote falando ou traga tudo do banco de uma vez.<button className="ghost-chip" onClick={act.importar}><I.upload /> Importar extrato</button></div>}
-            {grupos.map(g => (
+            {grupos.length === 0 && !(r.consult > 0 && filtro !== "saida" && !cat) && <div className="empty com-ilustra"><Ilustra n="arquivo" /><b>Nada por aqui neste mês</b>Anote falando ou traga tudo do banco de uma vez.<button className="ghost-chip" onClick={act.importar}><I.upload /> Importar extrato</button></div>}
+            {grupos.map(g => { const saiu = soma(g.itens.filter(l => l.tipo === "saida"), l => l.valor); return (
               <React.Fragment key={g.d}>
-                <div className="day-sep">{relativo(g.d)}</div>
+                <div className="day-sep g4-dia"><span>{relativo(g.d)}</span>{saiu > 0 && g.itens.length > 1 && <small className="num">−{brl(saiu)}</small>}</div>
                 {g.itens.map(l => <LancRow key={l.id} l={l} act={act} sel={!!sel} marcado={!!sel && sel.has(l.id)} onMarcar={marcar} onSegurar={segurar} />)}
               </React.Fragment>
-            ))}
+            ); })}
           </div>
         </div>
       </div>
@@ -607,32 +644,75 @@ function GastosTab({ db, act, tema }) {
   );
 }
 
+// A régua do mês: cada conta no dia em que vence (paga fica apagada, com um visto), e a marca de hoje
+function ReguaContas({ contas, chave, hoje }) {
+  const [a, mm] = chave.split("-").map(Number), n = new Date(a, mm, 0).getDate(), dh = Number(hoje.slice(8, 10));
+  const pos = d => `${((Math.min(d, n) - 1) / (n - 1)) * 100}%`;
+  // contas que vencem perto umas das outras viram uma pilha só (senão as bolinhas se amontoam)
+  const ord = contas.map(c => ({ c, d: Number(vencimento(c, chave).slice(8, 10)) })).sort((x, y) => x.d - y.d);
+  const grupos = []; ord.forEach(x => { const g = grupos[grupos.length - 1]; if (g && x.d - g.ini <= Math.max(2, Math.round(n / 12))) g.itens.push(x); else grupos.push({ ini: x.d, itens: [x] }); });
+  return (
+    <div className="g4-regua" aria-hidden="true">
+      <div className="g4-regua-linha"><i style={{ width: pos(dh) }} /></div>
+      {grupos.map((g, gi) => { const meio = g.itens.reduce((s, x) => s + x.d, 0) / g.itens.length, abertas = g.itens.filter(x => !(x.c.pagas && x.c.pagas[chave])), todasPagas = !abertas.length, atrasada = abertas.some(x => x.d < dh); return (
+        <span key={gi} className={"g4-regua-c" + (todasPagas ? " paga" : atrasada ? " atrasada" : "")} style={{ left: pos(meio), "--k": 0 }} title={g.itens.map(x => `${x.c.nome} (dia ${x.d})`).join(", ")}>
+          <span className="g4-regua-pilha">{g.itens.slice(0, 3).map(({ c }) => { const mid = c.semLogo ? null : c.marca || (acharMarca(c.nome) || {}).id; return <MarcaLogo key={c.id} marca={mid} site={c.logoSite} nome={c.nome} cat={catDe(c.cat)} className="txn-av" />; })}</span>
+          {g.itens.length > 3 && <em>+{g.itens.length - 3}</em>}
+          {todasPagas && <i><I.check /></i>}
+          <small>{g.itens.length > 1 && g.itens[0].d !== g.itens[g.itens.length - 1].d ? `${g.itens[0].d}–${g.itens[g.itens.length - 1].d}` : g.itens[0].d}</small>
+        </span>
+      ); })}
+      <span className="g4-regua-hoje" style={{ left: pos(dh) }}><b>hoje</b></span>
+      <div className="g4-regua-dias"><span>1</span><span>{n}</span></div>
+    </div>
+  );
+}
+
 function ContasTab({ db, act, tema }) {
   const t = todayISO(), chave = t.slice(0, 7);
+  const [verPagas, setVerPagas] = useState(false);
   const contas = [...db.pessoal.contas].sort((a, b) => a.dia - b.dia);
   const abertas = contas.filter(c => !(c.pagas && c.pagas[chave]));
   const pagas = contas.filter(c => c.pagas && c.pagas[chave]);
   const usadas = assinaturasAchadas(db, { usadas: true });
-  const totAssin = soma(contas.filter(c => c.assinatura), c => c.valor) + soma(usadas, x => x.valor);
+  const assin = contas.filter(c => c.assinatura);
+  const totAssin = soma(assin, c => c.valor) + soma(usadas, x => x.valor);
+  const total = soma(contas, c => c.valor), pago = soma(pagas, c => c.valor), falta = soma(abertas, c => c.valor);
+  // as que faltam, pela urgência
+  const semana = addDays(t, 7);
+  const atrasadas = abertas.filter(c => vencimento(c, chave) < t), logo = abertas.filter(c => vencimento(c, chave) >= t && vencimento(c, chave) <= semana), depois = abertas.filter(c => vencimento(c, chave) > semana);
+  const Grupo = ({ titulo, lista, cls }) => lista.length > 0 && (
+    <div className={"panel g4-grupo " + (cls || "")}>
+      <div className="panel-head"><h3>{titulo}</h3><small className="num">{brl(soma(lista, c => c.valor))}</small></div>
+      {lista.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
+    </div>
+  );
   return (
-    <div className="page" style={{ maxWidth: 820 }}>
+    <div className="page g4" style={{ maxWidth: 820 }}>
       <TopBar eyebrow={`${MES_LONGO[fromISO(t).getMonth()]} · ${pagas.length} de ${contas.length} pagas`} title="Contas fixas" act={act} tema={tema}
         extra={<><button className="icon-btn" onClick={act.lerBoleto} aria-label="Ler boleto"><I.scan /></button><button className="icon-btn" onClick={() => act.novaConta()} aria-label="Nova conta"><I.plus /></button></>} />
       <div className="stack">
-        <section className="bal">
-          <div className="bal-top"><span className="lab">Falta pagar este mês</span></div>
-          <div className="bal-amt" style={{ marginBottom: 2 }}><Money v={soma(abertas, c => c.valor)} /></div>
-          <div className="hint" style={{ padding: 0 }}>Já pago: {brl(soma(pagas, c => c.valor))}. Eu aviso no Início um dia antes de cada vencimento.</div>
-        </section>
-        <div className="panel">
-          <div className="panel-head"><h3>A pagar</h3></div>
-          {abertas.length === 0 ? <div className="empty com-ilustra"><Ilustra n="cafe" /><b>Tudo pago</b>Nenhuma conta pendente neste mês.</div> : abertas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
-        </div>
-        {pagas.length > 0 && <div className="panel"><div className="panel-head"><h3>Pagas</h3></div>{pagas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}</div>}
+        <Topo rotulo={<>Falta pagar em <b>{MES_LONGO[fromISO(t).getMonth()]}</b></>} valor={falta}
+          apoio={contas.length ? <span>{brl(pago)} de {brl(total)} já pagos</span> : <span>Nenhuma conta fixa ainda</span>}>
+          {contas.length > 0 && <div className="g4-prog" role="img" aria-label={`${Math.round((pago / (total || 1)) * 100)}% pago`}><i style={{ width: `${(pago / (total || 1)) * 100}%` }} /></div>}
+          {contas.length > 0 && <ReguaContas contas={contas} chave={chave} hoje={t} />}
+        </Topo>
+        {contas.length === 0 && <button className="btn mode" onClick={() => act.novaConta()}><I.plus /> Adicionar primeira conta</button>}
+        {contas.length > 0 && abertas.length === 0 && <div className="panel"><div className="empty com-ilustra"><Ilustra n="cafe" /><b>Tudo pago</b>Nenhuma conta pendente neste mês.</div></div>}
+        <Grupo titulo="Atrasadas" lista={atrasadas} cls="atrasadas" />
+        <Grupo titulo="Nos próximos 7 dias" lista={logo} />
+        <Grupo titulo="Mais para a frente" lista={depois} />
+        {pagas.length > 0 && <div className="panel g4-grupo pagas">
+          <button className="panel-head g4-pagas-b" onClick={() => setVerPagas(!verPagas)} aria-expanded={verPagas}><h3>Pagas <span>({pagas.length})</span></h3><small className="num">{brl(pago)} <I.chev /></small></button>
+          {verPagas && pagas.map(c => <BillRow key={c.id} c={c} chave={chave} act={act} />)}
+        </div>}
         <AssinaturasAchadas db={db} act={act} />
-        {(contas.some(c => c.assinatura) || usadas.length > 0) && (
-          <div className="panel">
-            <div className="panel-head"><h3>Assinaturas</h3><span className="hint" style={{ padding: 0 }}>{brl(totAssin)}/mês · {brl(totAssin * 12)}/ano</span></div>
+        {(assin.length > 0 || usadas.length > 0) && (
+          <div className="panel g4-assin">
+            <div className="g4-assin-topo">
+              <span className="c3-pilha" aria-hidden="true">{[...assin.map(c => ({ k: c.id, marca: c.semLogo ? null : c.marca || (acharMarca(c.nome) || {}).id, site: c.logoSite, nome: c.nome, cat: c.cat })), ...usadas.map(x => ({ k: x.k, marca: x.marca, nome: x.nome, cat: x.cat }))].slice(0, 5).map((x, i) => <span key={x.k} style={{ "--k": i }}><MarcaLogo marca={x.marca} site={x.site} nome={x.nome} cat={catDe(x.cat)} className="txn-av" /></span>)}</span>
+              <span className="g4-assin-n"><small>Assinaturas</small><b className="num"><Money v={totAssin} /></b><small>por mês · {brl(totAssin * 12)} por ano</small></span>
+            </div>
             {usadas.map(x => (
               <div key={x.k} className="assin-achada">
                 <MarcaLogo marca={x.marca} nome={x.nome} cat={catDe(x.cat)} className="txn-av" />
@@ -640,7 +720,7 @@ function ContasTab({ db, act, tema }) {
                 <span className="amt"><Money v={x.valor} /></span>
               </div>
             ))}
-            {contas.filter(c => c.assinatura).map(c => (
+            {assin.map(c => (
               <button key={c.id} className="txn" onClick={() => act.editConta(c.id)}>
                 <MarcaLogo marca={c.semLogo ? null : c.marca || (acharMarca(c.nome) || {}).id} site={c.semLogo ? null : c.logoSite} nome={c.nome} cat={catDe(c.cat)} className="txn-av" />
                 <span className="mid"><span className="nm">{c.nome}</span><span className="sb">{c.moeda ? `${ESCONDER ? "•••" : fmtMoeda(c.valorOrig, c.moeda)}${c.iof !== false ? " + IOF" : ""} · ` : ""}Todo dia {c.dia} · {brl(c.valor * 12)} por ano</span></span>
@@ -650,7 +730,6 @@ function ContasTab({ db, act, tema }) {
             <p className="hint" style={{ padding: "4px 0 12px" }}>Ainda usa todas? Cancelar uma que você esqueceu é dinheiro de volta todo mês.</p>
           </div>
         )}
-        {contas.length === 0 && <button className="btn mode" onClick={() => act.novaConta()}><I.plus /> Adicionar primeira conta</button>}
       </div>
     </div>
   );

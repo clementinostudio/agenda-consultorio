@@ -17,6 +17,10 @@
 .vz-cat-in { width: calc(var(--t) * .7); height: calc(var(--t) * .7); border-radius: 50%; display: grid; place-items: center; background: var(--cc); color: var(--ci, #fff); }
 .vz-cat-in svg { display: block; width: 46%; height: 46%; stroke-width: 2.2; }
 
+/* categoria sem logo (lançamentos, contas): a bolinha cheia da categoria, no mesmo desenho do ícone com anel */
+.txn-av.cat { border-radius: 50%; background: var(--cc); color: var(--ci, #fff); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cc) 22%, transparent); }
+.txn-av.cat svg { width: 19px; height: 19px; stroke-width: 2.2; }
+
 /* ---------- linha ---------- */
 .vz-linha { position: relative; width: 100%; }
 .vz-linha > svg { position: absolute; left: 0; top: 0; width: 100%; display: block; overflow: visible; animation: vz-revela 1.1s cubic-bezier(.45, 0, .2, 1) .15s both; }
@@ -56,6 +60,106 @@
 
 @keyframes vz-entra { from { opacity: 0; transform: translateY(14px); } }
 
+/* ---------- topo de tela: rótulo (ou setas do mês), número grande, apoio e gráfico ---------- */
+.vz-topo { position: relative; overflow: hidden; border-radius: 30px; border: 1px solid var(--line); padding: 12px 0 14px; text-align: center;
+  background: radial-gradient(120% 85% at 50% 0%, color-mix(in srgb, var(--mode) 20%, transparent), transparent 72%), var(--surface); }
+.vz-topo.neg { background: radial-gradient(120% 85% at 50% 0%, color-mix(in srgb, var(--rose) 18%, transparent), transparent 72%), var(--surface); }
+.vz-topo-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.vz-topo-nav b { color: var(--fg); font-weight: 700; }
+.vz-topo-nav .icon-btn { width: 36px; height: 36px; background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.vz-topo-nav .icon-btn:disabled { opacity: .3; }
+.vz-topo-lab { color: var(--muted); font-size: 14.5px; font-weight: 700; padding-top: 4px; }
+.vz-topo-v { margin-top: 10px; font-family: var(--f-display); font-weight: 700; font-size: clamp(42px, 12vw, 58px); letter-spacing: -.035em; line-height: 1; }
+.vz-topo.neg .vz-topo-v { color: var(--rose); }
+.vz-topo-v .mny .cur { font-size: .36em; vertical-align: 1.15em; margin-right: .18em; }
+.vz-topo-v .mny .cents { font-size: .55em; opacity: .4; }
+.vz-topo-apoio { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 12px; margin-top: 10px; padding: 0 18px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.vz-topo-apoio i { font-style: normal; font-weight: 800; margin-right: 5px; }
+.vz-topo-apoio .sobe i { color: var(--amber); } .vz-topo-apoio .desce i { color: var(--mint); }
+.vz-topo-apoio .mais { color: var(--mint); font-weight: 700; } .vz-topo-apoio .menos { color: var(--rose); font-weight: 700; }
+.vz-topo .vz-linha { margin-top: 12px; }
+@media (min-width: 900px) { .vz-topo { padding-top: 16px; } .vz-topo-v { font-size: 60px; } }
+
+/* ---------- botões redondos e o filtro de categoria (casa, gastos) ---------- */
+.c2-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 16px; border-radius: 999px; background: var(--surface-2); color: var(--fg); font-weight: 800; font-size: 13.5px; transition: transform .12s, filter .15s; }
+.c2-btn svg { width: 16px; height: 16px; }
+.c2-btn.forte { background: var(--mode); color: var(--mode-ink); }
+.c2-btn:active { transform: scale(.96); }
+.c2-filtro { display: inline-flex; align-items: center; gap: 8px; margin: 8px 0 2px; padding: 4px 12px 4px 4px; border-radius: 999px; background: var(--surface-2); color: var(--fg); font-weight: 700; font-size: 13px; }
+.c2-filtro .ci { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--cc) 20%, transparent); color: var(--cc); }
+.c2-filtro .ci svg { width: 14px; height: 14px; }
+.c2-filtro > svg { width: 14px; height: 14px; color: var(--muted); }
+
+/* ---------- barras dos últimos meses, dentro do topo (transporte) ---------- */
+.vz-barras { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; height: 130px; margin: 16px 16px 0; align-items: end; }
+.vz-barras button { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; background: none; color: var(--muted); padding: 0; }
+.vz-barras i { display: block; width: min(34px, 76%); border-radius: 8px; background: color-mix(in srgb, var(--mode) 30%, transparent); transform-origin: bottom; animation: vz-cresce .7s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 60ms + .2s); }
+.vz-barras .on i { background: var(--mode); }
+.vz-barras small { font-size: 10.5px; font-weight: 800; }
+.vz-barras .on small { color: var(--fg); }
+.vz-barras span { font-size: 12px; font-weight: 700; text-transform: capitalize; }
+.vz-barras .on span { color: var(--fg); }
+.vz-barras button:disabled { opacity: 1; }
+@keyframes vz-cresce { from { transform: scaleY(0); } }
+/* itens do transporte: o tipo de gasto numa bolinha cheia da cor dele */
+.transp-item .ic { border-radius: 50% !important; background: var(--c) !important; color: #fff !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+.transp .day-sep { padding-top: 12px; }
+
+/* ---------- Gastos ---------- */
+.g4-resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 14px 0; padding: 12px 6px; border-radius: 20px; background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.g4-resumo span { display: grid; gap: 2px; }
+.g4-resumo small { color: var(--muted); font-size: 12px; font-weight: 700; }
+.g4-resumo b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.g4-resumo b.mais { color: var(--mint); } .g4-resumo b.menos { color: var(--rose); }
+.g4-foco { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 24px; background: var(--surface); border: 1px solid var(--line); animation: vz-entra .35s cubic-bezier(.2, .8, .2, 1) both; }
+.g4-foco .mid { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.g4-foco .mid b { font-size: 15px; } .g4-foco .mid small { color: var(--muted); font-size: 13px; line-height: 1.35; }
+.g4-foco-acts { display: flex; align-items: center; gap: 6px; flex: none; }
+.g4-lanc-topo { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; padding: 14px 0 6px; }
+.g4-lanc-topo h3 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 24px; letter-spacing: -.02em; text-transform: capitalize; }
+.g4-lanc-topo h3 span { color: var(--muted); font-weight: 500; }
+.g4-dia { display: flex; align-items: center; justify-content: space-between; }
+.g4-dia small { letter-spacing: 0; font-size: 12px; }
+.g4-lanc .c2-filtro { margin-bottom: 4px; }
+
+/* ---------- Contas fixas ---------- */
+.g4-prog { height: 8px; margin: 14px 18px 0; border-radius: 99px; background: color-mix(in srgb, var(--fg) 9%, transparent); overflow: hidden; }
+.g4-prog i { display: block; height: 100%; border-radius: inherit; background: var(--mode); transform-origin: left; animation: vz-barra 1s cubic-bezier(.2, .8, .2, 1) .2s both; }
+@keyframes vz-barra { from { transform: scaleX(0); } }
+.g4-regua { position: relative; height: 86px; margin: 16px 40px 4px; }
+.g4-regua-linha { position: absolute; left: 0; right: 0; top: 46px; height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 10%, transparent); }
+.g4-regua-linha i { display: block; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--mode) 60%, transparent); }
+.g4-regua-c { position: absolute; top: 2px; transform: translateX(-50%); z-index: calc(5 - var(--k)); animation: c3-bolha .45s cubic-bezier(.3, 1.5, .5, 1) both; animation-delay: calc(.3s + var(--k) * 60ms); }
+.g4-regua-pilha { display: flex; }
+.g4-regua-c .txn-av { width: 32px; height: 32px; border-radius: 50%; box-shadow: 0 0 0 2.5px var(--surface); }
+.g4-regua-pilha .txn-av + .txn-av { margin-left: -14px; }
+.g4-regua-c > em { position: absolute; right: -10px; top: -8px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; display: grid; place-items: center; background: var(--fg); color: var(--bg); font-style: normal; font-size: 11px; font-weight: 800; }
+.g4-regua-c > small { position: absolute; top: 54px; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.g4-regua-c .txn-av svg { width: 15px; height: 15px; }
+.g4-regua-c .txn-av.cat { border: 0; }
+.g4-regua-c.paga .g4-regua-pilha { opacity: .45; filter: grayscale(.6); }
+.g4-regua-c.atrasada .txn-av { box-shadow: 0 0 0 2.5px var(--rose); }
+.g4-regua-c.atrasada > small { color: var(--rose); }
+.g4-regua-c > i { position: absolute; right: -4px; bottom: -4px; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; background: var(--mint); color: #04261A; border: 2px solid var(--surface); }
+.g4-regua-c > i svg { width: 9px; height: 9px; }
+.g4-regua-hoje { position: absolute; top: 41px; width: 3px; height: 14px; border-radius: 2px; background: var(--fg); transform: translateX(-50%); z-index: 6; }
+.g4-regua-hoje b { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); padding: 1px 7px; border-radius: 6px; background: var(--fg); color: var(--bg); font-size: 10.5px; font-weight: 800; white-space: nowrap; }
+.g4-regua-dias { position: absolute; left: -26px; right: -26px; top: 40px; display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; font-weight: 700; pointer-events: none; }
+.g4-grupo .panel-head small { color: var(--muted); font-weight: 800; font-size: 13.5px; }
+.g4-grupo.atrasadas { border-color: color-mix(in srgb, var(--rose) 45%, var(--line)); }
+.g4-grupo.atrasadas .panel-head h3 { color: var(--rose); }
+.g4-pagas-b { width: 100%; background: none; color: var(--fg); text-align: left; }
+.g4-pagas-b h3 span { color: var(--muted); font-weight: 500; }
+.g4-pagas-b small { display: inline-flex; align-items: center; gap: 4px; }
+.g4-pagas-b small svg { width: 15px; height: 15px; transition: transform .2s; }
+.g4-pagas-b[aria-expanded="true"] small svg { transform: rotate(90deg); }
+.g4-assin-topo { display: flex; align-items: center; gap: 14px; padding: 16px 0 12px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.g4-assin-topo .c3-pilha { margin: 0; height: 50px; flex: none; }
+.g4-assin-topo .c3-pilha > span { box-shadow: 0 0 0 3px var(--surface); }
+.g4-assin-n { display: grid; gap: 1px; min-width: 0; }
+.g4-assin-n small { color: var(--muted); font-size: 12.5px; font-weight: 700; }
+.g4-assin-n b { font-family: var(--f-display); font-size: 24px; font-weight: 700; }
+
 /* ---------- tela inicial do lado pessoal (src/telas/pessoal.jsx) ---------- */
 .c3-saldo { position: relative; overflow: hidden; border-radius: 30px; border: 1px solid var(--line); padding: 16px 0 14px; text-align: center;
   background: radial-gradient(120% 85% at 50% 0%, color-mix(in srgb, var(--mode) 20%, transparent), transparent 72%), var(--surface); }
@@ -82,7 +186,7 @@
 .c3-pilha > span:nth-child(2n) { margin-top: 12px; }
 .c3-pilha .txn-av { width: 38px; height: 38px; border-radius: 50%; }
 .c3-pilha .txn-av svg { width: 18px; height: 18px; }
-.c3-pilha .txn-av.cat { background: var(--cc); color: var(--cc-ink); border: 0; } /* conta sem logo: bolinha cheia da categoria */
+.c3-pilha .txn-av.cat { border: 0; box-shadow: none; } /* conta sem logo: bolinha cheia da categoria */
 .c3-pilha-ic { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--fg) 12%, transparent); color: var(--muted); }
 .c3-pilha-ic svg { width: 18px; height: 18px; }
 .c3-pilha-ic.entra { background: #2FCB8E; color: #04261A; }
@@ -97,7 +201,7 @@
 @media (min-width: 900px) { .c3-saldo { padding-top: 20px; } .c3-saldo-v { font-size: 60px; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .c3-pilha > span { animation: none !important; }
+  .vz-barras i, .c3-pilha > span, .g4-regua-c, .g4-prog i, .g4-foco { animation: none !important; }
   .vz-card { animation: none !important; }
   .vz-anel .cheio, .vz-linha > svg, .vz-ponto, .vz-ponto::after { animation: none !important; }
   .vz-anel .cheio { transition: none; }

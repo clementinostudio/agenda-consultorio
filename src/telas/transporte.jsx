@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar, ProximaConquista } from "../App.jsx";
 import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, postos, carroOuApp, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
+import { IconeAnel, Topo, Comparacao } from "./visual.jsx";
 
 /* ---------- ícones ---------- */
 const Svg = ({ children }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
@@ -217,23 +218,19 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
           </section>
         )}
 
-        <section className="transp-card transp-mes">
-          <div className="transp-mes-nav">
-            <button className="icon-btn" onClick={() => { setOff(off - 1); setFiltro(null); }} aria-label="Mês anterior"><I.chevL /></button>
-            <span>{mes.nome.charAt(0).toUpperCase() + mes.nome.slice(1)} de {mes.ano}</span>
-            <button className="icon-btn" onClick={() => { setOff(off + 1); setFiltro(null); }} aria-label="Próximo mês" disabled={off >= 0}><I.chev /></button>
-          </div>
-          <div className="transp-total"><Money v={g.total} /></div>
-          <small className="transp-sub">em transporte{delta != null ? ` · ${delta >= 0 ? "+" : "−"}${Math.abs(Math.round(delta * 100))}% que ${mesDe(off - 1).nome}` : ""}</small>
-          <div className="transp-barras" aria-label="Últimos 6 meses">
+        <Topo rotulo={<>Transporte em <b>{mes.nome}</b>{mes.ano !== new Date().getFullYear() ? ` de ${mes.ano}` : ""}</>} valor={g.total}
+          nav={{ ant: () => { setOff(off - 1); setFiltro(null); vibrar("toque"); }, prox: () => { setOff(off + 1); setFiltro(null); vibrar("toque"); }, podeProx: off < 0 }}
+          apoio={<Comparacao agora={g.total} antes={ant.total} nomeAnt={mesDe(off - 1).nome} />}>
+          <div className="vz-barras" role="group" aria-label="Últimos 6 meses">
             {seis.map((s, i) => (
-              <div key={s.chave} className={i === 5 ? "on" : ""}>
-                <i style={{ height: `${Math.max(4, s.total / maior * 100)}%` }} title={brlReal(s.total)} />
-                <small>{s.nome.slice(0, 3)}</small>
-              </div>
+              <button key={s.chave} type="button" className={i === 5 ? "on" : ""} onClick={() => { setOff(off - (5 - i)); setFiltro(null); }} disabled={i === 5} style={{ "--i": i }} aria-label={`${s.nome}: ${brlReal(s.total)}`}>
+                <small>{s.total > 0 ? brl(s.total).replace(/,d+$/, "") : ""}</small>
+                <i style={{ height: `${Math.max(4, s.total / maior * 100)}%` }} />
+                <span>{s.nome.slice(0, 3)}</span>
+              </button>
             ))}
           </div>
-        </section>
+        </Topo>
 
         <div className="transp-acoes">
           {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "combustivel", veiculoId: v && v.id })}><span className="ic ilu"><Ilustra n="bomba" /></span>Abastecer</button>}
@@ -242,13 +239,18 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
         </div>
 
         {subsMes.length > 0 && (
-          <section className="transp-grade" aria-label="Para onde foi o dinheiro">
-            {subsMes.map(s => (
-              <button key={s.id} className={"transp-sub-card" + (filtro === s.id ? " on" : "")} style={{ "--c": s.cor }} onClick={() => setFiltro(filtro === s.id ? null : s.id)}>
-                <span className="ic"><IconeSub id={s.id} /></span>
-                <span className="tx"><small>{s.nome}</small><b><Money v={g.porSub[s.id].total} /></b><small>{g.porSub[s.id].n} {g.porSub[s.id].n === 1 ? "gasto" : "gastos"} · {Math.round(g.porSub[s.id].total / (g.total || 1) * 100)}%</small></span>
-              </button>
-            ))}
+          <section aria-label="Para onde foi o dinheiro">
+            <div className="vz-head"><h3>Para onde foi</h3>{filtro && <button className="link" onClick={() => setFiltro(null)}>Ver tudo</button>}</div>
+            <div className="vz-trilho">
+              {subsMes.map(s => { const x = g.porSub[s.id]; return (
+                <button key={s.id} type="button" className={"vz-card" + (filtro === s.id ? " on" : filtro ? " apaga" : "")} aria-pressed={filtro === s.id} style={{ "--gc": s.cor }} onClick={() => { setFiltro(filtro === s.id ? null : s.id); vibrar("toque"); }}>
+                  <IconeAnel cor={s.cor} tinta={s.id === "combustivel" ? "#2A1A00" : "#fff"} p={x.total / (g.total || 1)}><IconeSub id={s.id} /></IconeAnel>
+                  <span className="vz-card-n">{s.nome}</span>
+                  <b className="num vz-card-v"><Money v={x.total} /></b>
+                  <small>{x.n} {x.n === 1 ? "gasto" : "gastos"} · {Math.round(x.total / (g.total || 1) * 100)}%</small>
+                </button>
+              ); })}
+            </div>
           </section>
         )}
 
@@ -356,12 +358,15 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
         <section className="transp-card">
           <div className="transp-card-cab"><h3>{filtro ? subInfo(filtro).nome : "Gastos do mês"}</h3>{filtro && <button className="link" onClick={() => setFiltro(null)}>Ver todos</button>}</div>
           {lista.length === 0 && <div className="empty">{filtro ? "Nada nesta categoria no mês." : "Nenhum gasto com transporte neste mês."}</div>}
-          {lista.map(l => (
-            <button key={l.id} className="transp-item" disabled={l.conta} onClick={() => !l.conta && act.abrirGastoTransp({ inicial: l })}>
+          {lista.map((l, i) => (
+            <React.Fragment key={l.id}>
+            {(i === 0 || lista[i - 1].data !== l.data) && <div className="day-sep">{relativo(l.data)}</div>}
+            <button className="transp-item" disabled={l.conta} onClick={() => !l.conta && act.abrirGastoTransp({ inicial: l })}>
               <span className="ic" style={{ "--c": subInfo(l.sub).cor }}><IconeSub id={l.sub} /></span>
               <span className="mid"><b>{l.desc || subInfo(l.sub).nome}</b><small>{subInfo(l.sub).nome} · {relativo(l.data).toLowerCase()}{l.litros ? ` · ${fmtNum(l.litros)} L` : ""}{l.conta ? " · conta fixa" : ""}</small></span>
               <span className="amt">−<Money v={l.valor} /></span>
             </button>
+            </React.Fragment>
           ))}
           <button className="link transp-teto" onClick={() => act.abrirTeto("transporte")}><I.gauge /> Teto de gastos com transporte</button>
         </section>

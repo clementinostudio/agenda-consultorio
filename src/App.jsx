@@ -190,7 +190,8 @@ const saudacao = d => d.getHours() < 12 ? "Bom dia" : d.getHours() < 18 ? "Boa t
 const corDe = p => CORES.find(c => c.id === (p && p.color)) || CORES[[...String(p && p.id || "x")].reduce((a, ch) => a + ch.charCodeAt(0), 0) % CORES.length];
 const corVars = p => { const c = corDe(p); return { "--pc": c.cor, "--pc-ink": c.ink }; };
 const catDe = id => CATEGORIAS.find(c => c.id === id) || CAT_ENTRADA.find(c => c.id === id) || CATEGORIAS[CATEGORIAS.length - 1];
-const catVars = cat => { const c = CORES.find(x => x.id === cat.cor) || CORES[0]; return { "--cc": c.cor, "--cc-ink": c.ink }; };
+// --ci: cor do ícone em cima da bolinha cheia (branco nas cores fortes; escuro no laranja e no amarelo, onde o branco some)
+const catVars = cat => { const c = CORES.find(x => x.id === cat.cor) || CORES[0]; return { "--cc": c.cor, "--cc-ink": c.ink, "--ci": c.id === "laranja" || c.id === "amarelo" ? c.ink : "#fff" }; };
 
 const lerJSON = (k, f) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch (e) { return f; } };
 const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };

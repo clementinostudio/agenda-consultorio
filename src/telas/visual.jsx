@@ -1,7 +1,7 @@
 // Peças visuais em comum entre a casa e a tela inicial do lado pessoal:
 // o ícone de categoria com anel, o anel sozinho, a linha do gráfico e o número que corre até o valor.
 import React, { useEffect, useRef, useState } from "react";
-import { CatIcon, catVars } from "../App.jsx";
+import { CatIcon, catVars, I, Money, brl } from "../App.jsx";
 import "../visual.css";
 
 export const menosMovimento = () => !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -37,17 +37,46 @@ export function Anel({ p, children, cor = "var(--mode)", trilho, tam = 64, esp =
 
 // Ícone de categoria: bolinha cheia na cor da categoria, o ícone no centro, e um anel da mesma cor em volta
 // (o trilho é a própria cor apagada) com um brilho suave. p = quanto o anel enche.
-// ícone branco nas cores fortes; escuro no laranja e no amarelo, onde o branco some (como o garfo no laranja)
-const ESCURO = new Set(["laranja", "amarelo"]);
-export function CatBolinha({ cat, p = 0, tam = 52 }) {
+// O mesmo desenho para qualquer cor e ícone (ex.: os tipos de gasto do transporte)
+export function IconeAnel({ cor, tinta = "#fff", p = 0, tam = 52, children }) {
   const esp = Math.max(3, Math.round(tam * .075));
   return (
-    <span className="vz-cat" style={{ ...catVars(cat), "--t": `${tam}px`, "--ci": ESCURO.has(cat.cor) ? "var(--cc-ink)" : "#fff" }}>
+    <span className="vz-cat" style={{ "--cc": cor, "--t": `${tam}px`, "--ci": tinta }}>
       <Anel p={p} cor="var(--cc)" trilho="color-mix(in srgb, var(--cc) 24%, transparent)" tam={tam} esp={esp}>
-        <span className="vz-cat-in"><CatIcon cat={cat} /></span>
+        <span className="vz-cat-in">{children}</span>
       </Anel>
     </span>
   );
+}
+// a cor do ícone (branco ou escuro) vem de catVars, em src/App.jsx
+export function CatBolinha({ cat, p = 0, tam = 52 }) {
+  const v = catVars(cat);
+  return <IconeAnel cor={v["--cc"]} tinta={v["--ci"]} p={p} tam={tam}><CatIcon cat={cat} /></IconeAnel>;
+}
+
+// Topo de uma tela: o rótulo (com as setas do mês, se tiver), o número grande que corre, uma linha de apoio e o gráfico
+//   tom: "neg" pinta de vermelho (saldo negativo)
+export function Topo({ rotulo, valor, apoio, nav, tom, children }) {
+  const v = useContagem(valor);
+  return (
+    <section className={"vz-topo" + (tom ? " " + tom : "")}>
+      {nav ? <div className="vz-topo-nav">
+        <button className="icon-btn" onClick={nav.ant} aria-label="Mês anterior"><I.chevL /></button>
+        <span>{rotulo}</span>
+        <button className="icon-btn" onClick={nav.prox} aria-label="Próximo mês" disabled={!nav.podeProx}><I.chev /></button>
+      </div> : <div className="vz-topo-lab">{rotulo}</div>}
+      <div className="vz-topo-v"><Money v={v} /></div>
+      {apoio && <div className="vz-topo-apoio">{apoio}</div>}
+      {children}
+    </section>
+  );
+}
+// Frase de comparação com o mês passado ("↑ R$ 177,60 a mais que setembro até o dia 29"); para gasto, subir é ruim
+export function Comparacao({ agora, antes, nomeAnt, ateDia }) {
+  if (!(antes > 0)) return agora > 0 ? <span>Primeiro mês com gastos anotados</span> : <span>Nada anotado ainda</span>;
+  const d = agora - antes, quando = ateDia ? ` até o dia ${ateDia}` : "";
+  if (Math.abs(d) < 1) return <span>Igual a {nomeAnt}{quando}</span>;
+  return <span className={d > 0 ? "sobe" : "desce"}><i aria-hidden="true">{d > 0 ? "↑" : "↓"}</i>{brl(Math.abs(d))} {d > 0 ? "a mais" : "a menos"} que {nomeAnt}{quando}</span>;
 }
 
 // Linha suave com área embaixo, desenhada da esquerda para a direita, e o ponto de agora pulsando.
