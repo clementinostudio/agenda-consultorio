@@ -119,9 +119,11 @@ tr:last-child td { border-bottom: 0; }
 .selo.ok { color: var(--mint); background: var(--mint-soft); border-color: transparent; }
 .selo.ruim { color: var(--rose); background: var(--rose-soft); border-color: transparent; }
 .plano { font-weight: 600; font-size: 13px; }
-.plano.pro { color: var(--mint); }
+.plano.pago { color: var(--mint); }
 .plano.aguardando, .plano.cancelada { color: var(--amber); }
-.plano.cortesia { color: var(--accent-ink); }
+.plano.codigo, .plano.cortesia { color: var(--accent-ink); }
+.plano.antiga { color: var(--fg); font-weight: 400; }
+.plano.desconhecido { color: var(--faint); }
 .plano.gratis { color: var(--muted); font-weight: 400; }
 
 /* ficha */
@@ -146,4 +148,90 @@ tr:last-child td { border-bottom: 0; }
   main { padding: 14px 12px 30px; }
   .graficos { grid-template-columns: 1fr; }
   .ficha dl { grid-template-columns: 120px 1fr; }
+}
+
+/* ---------- parte 2: ações, medidores, abas novas ---------- */
+.abas { overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.abas button { white-space: nowrap; }
+.abas.mini { display: inline-flex; margin: 2px 0 12px; }
+.abas.mini button { padding: 6px 11px; font-size: 13px; }
+.botao.perigo { background: var(--rose); color: #fff; }
+.botao.perigo:hover { filter: brightness(1.08); background: var(--rose); }
+.botao:disabled:hover { background: inherit; }
+.botao.leve:disabled { opacity: .45; }
+.numero.clica, tr.clica, .tabela-acessos tbody tr.clica { cursor: pointer; }
+.numero.clica:hover { border-color: var(--faint); }
+tr.clica:hover td { background: var(--surface-2); }
+.chips { margin: 0 0 8px; }
+.chip small { color: inherit; opacity: .7; margin-left: 2px; }
+.bloco-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.bloco-topo h3 { margin-bottom: 0; }
+.bloco-sub { display: block; font-size: 12px; }
+.nota-bloco { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+.titulo-secao { font-size: 15px; margin: 22px 0 10px; }
+.titulo-secao h3 { font-size: 15px; }
+.pessoa { display: inline-block; margin-right: 10px; }
+.fraco.pessoa { margin-right: 10px; }
+.selo.fraco { color: var(--faint); }
+.tabela-acessos td small { display: block; font-size: 12px; }
+.tabela-acessos { min-width: 860px; }
+.tabela-acessos th:first-child, .tabela-acessos td:first-child { padding-left: 14px; }
+.bloco .tabela-rola { border-radius: 10px; }
+.bloco .tabela-rola td:first-child, .bloco .tabela-rola th:first-child { padding-left: 10px; }
+
+.form { display: grid; gap: 10px; }
+.form label { display: grid; gap: 5px; font-weight: 600; font-size: 13px; }
+.form input, .form select, .form textarea, .acao select, .acao input, .bloco-topo select {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; font-weight: 400; }
+.form textarea { resize: vertical; }
+.nota { color: var(--muted); font-size: 12.5px; margin: 0; }
+.novos { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.novos pre { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; max-height: 220px; overflow: auto; font-size: 13px; user-select: all; margin: 8px 0; }
+
+.medidores { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.medidor { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; }
+.medidor-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.medidor-topo span { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.medidor-topo b { font-variant-numeric: tabular-nums; }
+.medidor-trilho { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.medidor-trilho div { height: 100%; border-radius: 999px; background: var(--barra); }
+.medidor.alerta .medidor-trilho div { background: var(--amber); }
+.medidor.critico .medidor-trilho div { background: var(--rose); }
+.medidor.alerta .medidor-nota { color: var(--amber); }
+.medidor.critico .medidor-nota { color: var(--rose); font-weight: 600; }
+.medidor-nota { font-size: 12px; }
+.como-ligar ol { padding-left: 20px; display: grid; gap: 8px; }
+.como-ligar pre { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; overflow-x: auto; margin: 6px 0 0; }
+.como-ligar p { margin: 0 0 8px; }
+
+.funil { display: grid; gap: 9px; }
+.funil-linha { display: grid; grid-template-columns: minmax(120px, 1.3fr) 2fr auto 42px; align-items: center; gap: 10px; font-size: 13px; }
+.funil-barra { height: 10px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.funil-barra div { height: 100%; background: var(--barra); border-radius: 999px; }
+.funil-linha b { font-variant-numeric: tabular-nums; text-align: right; }
+.funil-linha small { text-align: right; }
+
+.acoes-ficha { display: grid; gap: 12px; }
+.acao { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
+.acao .linha { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.acao select, .acao input { background: var(--surface); }
+.acao .link { justify-self: start; font-size: 13px; }
+.botoes-acao { display: flex; flex-wrap: wrap; gap: 8px; }
+.botoes-acao .botao { font-size: 13px; padding: 8px 12px; }
+.ficha .plano { margin-left: 6px; }
+.ficha dd .plano { margin-left: 0; }
+.ficha a { color: var(--accent-ink); }
+
+.modal-fundo { position: fixed; inset: 0; z-index: 20; background: rgba(3,4,8,.6); display: grid; place-items: center; padding: 16px; }
+.modal { width: min(460px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: grid; gap: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.4); }
+.modal h3 { font-size: 17px; }
+.modal-texto p { margin: 0 0 8px; color: var(--muted); }
+.modal-texto p b { color: var(--fg); }
+.modal label { display: grid; gap: 6px; font-size: 13px; }
+.modal input { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font-size: 15px; }
+.modal-botoes { display: flex; justify-content: flex-end; gap: 8px; }
+.toast { position: fixed; z-index: 30; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px;
+  border-radius: 12px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.35); max-width: calc(100% - 32px); }
+@media (max-width: 640px) {
+  .funil-linha { grid-template-columns: 1fr 1fr auto 36px; }
 }

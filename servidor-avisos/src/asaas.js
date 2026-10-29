@@ -56,7 +56,7 @@ function cpfValido(c) {
   return dv(9) === Number(c[9]) && dv(10) === Number(c[10]);
 }
 
-async function asaas(env, metodo, caminho, corpo) {
+export async function asaas(env, metodo, caminho, corpo) {
   const r = await fetch(`${env.ASAAS_URL || "https://api-sandbox.asaas.com/v3"}${caminho}`, {
     method: metodo,
     headers: { access_token: env.ASAAS_KEY, "Content-Type": "application/json", "User-Agent": "Avina" },

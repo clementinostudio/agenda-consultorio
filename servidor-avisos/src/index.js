@@ -179,7 +179,7 @@ export default {
     // Assinatura pelo Asaas (cobrança do app): veja src/asaas.js
     if (url.pathname.startsWith("/assinatura/") || url.pathname === "/asaas/webhook") return rotaAsaas(req, env, url, json, permitida);
     // Painel do dono (app.avina.com.br/admin/): veja src/admin.js
-    if (url.pathname.startsWith("/admin/")) return rotaAdmin(req, env, url, json, { aparelhos: async () => Object.keys(await ler(env)).length });
+    if (url.pathname.startsWith("/admin/")) return rotaAdmin(req, env, url, json, { ler: () => ler(env), gravar: dados => gravar(env, dados) });
 
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
 
@@ -318,8 +318,10 @@ HOJE: ${hoje}` }, { type: "image_url", image_url: { url: foto } }] }], max_token
       const avisos = (Array.isArray(b.avisos) ? b.avisos : [])
         .filter(a => Number.isFinite(a.t) && a.t > agora - 60000 && a.t < agora + 9 * 864e5)
         .slice(0, 300).map(a => ({ t: a.t, titulo: limpar(a.titulo, 90), corpo: limpar(a.corpo, 180), tag: limpar(a.tag, 40) }));
-      const dados = await ler(env);
-      dados[id] = { sub: b.sub, avisos, atualizado: agora };
+      const dados = await ler(env), antes = dados[id] || {};
+      // uid: de quem é o aparelho (para o painel mandar aviso a uma conta); extra: avisos do painel ainda não enviados
+      const uid = /^[0-9a-f-]{36}$/i.test(String(b.uid || "")) ? String(b.uid) : antes.uid;
+      dados[id] = { sub: b.sub, avisos, atualizado: agora, ...(uid ? { uid } : {}), ...(antes.extra ? { extra: antes.extra } : {}) };
       await gravar(env, dados);
       return json({ ok: true, avisos: avisos.length });
     }
@@ -355,6 +357,15 @@ HOJE: ${hoje}` }, { type: "image_url", image_url: { url: foto } }] }], max_token
         const status = await enviar(env, d.sub, { titulo: a.titulo, corpo: a.corpo, tag: a.tag });
         if (status === 404 || status === 410) { delete dados[id]; mudou = true; break; } // aparelho desinstalou o app
       }
+    }
+    // avisos mandados pelo painel do dono (src/admin.js): no máximo 30 por minuto (limite de pedidos do plano grátis)
+    let enviados = 0;
+    for (const [id, d] of Object.entries(dados)) {
+      if (!d.extra || !d.extra.length || enviados >= 30) continue;
+      const a = d.extra.shift(); enviados++; mudou = true;
+      const status = await enviar(env, d.sub, { titulo: a.titulo, corpo: a.corpo, tag: a.tag }).catch(() => 0);
+      if (status === 404 || status === 410) delete dados[id];
+      else if (!d.extra.length) delete d.extra;
     }
     if (mudou) await gravar(env, dados);
   },

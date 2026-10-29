@@ -356,7 +356,7 @@ export function desconectar() {
 }
 
 // Registro de acesso (o Marco Civil da Internet, art. 15, manda guardar 6 meses): data e hora, IP e aparelho.
-// O banco tira o IP e o aparelho do próprio pedido; a cidade aproximada vem do servidor de avisos.
+// O banco tira o IP e o aparelho do próprio pedido; a cidade aproximada e a operadora vêm do servidor de avisos.
 // Ao abrir o app e ao voltar para ele, no máximo uma vez a cada 15 minutos por aparelho.
 export async function registrarAcesso(uid, servidor) {
   if (!NUVEM || !uid || navigator.onLine === false) return;
@@ -367,7 +367,7 @@ export async function registrarAcesso(uid, servidor) {
     let geo = {};
     if (servidor) try { const r = await fetchComLimite(servidor + "/onde"); if (r.ok) geo = await r.json(); } catch (e) {}
     const sb = await cliente();
-    await sb.rpc("registrar_acesso", { p_cidade: geo.cidade || null, p_regiao: geo.regiao || null, p_pais: geo.pais || null });
+    await sb.rpc("registrar_acesso", { p_cidade: geo.cidade || null, p_regiao: geo.regiao || null, p_pais: geo.pais || null, p_rede: geo.rede || null });
   } catch (e) {}
 }
 

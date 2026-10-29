@@ -20,3 +20,4 @@ servidor-avisos/.segredos.json
 # Segredos de teste do servidor (chave do Asaas sandbox etc.)
 servidor-avisos/.dev.vars
 servidor-avisos/asaas.txt
+servidor-avisos/cloudflare-token.txt

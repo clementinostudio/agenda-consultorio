@@ -4218,7 +4218,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     if (!forcar && st.hash === h && st.email === conta.email && Date.now() - (st.quando || 0) < 6 * 36e5) return "ok";
     try {
       const { id, sub } = await inscreverPush(false);
-      await chamarServidor("/agendar", { id, sub, avisos }, manter);
+      await chamarServidor("/agendar", { id, sub, avisos, uid: conta.uid || undefined }, manter); // uid: o painel do dono pode mandar um aviso para a conta
       gravar(K_PUSH, { ...lerJSON(K_PUSH, {}), hash: h, email: conta.email, quando: Date.now(), total: avisos.length, erro: "" });
       return "ok";
     } catch (e) { gravar(K_PUSH, { ...lerJSON(K_PUSH, {}), erro: e.message }); return e.message; }
