@@ -4,6 +4,7 @@ import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, today
 import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
 import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja } from "../nota.js";
 import { lerQRs } from "./ferramentas.jsx";
+import { Anel, CatBolinha, Linha, useContagem } from "./visual.jsx";
 // gerador de QR code (zxing, o mesmo do leitor): só carrega quando alguém pede o QR do convite
 import wasmEscritor from "zxing-wasm/writer/zxing_writer.wasm?url";
 // visual da página da casa (fica junto com esta parte do app, que carrega sob demanda)
@@ -26,21 +27,6 @@ const pct = (v, t) => (t > 0 ? Math.round((v / t) * 100) : 0);
 const soma = ls => ls.reduce((s, l) => s + (Number(l.valor) || 0), 0);
 const diaDe = iso => Number(String(iso).slice(8, 10));
 const diasNoMes = ch => { const [a, m] = ch.split("-").map(Number); return new Date(a, m, 0).getDate(); };
-const menosMovimento = () => !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
-// Número que corre até o valor novo (ao abrir e ao trocar de mês)
-function useContagem(alvo, ms = 700) {
-  const [v, setV] = useState(() => (menosMovimento() ? alvo : 0));
-  const de = React.useRef(menosMovimento() ? alvo : 0);
-  useEffect(() => {
-    const ini = de.current; de.current = alvo;
-    if (ini === alvo || menosMovimento()) { setV(alvo); return; }
-    let raf, t0;
-    const passo = t => { if (!t0) t0 = t; const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3); setV(ini + (alvo - ini) * e); if (k < 1) raf = requestAnimationFrame(passo); };
-    raf = requestAnimationFrame(passo);
-    return () => cancelAnimationFrame(raf);
-  }, [alvo]);
-  return v;
-}
 // Cada bloco da página: a posição no celular (order) e o atraso da entrada (--i)
 const Bloco = ({ o, children, className = "" }) => <div className={"c2-bloco " + className} style={{ order: o, "--i": Math.min(o, 9) }}>{children}</div>;
 
@@ -184,12 +170,7 @@ function MesDaCasa({ mes, ant, off, itens, doAnt, onMes }) {
   const acum = (ls, n) => { const p = Array(n).fill(0); ls.forEach(l => { const d = diaDe(l.data); if (d >= 1 && d <= n) p[d - 1] += Number(l.valor) || 0; }); let s = 0; return p.map(x => (s += x)); };
   const nA = diasNoMes(mes.ch), nB = diasNoMes(ant.ch);
   const serieA = acum(itens, nA).slice(0, atual ? diaDe(hoje) : nA), serieB = acum(doAnt, nB);
-  const W = 340, H = 118, N = Math.max(nA, nB), max = Math.max(1, serieA[serieA.length - 1] || 0, serieB[nB - 1] || 0);
-  const x = i => (N > 1 ? (i / (N - 1)) * W : 0), y = val => H - 6 - (val / max) * (H - 18);
-  // curva suave entre os dias (degraus arredondados, como um gasto que acontece aos saltos)
-  const linha = s => s.map((val, i) => (i === 0 ? `M${x(0)},${y(val)}` : `C${(x(i - 1) + x(i)) / 2},${y(s[i - 1])} ${(x(i - 1) + x(i)) / 2},${y(val)} ${x(i)},${y(val)}`)).join(" ");
   const temA = serieA.length > 1 && total > 0, temB = (serieB[nB - 1] || 0) > 0;
-  const fim = temA ? { cx: x(serieA.length - 1), cy: y(serieA[serieA.length - 1]) } : null;
   const frase = !total && !totalAnt ? "Nada anotado ainda"
     : !totalAnt ? `Primeiro mês com gastos da casa`
     : Math.abs(dif) < 1 ? `Igual a ${ant.nome}${atual ? ` até o dia ${ateDia}` : ""}`
@@ -206,32 +187,15 @@ function MesDaCasa({ mes, ant, off, itens, doAnt, onMes }) {
         {totalAnt > 0 && Math.abs(dif) >= 1 && <i aria-hidden="true">{dif > 0 ? "↑" : "↓"}</i>}<span>{frase}</span>
       </div>
       {(temA || temB) && <div className="c2-linha" key={mes.ch}>
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Ritmo de gastos: ${brlReal(total)} em ${mes.nome}${temB ? `, contra ${brlReal(serieB[nB - 1])} no mês de ${ant.nome} inteiro` : ""}`}>
-          <defs><linearGradient id="c2-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="var(--mode)" stopOpacity=".34" /><stop offset="1" stopColor="var(--mode)" stopOpacity="0" /></linearGradient></defs>
-          {temB && <path className="c2-linha-ant" d={linha(serieB)} vectorEffect="non-scaling-stroke" />}
-          {temA && <path className="c2-linha-area" d={`${linha(serieA)} L${x(serieA.length - 1)},${H} L0,${H} Z`} fill="url(#c2-area)" />}
-          {temA && <path className="c2-linha-mes" d={linha(serieA)} pathLength="1" vectorEffect="non-scaling-stroke" />}
-        </svg>
-        {fim && <span className="c2-linha-pt" style={{ left: `${(fim.cx / W) * 100}%`, top: `${(fim.cy / H) * 100}%` }} />}
-        <div className="c2-linha-leg"><span><i className="a" />{Mai(mes.nome)}</span>{temB && <span><i className="b" />{Mai(ant.nome)}</span>}<span className="dir">{atual ? "hoje" : `${nA} ${mes.curto}`}</span></div>
+        <Linha n={Math.max(nA, nB)} series={[...(temB ? [{ v: serieB, fantasma: true }] : []), ...(temA ? [{ v: serieA }] : [])]}
+          legenda={[{ t: Mai(mes.nome) }, ...(temB ? [{ t: Mai(ant.nome), fantasma: true }] : [])]} rotuloDir={atual ? "hoje" : `${nA} ${mes.curto}`}
+          rotulo={`Ritmo de gastos: ${brlReal(total)} em ${mes.nome}${temB ? `, contra ${brlReal(serieB[nB - 1])} no mês de ${ant.nome} inteiro` : ""}`} />
       </div>}
     </section>
   );
 }
 
 /* ---------- quem deve quanto, no jeito de um cartão de orçamento: o anel é quanto você pagou da casa no mês ---------- */
-function Anel({ p, children, cor = "var(--mode)", tam = 64, esp = 6 }) {
-  const r = (tam - esp) / 2, c = 2 * Math.PI * r, k = Math.max(0, Math.min(1, p));
-  return (
-    <span className="c2-anel" style={{ width: tam, height: tam }}>
-      <svg viewBox={`0 0 ${tam} ${tam}`} aria-hidden="true">
-        <circle cx={tam / 2} cy={tam / 2} r={r} className="trilho" strokeWidth={esp} />
-        <circle cx={tam / 2} cy={tam / 2} r={r} className="cheio" strokeWidth={esp} style={{ stroke: cor, strokeDasharray: c, "--c": c, strokeDashoffset: c * (1 - k) }} transform={`rotate(-90 ${tam / 2} ${tam / 2})`} />
-      </svg>
-      <span className="c2-anel-in">{children}</span>
-    </span>
-  );
-}
 function CartaoSaldo({ C, mes, itens, dividas, ocupado, onAcertar, onLembrar }) {
   const total = soma(itens);
   let pagou = 0, justo = 0;
@@ -269,13 +233,13 @@ function Categorias({ itens, doAnt, ant, sel, onSel }) {
   const cats = Object.entries(por).sort((a, b) => b[1] - a[1]), tot = soma(itens);
   return (
     <section className="c2-cats" aria-label="Para onde foi">
-      <div className="c2-sec-head"><h3>Para onde foi</h3>{sel && <button className="link" onClick={() => onSel(sel)}>Ver tudo</button>}</div>
-      <div className="c2-cats-trilho" role="group">
+      <div className="vz-head"><h3>Para onde foi</h3>{sel && <button className="link" onClick={() => onSel(sel)}>Ver tudo</button>}</div>
+      <div className="vz-trilho" role="group">
         {cats.map(([c, v]) => { const ct = catDe(c), a = porAnt[c] || 0; return (
-          <button key={c} type="button" className={"c2-cat" + (sel === c ? " on" : sel ? " apaga" : "")} aria-pressed={sel === c} onClick={() => onSel(c)} style={{ "--gc": `var(--g-${c}, var(--mode))` }}>
-            <Anel p={tot > 0 ? v / tot : 0} cor="var(--gc)" tam={46} esp={4}><span className="c2-cat-ic" style={catVars(ct)}><CatIcon cat={ct} /></span></Anel>
-            <span className="c2-cat-n">{ct.nome}</span>
-            <b className="num c2-cat-v">{brl(v)}</b>
+          <button key={c} type="button" className={"vz-card" + (sel === c ? " on" : sel ? " apaga" : "")} aria-pressed={sel === c} onClick={() => onSel(c)} style={{ "--gc": `var(--g-${c}, var(--mode))` }}>
+            <CatBolinha cat={ct} p={tot > 0 ? v / tot : 0} tam={50} />
+            <span className="vz-card-n">{ct.nome}</span>
+            <b className="num vz-card-v">{brl(v)}</b>
             <small>{pct(v, tot)}% do mês{a > 0 ? ` · ${v > a ? "↑" : v < a ? "↓" : "="} ${ant.curto}` : ""}</small>
           </button>
         ); })}

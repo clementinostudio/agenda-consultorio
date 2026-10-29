@@ -4,6 +4,7 @@ import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
 import { DinheiroHome } from "./dinheiro.jsx";
+import { CatBolinha, Linha, useContagem } from "./visual.jsx";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
 import { logoPropria, lerArquivo } from "../App.jsx";
 import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos, Confirmar, vibrar } from "../App.jsx";
@@ -329,18 +330,101 @@ function BillRow({ c, chave, act }) {
   );
 }
 
-function PessoalHome({ db, conta, now, act, tema }) {
-  const t = todayISO(), chave = t.slice(0, 7);
+/* ---------- tela inicial: o mês num olhar (no mesmo jeito da casa) ---------- */
+// Sobra do mês: número grande que corre, entrou e saiu, e a linha do saldo (no mês, com o mês passado tracejado atrás)
+function SaldoMes({ db, act }) {
+  const t = todayISO(), chave = t.slice(0, 7), d = new Date();
   const [rng, setRng] = useState("mes");
   const r = resumoPessoal(db, chave);
-  const falas = conversaPessoal(db, act);
   const ini = rng === "7" ? addDays(t, -6) : rng === "30" ? addDays(t, -29) : `${chave}-01`;
   const serie = serieSaldo(db, ini, t);
   const saldo = serie.length ? serie[serie.length - 1] : 0;
+  const v = useContagem(saldo);
+  // no mês: o mês passado inteiro atrás, para comparar o ritmo
+  const pm = new Date(d.getFullYear(), d.getMonth() - 1, 1), chAnt = `${pm.getFullYear()}-${pad(pm.getMonth() + 1)}`;
+  const nAnt = new Date(d.getFullYear(), d.getMonth(), 0).getDate(), nMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  const anterior = rng === "mes" ? serieSaldo(db, `${chAnt}-01`, `${chAnt}-${pad(nAnt)}`) : [];
+  const temAnt = anterior.some(x => x !== 0);
+  const rotulo = rng === "mes" ? `Sobra de ${MES_LONGO[d.getMonth()]}` : `Saldo dos últimos ${rng} dias`;
+  return (
+    <section className={"c3-saldo" + (saldo < 0 ? " neg" : "")}>
+      <div className="c3-saldo-lab">{rotulo}<button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></div>
+      <div className="c3-saldo-v"><Money v={ESCONDER ? saldo : v} /></div>
+      <div className="c3-saldo-sub"><span className="mais">+{brl(r.entrou)}</span><span className="menos">−{brl(r.saiu)}</span><span>no mês</span></div>
+      {serie.length > 1 && <div className="c3-saldo-g" key={rng}>
+        <Linha n={rng === "mes" ? Math.max(nMes, nAnt) : serie.length} series={[...(temAnt ? [{ v: anterior, fantasma: true }] : []), { v: serie, cor: saldo < 0 ? "var(--rose)" : "var(--mode)" }]}
+          legenda={rng === "mes" ? [{ t: MES_LONGO[d.getMonth()] }, ...(temAnt ? [{ t: MES_LONGO[pm.getMonth()], fantasma: true }] : [])] : null} rotuloDir="hoje"
+          rotulo={`${rotulo}: ${brl(saldo)}`} />
+      </div>}
+      <div className="ranges" role="tablist">
+        {[["7", "7 dias"], ["30", "30 dias"], ["mes", "Mês"]].map(([k, l]) => <button key={k} role="tab" aria-selected={rng === k} className={"rg" + (rng === k ? " on" : "")} onClick={() => setRng(k)}>{l}</button>)}
+      </div>
+    </section>
+  );
+}
+
+// Ainda este mês: o que vai sair (contas, com os logos empilhados) e o que vai entrar (salário e sessões)
+function ProximosMes({ db, act }) {
+  const ch = todayISO().slice(0, 7);
+  const abertas = db.pessoal.contas.filter(c => !(c.pagas && c.pagas[ch])).sort((a, b) => a.dia - b.dia);
+  const p = previsaoMes(db);
+  const entra = p.renda + p.consult;
+  if (!abertas.length && !entra) return null;
+  const entradas = [p.renda > 0 && { t: `salário, dia ${p.diaRenda || 5}`, ic: "money" }, p.consult > 0 && { t: "sessões marcadas", ic: "cal" }].filter(Boolean);
+  return (
+    <section className="c3-prox">
+      <h3>Ainda este mês</h3>
+      <div className="c3-prox-g">
+        <button className="c3-prox-c" onClick={() => act.setTab("p-contas")}>
+          <span className="c3-pilha" aria-hidden="true">
+            {abertas.length ? abertas.slice(0, 4).map((c, i) => { const cat = catDe(c.cat); const mid = c.semLogo ? null : c.marca || (acharMarca(c.nome) || {}).id; return <span key={c.id} style={{ "--k": i }}><MarcaLogo marca={mid} site={c.logoSite} nome={c.nome} cat={cat} className="txn-av" /></span>; })
+              : <span style={{ "--k": 0 }}><span className="c3-pilha-ic ok"><I.check /></span></span>}
+          </span>
+          <span className="c3-prox-t">Vai sair</span>
+          <b className="num"><Money v={soma(abertas, c => c.valor)} /></b>
+          <small>{abertas.length ? `${abertas.length} ${abertas.length === 1 ? "conta" : "contas"} · a próxima dia ${abertas[0].dia}` : "Tudo pago"}</small>
+        </button>
+        <button className="c3-prox-c" onClick={() => act.setTab("p-gastos")}>
+          <span className="c3-pilha" aria-hidden="true">
+            {(entradas.length ? entradas : [{ ic: "money" }]).map((e, i) => <span key={i} style={{ "--k": i }}><span className={"c3-pilha-ic" + (entradas.length ? " entra" : "")}>{e.ic === "cal" ? <I.cal /> : <I.money />}</span></span>)}
+          </span>
+          <span className="c3-prox-t">Vai entrar</span>
+          <b className={"num" + (entra > 0 ? " c3-mais" : "")}>{entra > 0 ? "+" : ""}<Money v={entra} /></b>
+          <small>{entradas.length ? entradas.map(e => e.t).join(" e ") : "Nada previsto"}</small>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// Gastos por categoria: cartões com o anel; com teto, o anel é o teto e embaixo mostra o que sobra
+function CategoriasMes({ db, act }) {
+  const ch = todayISO().slice(0, 7), r = resumoPessoal(db, ch), lim = db.pessoal.limites || {};
+  const cats = Object.entries(r.porCat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  if (!cats.length) return null;
+  const tot = soma(cats, c => c[1]);
+  return (
+    <section className="c3-cats" aria-label="Gastos por categoria">
+      <div className="vz-head"><h3>Gastos por categoria</h3><button className="link" onClick={() => act.setTab("p-gastos")}>Ver tudo</button></div>
+      <div className="vz-trilho">
+        {cats.map(([id, v]) => { const ct = catDe(id), teto = lim[id] || 0, sobra = teto - v; return (
+          <button key={id} type="button" className="vz-card" onClick={() => id === "transporte" ? act.abrirTransporte() : act.abrirTeto(id)}>
+            <CatBolinha cat={ct} p={teto ? v / teto : v / tot} />
+            <span className="vz-card-n">{ct.nome}</span>
+            <b className="num vz-card-v"><Money v={v} /></b>
+            {teto ? <small className={sobra < 0 ? "acima" : ""}>{sobra >= 0 ? `/ ${brl(sobra)} sobrando` : `${brl(-sobra)} acima do teto`}</small> : <small>{Math.round((v / tot) * 100)}% do mês</small>}
+          </button>
+        ); })}
+      </div>
+    </section>
+  );
+}
+
+function PessoalHome({ db, conta, now, act, tema }) {
+  const t = todayISO(), chave = t.slice(0, 7);
+  const falas = conversaPessoal(db, act);
   const proximas = db.pessoal.contas.filter(c => !(c.pagas && c.pagas[chave])).sort((a, b) => a.dia - b.dia).slice(0, 4);
   const ultimos = [...db.pessoal.lanc].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 5);
-  const d = new Date();
-  const rotulo = rng === "mes" ? `Sobra de ${MES_LONGO[d.getMonth()]}` : `Saldo dos últimos ${rng} dias`;
   return (
     <div className="page">
       <HelloRow conta={conta} act={act} tema={tema} modo="pessoal" />
@@ -348,34 +432,21 @@ function PessoalHome({ db, conta, now, act, tema }) {
       <WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} />
       <div className="cols">
         <div className="col">
-          <Talk falas={falas} />
-          <ProximaConquista act={act} trilhas={["dinheiro", "app"]} />
-          <CasaCartao casa={act.casa} onAbrir={act.abrirCasa} />
-          {servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
-          <CartaoHoje db={db} act={act} />
-          <section className="bal">
-            <div className="bal-top">
-              <span className="lab">{rotulo} <button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></span>
-            </div>
-            <div className={"bal-amt" + (saldo < 0 ? " neg" : "")}><Money v={saldo} /></div>
-            <div className="bal-sub"><span className="up">+{brl(r.entrou)}</span><span className="trend dn">−{brl(r.saiu)}</span><span style={{ color: "var(--muted)", fontWeight: 600, fontSize: 13 }}>no mês</span></div>
-            <AreaChart serie={serie} />
-            <div className="ranges" role="tablist">
-              {[["7", "7 dias"], ["30", "30 dias"], ["mes", "Mês"]].map(([v, l]) => <button key={v} role="tab" aria-selected={rng === v} className={"rg" + (rng === v ? " on" : "")} onClick={() => setRng(v)}>{l}</button>)}
-            </div>
-          </section>
-          <CartaoPrevisao db={db} />
-          <div className="tiles">
-            <div className="tile"><I.down /><div><span>Entrou</span><b style={{ color: "var(--mint)" }}><Money v={r.entrou} /></b></div></div>
-            <div className="tile"><I.up /><div><span>Saiu</span><b><Money v={r.saiu} /></b></div></div>
-            <button className="tile" onClick={() => act.setTab("p-contas")}><I.bill /><div><span>A pagar</span><b style={{ color: r.aPagar ? "var(--amber)" : undefined }}><Money v={r.aPagar} /></b></div></button>
-          </div>
+          <SaldoMes db={db} act={act} />
           <div className="acts narrow-only">
             <button className="act" onClick={act.falarGasto}><i><I.mic /></i>Falar</button>
             <button className="act" onClick={() => act.novoLanc("saida")}><i><I.minus /></i>Gasto</button>
             <button className="act" onClick={() => act.novoLanc("entrada")}><i><I.plus /></i>Entrada</button>
             <button className="act" onClick={() => act.novaConta()}><i><I.bill /></i>Conta fixa</button>
           </div>
+          <Talk falas={falas} />
+          <ProximosMes db={db} act={act} />
+          <CategoriasMes db={db} act={act} />
+          <CartaoHoje db={db} act={act} />
+          <CasaCartao casa={act.casa} onAbrir={act.abrirCasa} />
+          {servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
+          <CartaoPrevisao db={db} />
+          <ProximaConquista act={act} trilhas={["dinheiro", "app"]} />
           <DinheiroHome db={db} act={act} />
         </div>
         <div className="col">
