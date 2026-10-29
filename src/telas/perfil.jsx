@@ -105,8 +105,12 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   const [avSemana, setAvSemana] = useState(av0.semana !== false);
   const [estilo, setEstilo] = useState(pf.estilo || "detalhado");
   const [vib, setVib] = useState(pf.vibrar !== false);
-  const [pessoal, setPessoal] = useState(pf.pessoal !== false || pf.consultorio === false);
+  const [pessoal, setPessoal] = useState(pf.pessoal !== false || (pf.consultorio === false && pf.loja !== true));
   const [consult, setConsult] = useState(pf.consultorio !== false);
+  const [lojaU, setLojaU] = useState(pf.loja === true);
+  // os três modos (consultório, pessoal, loja): pelo menos um fica ligado
+  const ligados = [consult, pessoal, lojaU].filter(Boolean).length;
+  const alternar = (on, set) => { if (on && ligados <= 1) return; set(!on); };
   const [permissao, setPermissao] = useState(() => "Notification" in window ? Notification.permission : "indisponivel");
   const [teste, setTeste] = useState(null);
   const [salvo, setSalvo] = useState(false);
@@ -123,12 +127,12 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
         perfil: { ...atual, profissao, nascimento: nasc, cidade: cidade.trim(), termo, duracao: dur, horaIni: hIni, horaFim: hFim, diasTrab: diasT, grade, periodos, falta, registro: regLembrar,
           meta: num(meta) || 0, valorPadrao: num(valorPadrao) || atual.valorPadrao || 0, subPadrao: num(subPadrao), reserva,
           avisos: { ...av0, ...(atual.avisos || {}), ativo: avAtivo, antecedencia: antec, nomes: avNomes, resumo: avResumo, fechar: avFechar, semana: avSemana },
-          estilo, vibrar: vib, pessoal: pessoal || !consult, consultorio: consult },
+          estilo, vibrar: vib, pessoal, consultorio: consult, loja: lojaU },
       }, pix.trim());
       setSalvo(true);
     }, 450);
     return () => clearTimeout(t);
-  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, grade, periodos, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, avSemana, estilo, vib, pessoal, consult]);
+  }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, grade, periodos, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, avSemana, estilo, vib, pessoal, consult, lojaU]);
   useEffect(() => { if (!salvo) return; const t = setTimeout(() => setSalvo(false), 1600); return () => clearTimeout(t); }, [salvo]);
   useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba, sub]);
   useEffect(() => { if (aba !== "assinatura") setSub(null); }, [aba]);
@@ -177,7 +181,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
     ] },
     { grupo: "App", itens: [
       { id: "visual", ic: <I.sun />, t: "Aparência e fundo", v: temaNome },
-      { id: "pessoal", ic: <I.piggy />, t: "Como você usa o app", v: !consult ? "Só a vida pessoal" : pessoal ? "Consultório e vida pessoal" : "Só o consultório" },
+      { id: "pessoal", ic: <I.piggy />, t: "Como você usa o app", v: [consult && "Consultório", pessoal && "Pessoal", lojaU && "Loja"].filter(Boolean).join(" e ").replace(/ e (?=.* e )/, ", ") },
       { id: "app", ic: <I.down />, t: "Instalar e atalhos", v: appInstalado() ? "Instalado" : "Colocar na tela inicial" },
     ] },
   ];
@@ -345,10 +349,12 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
         </div>}
 
         {aba === "pessoal" && <div className="stack">
-          <div className="note"><I.piggy /><span>O consultório tem agenda, pacientes e cobranças. A vida pessoal tem gastos, contas, transporte e caixinhas. Use os dois ou só um.</span></div>
-          <Toggle on={consult} onClick={() => { if (consult && !pessoal) setPessoal(true); setConsult(!consult); }}>Usar o consultório</Toggle>
-          <Toggle on={pessoal || !consult} onClick={() => { if (!consult) return; setPessoal(!pessoal); }}>Usar a vida pessoal</Toggle>
-          {!consult && <div className="hint">Sem o consultório, o app abre direto nos seus gastos e some o seletor de modo. Seus pacientes ficam guardados se você voltar a usar.</div>}
+          <div className="note"><I.piggy /><span>O consultório tem agenda, pacientes e cobranças. A vida pessoal tem gastos, contas, transporte e caixinhas. A loja tem o caixa do dia, os gastos da loja e a lista do que falta. Use quantos quiser.</span></div>
+          <Toggle on={consult} onClick={() => alternar(consult, setConsult)}>Usar o consultório</Toggle>
+          <Toggle on={pessoal} onClick={() => alternar(pessoal, setPessoal)}>Usar a vida pessoal</Toggle>
+          <Toggle on={lojaU} onClick={() => alternar(lojaU, setLojaU)}>Usar a loja</Toggle>
+          {ligados === 1 && <div className="hint">Com um modo só, o app abre direto nele e some o seletor de modo. O que você anotou nos outros fica guardado se voltar a usar.</div>}
+          {lojaU && !pf.loja && <div className="hint">A loja aparece no seletor de modo, no alto da tela. Lá você abre a sua loja ou entra na de alguém pelo convite.</div>}
           {pessoal && consult && <Toggle on={db.pessoal.incluirConsultorio} onClick={act.toggleIncluir}>Contar o líquido do consultório como entrada no Pessoal</Toggle>}
           {(pessoal || !consult) && <EntradaMes renda={db.pessoal.renda} onChange={act.salvarRenda} />}
         </div>}

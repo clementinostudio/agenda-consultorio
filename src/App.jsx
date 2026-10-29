@@ -17,6 +17,7 @@ import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquis
 import { AVATARES, ehAvatarPronto, avatarAtualizado } from "./avatares.js";
 import { precosGuardados, veiculosDe } from "./transporte.js";
 import { useCasa, K_CONVITE, pesosDe } from "./casa.js";
+import { useLoja, K_CONVITE_LOJA } from "./loja.js";
 import { janelasDoDia } from "./horarios.js";
 import { LIMITE_GRATIS, liberadoDe, ehPro, produtoDoUso } from "./plano.js";
 import { useLinkAgendamento, linkDo } from "./link.js";
@@ -165,7 +166,14 @@ const comTransicao = (fn, tipo = "frente") => {
   } catch (e) {}
   fn();
 };
-const ORDEM_ABAS = ["home", "agenda", "pac", "fin", "p-home", "p-gastos", "p-contas", "p-transp", "p-casa"];
+const ORDEM_ABAS = ["home", "agenda", "pac", "fin", "p-home", "p-gastos", "p-contas", "p-transp", "p-casa", "l-caixa", "l-gastos", "l-lista", "l-resumo"];
+// Os modos do app: Consultório, Pessoal e Loja. Cada pessoa usa os que escolheu (pelo menos um)
+const modosDo = p => { p = p || {}; const c = p.consultorio !== false, l = p.loja === true, ps = p.pessoal !== false || (!c && !l); return [c && "consultorio", ps && "pessoal", l && "loja"].filter(Boolean); };
+const inicioDo = m => m === "pessoal" ? "p-home" : m === "loja" ? "l-caixa" : "home";
+const modoDaAba = t => t.startsWith("p-") ? "pessoal" : t.startsWith("l-") ? "loja" : "consultorio";
+const NOME_MODO = { consultorio: "Consultório", pessoal: "Pessoal", loja: "Loja" };
+// por onde o app abre depois do cadastro: quem tem loja começa nela
+const modoInicial = p => (p && p.loja ? "loja" : modosDo(p)[0]);
 const brlReal = v => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brl = v => ESCONDER ? "R$ •••" : brlReal(v);
 const num = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
@@ -1792,7 +1800,7 @@ function TopBar({ eyebrow, title, act, tema, extra, voltar }) {
 }
 
 // Seletor Consultório / Pessoal (menu brilhante)
-function ModeSwitch({ modo, setModo, block }) {
+function ModeSwitch({ modo, setModo, block, modos }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -1802,11 +1810,11 @@ function ModeSwitch({ modo, setModo, block }) {
     document.addEventListener("pointerdown", f); document.addEventListener("keydown", k);
     return () => { document.removeEventListener("pointerdown", f); document.removeEventListener("keydown", k); };
   }, [open]);
-  const ops = [["consultorio", "Consultório", "Agenda, pacientes e cobranças"], ["pessoal", "Pessoal", "Gastos e contas da casa"]];
+  const ops = [["consultorio", "Consultório", "Agenda, pacientes e cobranças"], ["pessoal", "Pessoal", "Gastos e contas da casa"], ["loja", "Loja", "Caixa, gastos e o que falta"]].filter(([v]) => !modos || modos.includes(v));
   return (
     <div className={"mode" + (block ? " block" : "")} ref={ref}>
       <button className="mode-pill" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open}>
-        <i className="mode-dot" />{modo === "pessoal" ? "Pessoal" : "Consultório"}<I.chevD />
+        <i className="mode-dot" />{NOME_MODO[modo] || "Consultório"}<I.chevD />
       </button>
       {open && (
         <div className="menu" role="menu">
@@ -1842,7 +1850,7 @@ const AvinaA = () => (
   </svg>
 );
 function BarraLateral({ conta, tema, modo, doisModos, abas, tab, act }) {
-  const pessoal = modo === "pessoal";
+  const pessoal = modo === "pessoal", loja = modo === "loja";
   const [mini, setMini] = useState(() => lerJSON(K_LATERAL, "aberta") === "mini");
   const [abertos, setAbertos] = useState({});   // submenus abertos (barra aberta)
   const [rapido, setRapido] = useState(null);   // menu do botão principal: { top, left, width }
@@ -1861,8 +1869,13 @@ function BarraLateral({ conta, tema, modo, doisModos, abas, tab, act }) {
   useEffect(() => () => { clearTimeout(tempo.current.abre); clearTimeout(tempo.current.fecha); }, []);
 
   const chat = servidorAvisos() ? [{ id: "chat", l: "Perguntar à Bolinha", ic: <I.chat />, f: act.abrirChat }] : [];
-  const principal = pessoal ? { l: "Anotar gasto", f: () => act.novoLanc("saida") } : { l: `Novo ${TERMO.s}`, f: act.novoPaciente };
-  const rapidas = pessoal
+  const principal = loja ? { l: "Anotar gasto", f: () => act.abrirLoja("gasto", {}) } : pessoal ? { l: "Anotar gasto", f: () => act.novoLanc("saida") } : { l: `Novo ${TERMO.s}`, f: act.novoPaciente };
+  const rapidas = loja
+    ? [{ id: "gasto", l: "Anotar gasto da loja", d: "Insumos, embalagem, gás…", ic: <I.minus />, f: () => act.abrirLoja("gasto", {}) },
+       { id: "venda", l: "Venda pelo valor", d: "Sem escolher produto", ic: <I.plus />, f: () => act.abrirLoja("venda", {}) },
+       { id: "nota", l: "Ler nota do fornecedor", d: "QR code ou foto", ic: <I.receipt />, f: () => act.abrirLoja("nota", {}) },
+       { id: "fechar", l: "Fechar o caixa", d: "Contar a gaveta", ic: <I.wallet />, f: () => act.abrirLoja("fechar", {}) }]
+    : pessoal
     ? [{ id: "gasto", l: "Anotar gasto", d: "Saiu dinheiro", ic: <I.minus />, f: () => act.novoLanc("saida") },
        { id: "entrada", l: "Anotar entrada", d: "Entrou dinheiro", ic: <I.plus />, f: () => act.novoLanc("entrada") },
        { id: "conta", l: "Nova conta fixa", d: "Luz, aluguel, assinaturas", ic: <I.bill />, f: () => act.novaConta() },
@@ -1870,7 +1883,9 @@ function BarraLateral({ conta, tema, modo, doisModos, abas, tab, act }) {
     : [{ id: "pac", l: `Novo ${TERMO.s}`, d: "Cadastrar e pôr na agenda", ic: <I.users />, f: act.novoPaciente },
        { id: "espera", l: "Lista de espera", d: "Anotar quem quer um horário", ic: <I.clock />, f: act.novaEspera },
        { id: "importar", l: "Importar agenda", d: "Trazer de outra agenda", ic: <I.upload />, f: act.importarAgenda }];
-  const atalhos = pessoal
+  const atalhos = loja
+    ? [{ id: "ajustes", l: "Ajustes e equipe", ic: <I.gear />, f: () => act.abrirLoja("ajustes", {}) }, { id: "mov", l: "Tirar ou pôr dinheiro", ic: <I.repeat />, f: () => act.abrirLoja("mov", {}) }]
+    : pessoal
     ? [...chat, { id: "casa", l: "Nossa casa", ic: <I.home />, tab: "p-casa", f: act.abrirCasa }]
     : [...chat, { id: "agora", l: "Só o agora", ic: <I.target />, f: act.agora }, { id: "fechar", l: "Fechar o dia", ic: <I.moon />, f: act.fecharDia }, { id: "livres", l: "Horários livres", ic: <I.share />, f: act.livres }];
   const itens = [...abas.map(a => ({ id: a.id, l: a.l, ic: a.ic, n: a.n, tab: a.id })), { id: "atalhos", l: "Atalhos", ic: <I.grid />, sub: atalhos }];
@@ -1942,7 +1957,7 @@ function BarraLateral({ conta, tema, modo, doisModos, abas, tab, act }) {
       <div className="lt-marca">
         {mini
           ? <button type="button" key="a" onClick={() => setMini(false)} title="Avina" aria-label="Expandir menu"><AvinaA /></button>
-          : <button type="button" key="nome" onClick={() => act.setTab(pessoal ? "p-home" : "home")} aria-label="Avina, início"><AvinaNome /></button>}
+          : <button type="button" key="nome" onClick={() => act.setTab(inicioDo(modo))} aria-label="Avina, início"><AvinaNome /></button>}
       </div>
 
       <div className="lt-acao">
@@ -1999,8 +2014,8 @@ function BarraLateral({ conta, tema, modo, doisModos, abas, tab, act }) {
           {!mini && <span className="lt-quem"><b>{conta.nome}</b><small>{conta.email}</small></span>}
         </button>
         {doisModos && (
-          <button type="button" className="lt-linha" onClick={() => act.setModo(pessoal ? "consultorio" : "pessoal")} title={pessoal ? "Ir para o Consultório" : "Ir para o Pessoal"}>
-            <span><i className="lt-modo" />{!mini && <em>{pessoal ? "Pessoal" : "Consultório"}</em>}</span>
+          <button type="button" className="lt-linha" onClick={act.proximoModo} title={`Ir para o ${NOME_MODO[act.modoSeguinte]}`}>
+            <span><i className="lt-modo" />{!mini && <em>{NOME_MODO[modo]}</em>}</span>
             {!mini && <small>Trocar</small>}
           </button>
         )}
@@ -2073,7 +2088,7 @@ function AreaChart({ serie, cor }) {
    ========================================================= */
 function Auth({ onLogin, emailInicial, aviso }) {
   // chegou por um convite para a casa (#casa=...): o convite fica guardado e abre depois de entrar
-  const [convite] = useState(() => { try { return !!localStorage.getItem("agenda-convite-casa"); } catch (e) { return false; } });
+  const [convite] = useState(() => { try { return !!(localStorage.getItem("agenda-convite-casa") || localStorage.getItem("agenda-convite-loja")); } catch (e) { return false; } });
   const [modo, setModo] = useState(() => ["#criar", "#demo"].includes(location.hash) || (convite && !emailInicial) ? "criar" : "entrar"); // entrar | criar | esqueci
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState(() => { if (emailInicial) return emailInicial; const daApresentacao = new URLSearchParams(location.search).get("email"); if (daApresentacao) return daApresentacao; try { const e = sessionStorage.getItem("agenda-email") || ""; sessionStorage.removeItem("agenda-email"); return e; } catch (x) { return ""; } });
@@ -2198,7 +2213,7 @@ function HelloRow({ conta, act, tema, modo }) {
     <div className="hello">
       <div className="hello-l">
         <Avatar conta={conta} onClick={act.openSettings} />
-        {conta.perfil && conta.perfil.pessoal !== false && conta.perfil.consultorio !== false && <ModeSwitch modo={modo} setModo={act.setModo} />}
+        {act.modos && act.modos.length > 1 && <ModeSwitch modo={modo} setModo={act.setModo} modos={act.modos} />}
       </div>
       <div className="top-actions">
         <button className="icon-btn" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button>
@@ -2935,6 +2950,11 @@ function ChargeSheet({ db, cid, fresh, nomeProf, onClose, act }) {
    ========================================================= */
 
 const PessoalHome = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.PessoalHome })));
+const LojaCaixa = lazy(() => import("./telas/loja.jsx").then(m => ({ default: m.LojaCaixa })));
+const LojaGastos = lazy(() => import("./telas/loja.jsx").then(m => ({ default: m.LojaGastos })));
+const LojaLista = lazy(() => import("./telas/loja.jsx").then(m => ({ default: m.LojaLista })));
+const LojaResumo = lazy(() => import("./telas/loja.jsx").then(m => ({ default: m.LojaResumo })));
+const LojaSheet = lazy(() => import("./telas/loja.jsx").then(m => ({ default: m.LojaSheet })));
 
 const GastosTab = lazy(() => import("./telas/pessoal.jsx").then(m => ({ default: m.GastosTab })));
 
@@ -3817,13 +3837,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   ESTILO = perfil.estilo || "detalhado";
   PERFIL = perfil;
   LOGADO = !!conta.uid;
-  const usaConsultorio = perfil.consultorio !== false;
-  const usaPessoal = perfil.pessoal !== false || !usaConsultorio;
-  const doisModos = usaPessoal && usaConsultorio;
+  const modos = modosDo(perfil);
+  const usaConsultorio = modos.includes("consultorio"), usaPessoal = modos.includes("pessoal"), usaLoja = modos.includes("loja");
+  const doisModos = modos.length > 1;
   const av = { ...AVISOS_PADRAO, ...(perfil.avisos || {}) };
   const [db, setDb] = useState(() => carregarDb(conta));
   const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem
   const casa = useCasa(conta, db, setDb); // gastos da casa divididos com quem mora junto
+  const loja = useLoja(conta, db, setDb); // o caixa da loja, com quem ajuda
   // bolinha de perfil de um desenho antigo: troca sozinha pela nova parecida (e a casa acompanha)
   useEffect(() => { const nova = avatarAtualizado(conta.foto); if (nova) onAtualizar({ foto: nova }); }, [conta.foto]);
   const linkAg = useLinkAgendamento({
@@ -3870,7 +3891,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   LOGOS = (db.pessoal && db.pessoal.logos) || {};
   const [modo, setModoSt] = useState(() => lerJSON(K.modo(conta.email), "consultorio"));
   const [veicAtual, setVeicAtual] = useState(null); // veículo mostrado no carrossel do Transporte
-  const [tab, setTab] = useState(() => lerJSON(K.modo(conta.email), "consultorio") === "pessoal" ? "p-home" : "home");
+  const [tab, setTab] = useState(() => inicioDo(lerJSON(K.modo(conta.email), "consultorio")));
+  const modoEf = modos.includes(modo) ? modo : modos[0];
+  const trocarModoSt = m => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(inicioDo(m)); };
+  // a Loja: o Pro da dona libera a equipe (e o histórico) para todo mundo da loja
+  const lojaPro = !libera || !!libera.loja || !!(loja.loja && loja.loja.pro_ate && loja.loja.pro_ate >= hojePlano);
+  useEffect(() => { if (libera && libera.loja && loja.souDona) loja.marcarPro(addDays(hojePlano, 40)); }, [!!(libera && libera.loja), loja.souDona, loja.loja && loja.loja.pro_ate]);
   const [sheet, setSheet] = useState(null);
   const [foco, setFoco] = useState(false);
   const [pacVista, setPacVista] = useState("ativos");
@@ -3928,6 +3954,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     else if (h === "fechar") setSheet({ type: "fechar" });
     else if (h === "livres") setSheet({ type: "livres" });
     else if (h === "compartilhado") setTimeout(() => act.receberCompartilhado(), 300);
+    const tokL = h.startsWith("loja=") ? h.slice(5) : lerJSON(K_CONVITE_LOJA, null);
+    if (tokL) { localStorage.removeItem(K_CONVITE_LOJA); if (h.startsWith("loja=")) history.replaceState(null, "", location.pathname + location.search); setTimeout(() => setSheet({ type: "loja", qual: "convite", token: tokL, n: Date.now() }), 600); }
     const tok = h.startsWith("casa=") ? h.slice(5) : lerJSON(K_CONVITE, null);
     if (tok) { localStorage.removeItem(K_CONVITE); if (h.startsWith("casa=")) history.replaceState(null, "", location.pathname + location.search); setTimeout(() => setSheet({ type: "convite-casa", token: tok }), 600); }
   }, []);
@@ -4185,7 +4213,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       const quando = pend.atrasada ? "venceu" : faltam <= 0 ? "vence hoje" : faltam === 1 ? "vence amanhã" : `vence em ${faltam} dias`;
       return { txt: <>Seu <b>Avina Pro</b> {quando}: {brl(pend.valor)}{pend.forma === "pix" ? " no Pix" : ""}.</>, acao: { l: "Pagar", ic: <I.wallet />, fn: () => act.openSettings("assinatura") } };
     },
-    toast: m => notify(m),
+    toast: (m, desfazer) => notify(m, desfazer),
+    // Loja
+    loja, lojaPro, usaPessoal, modos,
+    abrirLoja: (qual, extra = {}) => setSheet({ type: "loja", qual, ...extra, n: Date.now() }),
+    pedirPro: motivo => { vibrar("aviso"); setSheet({ type: "pro", motivo, sugerido: produtoDoUso(perfil) }); },
+    // retirada da loja que a dona leva para o Pessoal: vira uma entrada lá
+    retiradaParaPessoal: ({ valor, loja: nomeL, desc, movId }) => setP(P => ({ ...P, lanc: [...P.lanc, { id: uid(), tipo: "entrada", cat: "trabalho", valor, desc: desc && desc !== "Para mim" ? `${desc} (${nomeL})` : `Retirada da ${nomeL}`, data: todayISO(), lojaMov: movId }] })),
     conquistas,
     abrirClima: () => setSheet({ type: "clima" }),
     // Transporte é uma aba do modo Pessoal; os painéis dela abrem como os outros
@@ -4242,7 +4276,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     abrirChat: () => { if (sheet) close(); vozApi.current.chat && vozApi.current.chat(); },
     recarregarClima: () => carregarClima(true),
     setTab: t => { if (t === tab) return rolarTopo(); comTransicao(() => { setTab(t); rolarTopo(); }, ORDEM_ABAS.indexOf(t) < ORDEM_ABAS.indexOf(tab) ? "tras" : "frente"); },
-    setModo: m => comTransicao(() => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(m === "pessoal" ? "p-home" : "home"); rolarTopo(); }, "modo"),
+    setModo: m => comTransicao(() => { trocarModoSt(m); rolarTopo(); }, "modo"),
+    modoSeguinte: modos[(modos.indexOf(modoEf) + 1) % modos.length],
+    proximoModo: () => act.setModo(modos[(modos.indexOf(modoEf) + 1) % modos.length]),
     toggleOculto: () => setOculto(o => !o),
     testarAviso: async (atraso = 0) => {
       // pede a permissão na hora do toque (o navegador só deixa pedir assim)
@@ -4372,10 +4408,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     salvarPerfil: (patch, pix) => {
       setDb(d => d.settings.pix === pix ? d : { ...d, settings: { ...d.settings, pix } });
       onAtualizar(patch);
-      if (patch.perfil && patch.perfil.pessoal === false && modo === "pessoal") { setModoSt("consultorio"); gravar(K.modo(conta.email), "consultorio"); setTab("home"); }
-      if (patch.perfil && patch.perfil.consultorio === false && modo !== "pessoal") { setModoSt("pessoal"); gravar(K.modo(conta.email), "pessoal"); setTab("p-home"); }
+      if (patch.perfil) { const ms = modosDo(patch.perfil); if (!ms.includes(modoEf)) trocarModoSt(ms[0]); }
     },
-    modo: !usaConsultorio ? "pessoal" : usaPessoal ? modo : "consultorio",
+    modo: modoEf,
     salvarPaciente: p => {
       if (!db.patients.some(x => x.id === p.id) && p.active && limite("pac")) return;
       setDb(d => ({ ...d, patients: d.patients.some(x => x.id === p.id) ? d.patients.map(x => x.id === p.id ? p : x) : [...d.patients, p] }));
@@ -4485,7 +4520,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       } catch (e) { notify("Não consegui abrir o que foi compartilhado."); }
     },
     // Conta
-    salvarAjustes: (patch, pix) => { setDb(d => ({ ...d, settings: { ...d.settings, pix } })); onAtualizar(patch); if (patch.perfil && patch.perfil.pessoal === false && modo === "pessoal") act.setModo("consultorio"); close(); notify("Tudo salvo"); },
+    salvarAjustes: (patch, pix) => { setDb(d => ({ ...d, settings: { ...d.settings, pix } })); onAtualizar(patch); if (patch.perfil) { const ms = modosDo(patch.perfil); if (!ms.includes(modoEf)) act.setModo(ms[0]); } close(); notify("Tudo salvo"); },
     refazer: () => { close(); onAtualizar({ perfil: { ...perfil, refazer: true } }); },
     zerar: () => { setDb(vazio()); close(); notify("Dados apagados"); },
     sair: async () => {
@@ -4521,9 +4556,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const atrasados = db.patients.filter(p => p.active && p.nextDate && p.nextDate < t).length;
   const pendentes = db.charges.filter(c => !c.paid).length;
   const contasUrg = db.pessoal.contas.filter(c => { const s = situacaoConta(c, ch).st; return s === "atrasada" || s === "hoje"; }).length;
-  const modoEf = !usaConsultorio ? "pessoal" : usaPessoal ? modo : "consultorio";
-  const tabEf = !usaPessoal && tab.startsWith("p-") ? "home" : !usaConsultorio && !tab.startsWith("p-") ? "p-home" : tab;
-  const abas = modoEf === "pessoal"
+  const tabEf = modoDaAba(tab) === modoEf ? tab : inicioDo(modoEf);
+  const abas = modoEf === "loja"
+    ? [{ id: "l-caixa", l: "Caixa", ic: <I.wallet />, on: <I.walletOn />, n: 0 }, { id: "l-gastos", l: "Gastos", ic: <I.bill />, on: <I.billOn />, n: 0 }, { id: "l-lista", l: "Falta", ic: <I.cart />, on: <I.cart />, n: loja.faltas.filter(x => !x.feito).length }, { id: "l-resumo", l: "Resumo", ic: <I.chart />, on: <I.chartOn />, n: 0 }]
+    : modoEf === "pessoal"
     ? [{ id: "p-home", l: "Início", ic: <I.home />, on: <I.homeOn />, n: 0 }, { id: "p-gastos", l: "Gastos", ic: <I.chart />, on: <I.chartOn />, n: 0 }, { id: "p-contas", l: "Contas", ic: <I.bill />, on: <I.billOn />, n: contasUrg }, { id: "p-transp", l: "Transporte", ic: <I.car />, on: <I.carOn />, n: 0 }]
     : [{ id: "home", l: "Início", ic: <I.home />, on: <I.homeOn />, n: atrasados }, { id: "agenda", l: "Agenda", ic: <I.cal />, on: <I.calOn />, n: 0 }, { id: "pac", l: TERMO.P, ic: <I.users />, on: <I.usersOn />, n: 0 }, { id: "fin", l: "Finanças", ic: <I.wallet />, on: <I.walletOn />, n: pendentes }];
   const lancSel = sheet && sheet.type === "lanc" && sheet.id ? db.pessoal.lanc.find(l => l.id === sheet.id) : null;
@@ -4561,6 +4597,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         notify("Você entrou na casa!"); act.abrirCasa();
       }} /></Suspense>}
       {sheet && sheet.type === "veiculo" && <Suspense fallback={null}><VeiculoSheet key={sheet.id || "novo"} veiculo={sheet.id && sheet.id !== "novo" ? veiculosDe(db).find(x => x.id === sheet.id) || null : sheet.id === "novo" ? null : veiculosDe(db)[0] || null} db={db} onSave={act.salvarVeiculo} onDelete={act.removerVeiculo} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "loja" && <Suspense fallback={null}><LojaSheet key={sheet.n} sheet={sheet.qual === "convite" ? { ...sheet, onEntrou: () => {
+        // quem entra numa loja passa a ver o modo Loja
+        if (!usaLoja) onAtualizar({ perfil: { ...perfil, loja: true } });
+        notify("Você entrou na loja!"); setTimeout(() => act.setModo("loja"), 300);
+      } } : sheet} loja={loja} conta={conta} servidor={servidorAvisos()} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "boleto" && <Suspense fallback={null}><BoletoSheet key={sheet.n || "boleto"} texto={sheet.texto} act={act} onClose={close} /></Suspense>}
@@ -4592,16 +4633,20 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         {tabEf === "p-gastos" && <Suspense fallback={null}><GastosTab db={db} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-contas" && <Suspense fallback={null}><ContasTab db={db} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-casa" && <Suspense fallback={null}><CasaPagina casa={casa} conta={conta} pix={db.settings.pix} act={act} tema={tema} /></Suspense>}
+        {tabEf === "l-caixa" && <Suspense fallback={null}><LojaCaixa loja={loja} conta={conta} act={act} tema={tema} /></Suspense>}
+        {tabEf === "l-gastos" && <Suspense fallback={null}><LojaGastos loja={loja} conta={conta} act={act} tema={tema} /></Suspense>}
+        {tabEf === "l-lista" && <Suspense fallback={null}><LojaLista loja={loja} conta={conta} act={act} tema={tema} /></Suspense>}
+        {tabEf === "l-resumo" && <Suspense fallback={null}><LojaResumo loja={loja} conta={conta} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-transp" && <Suspense fallback={null}><TransporteTab db={db} act={act} tema={tema} perfil={perfil} atual={veicAtual} onTrocar={setVeicAtual} /></Suspense>}
       </main>
 
       <div className={"topo-fixo" + (rolou && !sheet ? " on" : "")} aria-hidden={!(rolou && !sheet)} inert={rolou && !sheet ? undefined : ""}>
         <div className="topo-fixo-in">
           <Avatar conta={conta} onClick={act.openSettings} label="Sua conta" />
-          <button className="topo-fixo-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{tabEf === "home" || tabEf === "p-home" ? primeiro(conta.nome) : (abas.find(a => a.id === tabEf) || {}).l || (tabEf === "p-casa" ? ((casa.casa && casa.casa.nome) || "Nossa casa") : "")}</button>
+          <button className="topo-fixo-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{tabEf === "home" || tabEf === "p-home" ? primeiro(conta.nome) : tabEf === "l-caixa" ? ((loja.loja && loja.loja.nome) || "Loja") : (abas.find(a => a.id === tabEf) || {}).l || (tabEf === "p-casa" ? ((casa.casa && casa.casa.nome) || "Nossa casa") : "")}</button>
           <button className="icon-btn redondo" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>
           {doisModos
-            ? <button className="topo-fixo-pill" onClick={() => act.setModo(modoEf === "pessoal" ? "consultorio" : "pessoal")} aria-label="Trocar de modo">{modoEf === "pessoal" ? "Pessoal" : "Consultório"}<I.repeat /></button>
+            ? <button className="topo-fixo-pill" onClick={act.proximoModo} aria-label={`Trocar de modo: ir para ${NOME_MODO[act.modoSeguinte]}`}>{NOME_MODO[modoEf]}<I.repeat /></button>
             : <button className="icon-btn redondo" onClick={act.trocarTema} aria-label="Trocar tema">{tema.escuro ? <I.sun /> : <I.moon />}</button>}
         </div>
       </div>
@@ -4719,7 +4764,7 @@ function App() {
     if (!(sessao && sessao.conta)) entrar(await contaDaNuvem(user, lerJSON(K.contas, {})[user.email]), false);
   }} />;
   if (!sessao || sessao.legado) return <Auth onLogin={entrar} emailInicial={sessao && sessao.legado} aviso={sessao && sessao.legado ? "Agora seus dados ficam guardados na nuvem. Entre com a sua senha de sempre e eu levo tudo para lá." : null} />;
-  if (!sessao.conta.perfil || sessao.conta.perfil.refazer) return <Suspense fallback={null}><Onboarding conta={sessao.conta} onSair={sair} onDone={({ inicial, ...d }) => { const e = sessao.conta.email; if (inicial) gravar(K.inicial(e), inicial); gravar(K.modo(e), d.perfil.consultorio === false ? "pessoal" : "consultorio"); atualizar(d, { pronto: true }); window.scrollTo(0, 0); }} /></Suspense>;
+  if (!sessao.conta.perfil || sessao.conta.perfil.refazer) return <Suspense fallback={null}><Onboarding conta={sessao.conta} onSair={sair} onDone={({ inicial, ...d }) => { const e = sessao.conta.email; if (inicial) gravar(K.inicial(e), inicial); gravar(K.modo(e), modoInicial(d.perfil)); atualizar(d, { pronto: true }); window.scrollTo(0, 0); }} /></Suspense>;
   return <Painel key={sessao.conta.email} conta={sessao.conta} novo={sessao.novo} pronto={sessao.pronto} tema={tema} onSair={sair} onAtualizar={atualizar} onPerfilNuvem={perfilNuvem} />;
 }
 

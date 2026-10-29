@@ -26,6 +26,10 @@ const PLANOS = {
   consultorio_mensal: { nome: "Pro Consultório mensal", valor: 29.9, ciclo: "MONTHLY" },
   pessoal_anual: { nome: "Pro Pessoal anual", valor: 199, ciclo: "YEARLY" },
   pessoal_mensal: { nome: "Pro Pessoal mensal", valor: 19.9, ciclo: "MONTHLY" },
+  loja_anual: { nome: "Pro Loja anual", valor: 299, ciclo: "YEARLY" },
+  loja_mensal: { nome: "Pro Loja mensal", valor: 29.9, ciclo: "MONTHLY" },
+  lojapessoal_anual: { nome: "Pro Loja + Pessoal anual", valor: 399, ciclo: "YEARLY" },
+  lojapessoal_mensal: { nome: "Pro Loja + Pessoal mensal", valor: 39.9, ciclo: "MONTHLY" },
 };
 const ALIAS = { anual: "completo_anual", mensal: "completo_mensal" }; // planos de antes dos três pacotes (incluíam as duas áreas)
 const idPlano = id => ALIAS[id] || id;

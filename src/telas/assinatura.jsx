@@ -4,12 +4,14 @@
 import React, { useState, useEffect } from "react";
 import { I, Marca, Seg, Field, Ilustra, Sheet, BASE, todayISO, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
 import { cliente } from "../nuvem.js";
-import { PLANOS, PRODUTOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso, linkSuporte, LANCAMENTO_ATE, emLancamento } from "../plano.js";
+import { PLANOS, PRODUTOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso, linkSuporte, LANCAMENTO_ATE, emLancamento, GRUPOS, grupoDe } from "../plano.js";
 
 const INCLUI = {
   completo: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Lançamentos pessoais sem limite: gastos, contas, caixinhas e a casa", "O líquido do consultório entrando no seu dinheiro pessoal", "Avisos no celular, voz e cópia na nuvem"],
   consultorio: ["Pacientes sem limite: agenda, cobranças, recibos e imposto", "Link de agendamento para o paciente marcar sozinho", "Lembretes de sessão, faltas e reajuste", "Avisos no celular, voz e cópia na nuvem"],
   pessoal: ["Lançamentos sem limite todo mês", "Contas, caixinhas, transporte e a casa a dois", "Quanto dá para gastar hoje e a previsão do mês", "Avisos no celular, voz e cópia na nuvem"],
+  loja: [`Equipe: até 5 ajudantes anotando, cada um no seu celular`, "Você escolhe quem vê o lucro e quem só anota", "Resumo e gastos de todos os meses, sem limite", "Caixa, Pix com QR code, nota do fornecedor e cópia na nuvem"],
+  lojapessoal: ["Tudo do Pro Loja: equipe, resumo e gastos sem limite", "Lançamentos pessoais sem limite: gastos, contas, caixinhas e a casa", "A retirada da loja entrando no seu dinheiro pessoal", "Avisos no celular, voz e cópia na nuvem"],
 };
 const GRATIS_TXT = `Grátis: até ${LIMITE_GRATIS.pacientes} pacientes e ${LIMITE_GRATIS.lancMes} lançamentos por mês.`;
 const nomeCompleto = p => p ? `${p.nome} ${p.meses > 1 ? "anual" : "mensal"}` : "Avina Pro";
@@ -189,6 +191,8 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
   const [meses, setMeses] = useState(1);
   const [motivo, setMotivo] = useState(null);
   const P = planoDe(plano), atual = planoDe(a.plano) || P, produto = P.produto;
+  // os pacotes da loja e os do consultório/pessoal ficam em grupos separados (quem tem loja vê os da loja primeiro)
+  const grupo = grupoDe(produto), outroGrupo = grupo === "loja" ? "consultorio" : "loja";
   const produtoPadrao = produtoDoUso(conta.perfil);
   // Quem já assina só troca o plano para a próxima renovação (sem cobrar a diferença)
   const trocando = sit.s === "ativa";
@@ -214,8 +218,9 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
       <i className="assin-logo"><Marca /></i>
       <h2>{sit.s === "sem" ? "Assine o Avina Pro" : "Continue com o Avina Pro"}</h2>
       {!trocando && emLancamento(hoje) && <div className="lanc-faixa"><b>Preço de lançamento</b><span>Assinando até {dataLonga(LANCAMENTO_ATE)}, você mantém este valor enquanto a assinatura estiver ativa.</span></div>}
-      <Seg big value={produto} onChange={v => setPlano(`${v}_${plano.endsWith("_mensal") ? "mensal" : "anual"}`)} options={Object.entries(PRODUTOS).map(([v, x]) => ({ v, l: x.nome }))} />
+      <Seg big value={produto} onChange={v => setPlano(`${v}_${plano.endsWith("_mensal") ? "mensal" : "anual"}`)} options={GRUPOS[grupo].map(v => ({ v, l: PRODUTOS[v].nome }))} />
       <ul className="assin-inclui">{INCLUI[produto].map(t => <li key={t}><I.check />{t}</li>)}</ul>
+      <button className="btn text" onClick={() => setPlano(`${GRUPOS[outroGrupo][0]}_${plano.endsWith("_mensal") ? "mensal" : "anual"}`)}>{grupo === "loja" ? "Ver os pacotes de consultório e vida pessoal" : "Tem uma loja? Ver os pacotes da Loja"}</button>
       <div className="assin-planos" role="radiogroup" aria-label="Plano">
         {["anual", "mensal"].map(c => {
           const id = `${produto}_${c}`, p = PLANOS[id];
@@ -380,12 +385,12 @@ function AssinaturaPagina({ s, tela, setTela, act, conta }) {
 
 // Passou do limite da versão grátis: mostra o que o Pro libera (nada do que já está anotado se perde)
 function ProSheet({ motivo, sugerido, onClose, act }) {
-  const pac = motivo === "pac";
+  const pac = motivo === "pac", lj = String(motivo || "").startsWith("loja");
   // quem usa as duas áreas vê o pacote com as duas; senão, só a área que travou
-  const produto = sugerido === "completo" ? "completo" : pac ? "consultorio" : "pessoal", P = PLANOS[`${produto}_anual`];
+  const produto = lj ? (sugerido === "lojapessoal" ? "lojapessoal" : "loja") : sugerido === "completo" ? "completo" : pac ? "consultorio" : "pessoal", P = PLANOS[`${produto}_anual`];
   return (
-    <Sheet title={pac ? `Você chegou a ${LIMITE_GRATIS.pacientes} pacientes` : `Você chegou a ${LIMITE_GRATIS.lancMes} lançamentos este mês`}
-      sub={pac ? `Na versão grátis, dá para acompanhar até ${LIMITE_GRATIS.pacientes} pacientes ativos.` : `Na versão grátis, dá para anotar até ${LIMITE_GRATIS.lancMes} lançamentos por mês. No mês que vem, o contador zera.`} onClose={onClose}>
+    <Sheet title={lj ? (motivo === "loja-equipe" ? "Sua equipe no caixa" : "Todo o histórico da loja") : pac ? `Você chegou a ${LIMITE_GRATIS.pacientes} pacientes` : `Você chegou a ${LIMITE_GRATIS.lancMes} lançamentos este mês`}
+      sub={lj ? (motivo === "loja-equipe" ? "Na versão grátis, a loja é só sua. No Pro Loja, quem ajuda anota junto, cada um no seu celular." : `Na versão grátis, o resumo e os gastos mostram os últimos ${LIMITE_GRATIS.lojaDias} dias. Nada do que foi anotado se perde.`) : pac ? `Na versão grátis, dá para acompanhar até ${LIMITE_GRATIS.pacientes} pacientes ativos.` : `Na versão grátis, dá para anotar até ${LIMITE_GRATIS.lancMes} lançamentos por mês. No mês que vem, o contador zera.`} onClose={onClose}>
       <div className="pro-topo"><i className="assin-logo"><Marca /></i><b>Avina Pro</b><span className="pro-selo">PRO</span></div>
       <ul className="assin-inclui">{INCLUI[produto].map(t => <li key={t}><I.check />{t}</li>)}</ul>
       <div className="note mint"><I.star /><span>{P.nome}: {porMes(P)} por mês no plano anual.{emLancamento(todayISO()) ? ` Preço de lançamento até ${dataLonga(LANCAMENTO_ATE)}: quem assina agora mantém o valor.` : ""} Garantia de 7 dias: não gostou, devolvemos tudo.</span></div>

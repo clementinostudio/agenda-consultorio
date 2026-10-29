@@ -28,7 +28,10 @@ const instalado = (window.matchMedia && matchMedia("(display-mode: standalone)")
 // Convite para a casa (#casa=...): guarda o convite; sem login, abre a tela de entrar e ele é usado depois
 const convite = location.hash.startsWith("#casa=") ? location.hash.slice(6) : "";
 if (convite) { try { localStorage.setItem("agenda-convite-casa", JSON.stringify(convite)); } catch (e) {} }
-const vemDaApresentacao = ["#entrar", "#criar", "#demo"].includes(location.hash) || !!convite;
+// Convite para ajudar numa loja (#loja=...): do mesmo jeito
+const conviteLoja = location.hash.startsWith("#loja=") ? location.hash.slice(6) : "";
+if (conviteLoja) { try { localStorage.setItem("agenda-convite-loja", JSON.stringify(conviteLoja)); } catch (e) {} }
+const vemDaApresentacao = ["#entrar", "#criar", "#demo"].includes(location.hash) || !!convite || !!conviteLoja;
 // Links dos e-mails da conta (confirmar cadastro, criar senha nova) também abrem direto no app
 const vemDoEmail = /access_token=|error_description=|type=recovery/.test(location.hash);
 

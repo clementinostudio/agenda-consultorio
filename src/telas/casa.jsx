@@ -447,11 +447,12 @@ const MOTIVOS = {
   js: uf => `A página da Sefaz${uf ? ` de ${uf}` : ""} só abre no navegador, e eu não consigo ler os itens dela. Pela foto eu leio.`,
   "ainda-nao": () => "Essa nota ainda não chegou na Sefaz (acontece logo depois da compra, ou quando o caixa estava sem internet). Tente pelo QR mais tarde, ou leia pela foto agora.",
 };
-export function NotaSheet({ casa: C, servidor, onClose, act }) {
+// Também serve à loja: sem casa (C nulo), com a lista dela (lista) e o que fazer ao salvar (onSalvar)
+export function NotaSheet({ casa: C, servidor, onClose, act, lista: listaExt, onSalvar, titulo, onSemNota }) {
   const [etapa, setEtapa] = useState("escolher"); // escolher | camera | lendo | revisar
   const [nota, setNota] = useState(null), [erro, setErro] = useState(null), [link, setLink] = useState(""), [lendo, setLendo] = useState("");
   const [dica, setDica] = useState(""), [luz, setLuz] = useState(null); // luz: null = aparelho sem lanterna
-  const [pagou, setPagou] = useState(C.eu), [modo, setModo] = useState("dividir");
+  const [pagou, setPagou] = useState(C ? C.eu : null), [modo, setModo] = useState("dividir");
   const video = React.useRef(null), stream = React.useRef(null), vivo = React.useRef(true), fotoRef = React.useRef(null);
   const parar = () => { if (stream.current) stream.current.getTracks().forEach(t => { try { t.stop(); } catch (e) {} }); stream.current = null; setLuz(null); };
   useEffect(() => { vivo.current = true; return () => { vivo.current = false; parar(); }; }, []);
@@ -541,10 +542,11 @@ export function NotaSheet({ casa: C, servidor, onClose, act }) {
   };
   const tirarFoto = () => fotoRef.current && fotoRef.current.click();
   const tirar = i => setNota(n => { const it = n.itens[i]; return { ...n, itens: n.itens.filter((_, k) => k !== i), total: Math.max(0, Math.round((n.total - it.valor) * 100) / 100) }; });
-  const lista = C.compras;
+  const lista = listaExt || C.compras;
   const naNota = nota ? lista.filter(x => nota.itens.some(i => combina(x.texto, i.nome))) : [];
   const ficou = nota ? lista.filter(x => !x.feito && !naNota.includes(x)) : [];
   const salvar = async () => {
+    if (onSalvar) { const { _tr, recusa, bloqueio, ...n } = nota; await onSalvar(n, naNota); onClose(); return; }
     const parts = modo === "dividir" ? C.membros.map(m => m.id) : [pagou];
     const { _tr, recusa, bloqueio, ...n } = nota;
     await C.salvar("lanc", { valor: n.total, desc: nomeLoja(n.loja) || "Mercado", cat: "mercado", data: n.data || todayISO(), pagou, participantes: parts, pesos: modo === "dividir" ? pesosDe(C.config, parts) : undefined, nota: n, criado: Date.now(), autor: C.eu });
@@ -553,7 +555,7 @@ export function NotaSheet({ casa: C, servidor, onClose, act }) {
     onClose();
   };
   return (
-    <Sheet title="Nota do mercado" sub={etapa === "revisar" ? "Confira e salve" : "Os itens e os preços ficam guardados"} onClose={onClose}>
+    <Sheet title={titulo || "Nota do mercado"} sub={etapa === "revisar" ? "Confira e salve" : "Os itens e os preços ficam guardados"} onClose={onClose}>
       {(etapa === "escolher" || etapa === "camera") && <>
         {erro && <div className="nota-erro" role="alert">
           <span>{erro.t}</span>
@@ -577,7 +579,7 @@ export function NotaSheet({ casa: C, servidor, onClose, act }) {
           <input value={link} onChange={e => setLink(e.target.value)} placeholder="Ou cole o link, ou digite a chave (44 números)" aria-label="Link do QR code ou chave de acesso da nota" autoComplete="off" />
           <button type="submit" className="bub-act" disabled={!link.trim()}>Buscar</button>
         </form>
-        <button className="btn text" onClick={() => act.abrirGastoCasa(null, { desc: "Mercado", cat: "mercado" })}>Sem nota? Anotar só o total</button>
+        <button className="btn text" onClick={() => onSemNota ? onSemNota() : act.abrirGastoCasa(null, { desc: "Mercado", cat: "mercado" })}>Sem nota? Anotar só o total</button>
       </>}
       {etapa === "lendo" && <div className="nota-lendo"><Ilustra n="carrinho" /><b>Lendo a nota…</b><small>{lendo || "Isso leva alguns segundos."}</small></div>}
       {etapa === "revisar" && nota && <>
@@ -598,7 +600,7 @@ export function NotaSheet({ casa: C, servidor, onClose, act }) {
           ); })}
         </div>
         {nota.fonte === "foto" && <div className="hint">A foto pode trocar um número ou outro: toque no × para tirar o que a IA leu errado.</div>}
-        {C.membros.length > 1 && <>
+        {C && C.membros.length > 1 && <>
           <div className="hint">Quem pagou</div>
           <div className="casa-chips" role="radiogroup" aria-label="Quem pagou">{C.membros.map(m => <button key={m.id} type="button" className={pagou === m.id ? "on" : ""} onClick={() => setPagou(m.id)}><Pessoa m={m} />{m.id === C.eu ? "Você" : m.nome}</button>)}</div>
           <Seg value={modo} onChange={setModo} options={[{ v: "dividir", l: "Dividir entre todos" }, { v: "mostrar", l: "Só guardar" }]} />

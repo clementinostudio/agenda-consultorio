@@ -9,6 +9,8 @@ const USOS = [
   ["tudo", "Consultório e vida pessoal", "Agenda, pacientes e cobranças, mais os gastos da casa", "ipad"],
   ["consultorio", "Só o consultório", "Agenda, pacientes, cobranças e recibos", "arquivo"],
   ["pessoal", "Só a vida pessoal", "Gastos, contas, carro e caixinhas", "dinheiro"],
+  ["lojapessoal", "Minha loja e vida pessoal", "O caixa da loja e o seu dinheiro, cada um no seu lugar", "carrinho"],
+  ["loja", "Só a minha loja", "Vendas, gastos, o que falta e fechar o caixa", "carrinho"],
 ];
 // [nome, categoria, dia comum de vencimento]
 const CONTAS_COMUNS = [["Aluguel", "casa", 5], ["Condomínio", "casa", 10], ["Luz", "casa", 15], ["Água", "casa", 15], ["Internet", "casa", 10], ["Celular", "casa", 10], ["Streaming", "lazer", 5], ["Academia", "saude", 5], ["Plano de saúde", "saude", 10], ["Escola", "outros", 10], ["Financiamento", "casa", 10], ["Cartão de crédito", "compras", 10]];
@@ -23,7 +25,9 @@ function Onboarding({ conta, onDone, onSair }) {
   const [nasc, setNasc] = useState(p0.nascimento || "");
   // veio por um convite para a casa? A casa fica no lado pessoal, então ele já vem escolhido
   const [convidado] = useState(() => { try { return !!localStorage.getItem("agenda-convite-casa"); } catch (e) { return false; } });
-  const [uso, setUso] = useState(p0.consultorio === false ? "pessoal" : p0.pessoal === false ? "consultorio" : p0.pessoal ? "tudo" : convidado ? "pessoal" : "");
+  // ...ou para ajudar numa loja: o modo Loja já vem escolhido
+  const [convidadoLoja] = useState(() => { try { return !!localStorage.getItem("agenda-convite-loja"); } catch (e) { return false; } });
+  const [uso, setUso] = useState(p0.loja ? (p0.pessoal === false ? "loja" : "lojapessoal") : p0.consultorio === false ? "pessoal" : p0.pessoal === false ? "consultorio" : p0.pessoal ? "tudo" : convidadoLoja ? "loja" : convidado ? "pessoal" : "");
   const [prof, setProf] = useState(p0.profissao ? (PROFISSOES.some(x => x.id === p0.profissao) ? p0.profissao : "Outra") : "");
   const [outra, setOutra] = useState(p0.profissao && !PROFISSOES.some(x => x.id === p0.profissao) ? p0.profissao : "");
   const [termo, setTermo] = useState(p0.termo || "");
@@ -43,7 +47,7 @@ function Onboarding({ conta, onDone, onSair }) {
 
   const idade = idadeDe(nasc);
   const profissao = prof === "Outra" ? outra.trim() : prof;
-  const consult = uso === "tudo" || uso === "consultorio", pessoal = uso === "tudo" || uso === "pessoal";
+  const consult = uso === "tudo" || uso === "consultorio", pessoal = uso === "tudo" || uso === "pessoal" || uso === "lojapessoal", lojaUso = uso === "loja" || uso === "lojapessoal";
   const escolherProf = id => { setProf(id); setTermo((PROFISSOES.find(x => x.id === id) || { termo: "Cliente" }).termo); };
   const Choice = ({ on, onClick, children, sub, wide }) => <button type="button" className={"choice" + (on ? " on" : "") + (wide ? " wide" : "")} aria-pressed={on} onClick={onClick}>{children}{sub && <small>{sub}</small>}</button>;
   const marcarConta = ([n, , dia]) => setContas(c => { const x = { ...c }; if (x[n]) delete x[n]; else x[n] = { valor: "", dia: String(dia) }; return x; });
@@ -65,7 +69,8 @@ function Onboarding({ conta, onDone, onSair }) {
           <Ilustra n={ilu} /><span><b>{t}</b><small>{s}</small></span>{uso === k && <i><I.check /></i>}
         </button>
       ))}</div>
-        {convidado && <div className="hint">Você veio por um convite: a casa fica na parte de <b>vida pessoal</b>, e entrar nela é grátis. Se também atende, escolha “Consultório e vida pessoal”.</div>}</> },
+        {convidadoLoja && <div className="hint">Você veio por um convite para ajudar numa <b>loja</b>: para quem ajuda, é grátis.</div>}
+        {convidado && !convidadoLoja && <div className="hint">Você veio por um convite: a casa fica na parte de <b>vida pessoal</b>, e entrar nela é grátis. Se também atende, escolha “Consultório e vida pessoal”.</div>}</> },
     ...(consult ? [
       { id: "area", q: "Qual é a sua área?", why: "Assim eu uso as palavras certas da sua profissão.",
         valida: () => !profissao ? (prof === "Outra" ? "Escreva sua área." : "Escolha uma opção.") : !termo ? "Diga como chama quem você atende." : "",
@@ -129,7 +134,7 @@ function Onboarding({ conta, onDone, onSair }) {
 
   const terminar = () => {
     const c0 = PROFISSOES.find(x => x.id === profissao);
-    const perfil = { ...p0, refazer: undefined, nascimento: nasc, consultorio: consult, pessoal, cidade: cidade.trim(), estilo: p0.estilo || "detalhado", avisos: p0.avisos || AVISOS_PADRAO,
+    const perfil = { ...p0, refazer: undefined, nascimento: nasc, consultorio: consult, pessoal, loja: lojaUso, cidade: cidade.trim(), estilo: p0.estilo || "detalhado", avisos: p0.avisos || AVISOS_PADRAO,
       ...(consult ? { profissao, termo, duracao: dur, valorPadrao: num(valor), subPadrao: temSub === "sim" ? num(sub) : 0, subTipo, meta: num(meta) || 0 } : { termo: p0.termo || (c0 ? c0.termo : "Paciente") }) };
     // o que já vai pronto para o lado pessoal
     const inicial = pessoal ? {
