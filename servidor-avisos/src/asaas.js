@@ -19,7 +19,7 @@
 */
 
 // Mesmos preços do app (src/plano.js): mudou lá, mude aqui. Um plano para cada combinação de áreas; o anual sai 10 mensalidades.
-const PLANOS = {
+export const PLANOS = {
   pessoal_anual: { nome: "Pro Pessoal anual", valor: 199, ciclo: "YEARLY" },
   pessoal_mensal: { nome: "Pro Pessoal mensal", valor: 19.9, ciclo: "MONTHLY" },
   consultorio_anual: { nome: "Pro Consultório anual", valor: 299, ciclo: "YEARLY" },
@@ -36,7 +36,7 @@ const PLANOS = {
   tudo_mensal: { nome: "Pro Completo mensal", valor: 59.9, ciclo: "MONTHLY" },
 };
 const ALIAS = { anual: "completo_anual", mensal: "completo_mensal" }; // planos de antes dos três pacotes (incluíam as duas áreas)
-const idPlano = id => ALIAS[id] || id;
+export const idPlano = id => ALIAS[id] || id;
 // Contas criadas antes de começar a cobrar (COBRANCA_INICIO) ganham 30 dias de Pro liberado
 const CORTESIA_DIAS = 30;
 const GARANTIA_DIAS = 7;
@@ -109,7 +109,7 @@ const formaDe = t => t === "PIX" ? "pix" : t === "CREDIT_CARD" ? "cartao" : "pix
 const itemHistorico = (p, plano) => ({ id: p.id, data: p.paymentDate || p.clientPaymentDate || p.confirmedDate || p.dueDate, valor: p.value, plano, forma: formaDe(p.billingType), devolvido: p.status === "REFUNDED" || undefined });
 
 // Como está a assinatura agora, no formato que o app usa
-async function estado(env, uid) {
+export async function estado(env, uid) {
   const reg = await lerReg(env, uid), hoje = hojeBR();
   const base = { real: true, plano: reg.plano ? idPlano(reg.plano) : null, forma: reg.forma || null, desde: reg.desde || null, historico: reg.historico || [] };
   if (!reg.assinatura) {

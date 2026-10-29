@@ -17,6 +17,7 @@
 */
 import { rotaAsaas, usarCotaIA } from "./asaas.js";
 import { rotaLink } from "./link.js";
+import { rotaAdmin, onde } from "./admin.js";
 
 const CHAVE = "dados"; // tudo fica numa chave só do KV (um app pessoal, poucos aparelhos)
 const enc = new TextEncoder();
@@ -172,9 +173,13 @@ export default {
 
     // Link de agendamento (a página do paciente usa GET para ver os horários): veja src/link.js
     if (url.pathname.startsWith("/link/")) return rotaLink(req, env, url, json, ctx, async (id, aviso) => { const d = (await ler(env))[id]; if (d && valido(d.sub)) await enviar(env, d.sub, aviso); });
+    // Cidade aproximada de quem abriu o app (vai junto no registro de acesso): veja src/admin.js
+    if (url.pathname === "/onde") return new Response(JSON.stringify(onde(req)), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     // Assinatura pelo Asaas (cobrança do app): veja src/asaas.js
     if (url.pathname.startsWith("/assinatura/") || url.pathname === "/asaas/webhook") return rotaAsaas(req, env, url, json, permitida);
+    // Painel do dono (app.avina.com.br/admin/): veja src/admin.js
+    if (url.pathname.startsWith("/admin/")) return rotaAdmin(req, env, url, json, { aparelhos: async () => Object.keys(await ler(env)).length });
 
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
 

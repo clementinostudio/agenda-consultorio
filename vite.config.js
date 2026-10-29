@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { resolve } from "node:path";
 
 // BASE_PATH: o workflow preenche sozinho ("/" com o domínio app.avina.com.br, /nome-do-repositorio/ sem domínio próprio).
 // Rodando local, fica "/". A página de apresentação (avina.com.br) tem o build dela: vite.site.config.js.
@@ -10,6 +11,8 @@ export default defineConfig({
   base,
   build: {
     rollupOptions: {
+      // admin/: o painel do dono (app.avina.com.br/admin/), uma página à parte que o app não carrega
+      input: { index: resolve(import.meta.dirname, "index.html"), admin: resolve(import.meta.dirname, "admin/index.html") },
       // O React fica num arquivo separado: quase nunca muda, então o celular não precisa baixar de novo a cada atualização
       // O leitor de PDF (pdf.js) também fica separado: só baixa quando alguém compartilha um PDF com o app
       output: { manualChunks: id => (/node_modules\/(react|react-dom|scheduler)\//.test(id) ? "react" : /node_modules\/pdfjs-dist\//.test(id) ? "leitor-pdf" : undefined) },
@@ -63,10 +66,10 @@ export default defineConfig({
       workbox: {
         // Guarda o app para abrir offline (só as fontes .woff2 dos alfabetos latinos, para ficar leve)
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,webp,woff2}"],
-        globIgnores: ["**/leitor-pdf-*", "**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**"],
+        globIgnores: ["**/leitor-pdf-*", "**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**", "**/admin/**", "**/admin-*"],
         navigateFallback: "index.html",
-        // termos, privacidade e cookies são páginas próprias (public/): o app instalado não pode trocá-las pela tela do app
-        navigateFallbackDenylist: [/\/(termos|privacidade|cookies|agendar)\//],
+        // termos, privacidade e cookies são páginas próprias (public/), e o painel (admin/) também: o app instalado não pode trocá-las pela tela do app
+        navigateFallbackDenylist: [/\/(termos|privacidade|cookies|agendar)\//, /\/admin(\/|$|\?)/],
         importScripts: ["sw-extra.js"], // abre o app ao tocar numa notificação
         runtimeCaching: [
           { // Leitor de código de barras (boleto): baixa só quando usado e fica guardado para funcionar offline

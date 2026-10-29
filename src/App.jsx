@@ -11,7 +11,7 @@ import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "rea
 import PORQUINHO from "./assets/porquinho.webp";
 import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monograma, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
-import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro } from "./nuvem.js";
+import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro, registrarAcesso } from "./nuvem.js";
 import { lerBoleto, acharBoleto } from "./boleto.js";
 import { buscarCnpj, cnpjValido } from "./cnpj.js";
 import { ehLinkNfce } from "./nota.js";
@@ -3930,6 +3930,13 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const av = { ...AVISOS_PADRAO, ...(perfil.avisos || {}) };
   const [db, setDb] = useState(() => carregarDb(conta));
   const nuvem = useNuvem(conta, db, setDb, onPerfilNuvem); // null quando a conta não usa a nuvem
+  // registro de acesso (Marco Civil): ao abrir e ao voltar para o app
+  useEffect(() => {
+    if (!NUVEM || !conta.uid) return;
+    const reg = () => { if (document.visibilityState !== "hidden") registrarAcesso(conta.uid, servidorAvisos()); };
+    reg(); document.addEventListener("visibilitychange", reg);
+    return () => document.removeEventListener("visibilitychange", reg);
+  }, [conta.uid]);
   const casa = useCasa(conta, db, setDb); // gastos da casa divididos com quem mora junto
   const loja = useLoja(conta, db, setDb); // o caixa da loja, com quem ajuda
   // inflação (IPCA) para o lembrete de reajuste: só busca se algum paciente está há 12 meses com o mesmo valor
