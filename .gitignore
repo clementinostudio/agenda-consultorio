@@ -21,3 +21,4 @@ servidor-avisos/.segredos.json
 servidor-avisos/.dev.vars
 servidor-avisos/asaas.txt
 servidor-avisos/cloudflare-token.txt
+servidor-avisos/pluggy.txt
