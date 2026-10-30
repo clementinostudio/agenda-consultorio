@@ -66,10 +66,11 @@ export default defineConfig({
       workbox: {
         // Guarda o app para abrir offline (só as fontes .woff2 dos alfabetos latinos, para ficar leve)
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,webp,woff2}"],
-        globIgnores: ["**/leitor-pdf-*", "**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**", "**/admin/**", "**/admin-*"],
+        globIgnores: ["**/leitor-pdf-*", "**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**", "**/admin/**", "**/admin-*", "**/celular/**"],
         navigateFallback: "index.html",
-        // termos, privacidade e cookies são páginas próprias (public/), e o painel (admin/) também: o app instalado não pode trocá-las pela tela do app
-        navigateFallbackDenylist: [/\/(termos|privacidade|cookies|agendar)\//, /\/admin(\/|$|\?)/],
+        // termos, privacidade, cookies e excluir conta são páginas próprias (public/), e o painel (admin/) também: o app
+        // instalado não pode trocá-las pela tela do app. celular/ é a cópia do Avina que o app de celular baixa.
+        navigateFallbackDenylist: [/\/(termos|privacidade|cookies|agendar|excluir-conta|celular)\//, /\/admin(\/|$|\?)/],
         importScripts: ["sw-extra.js"], // abre o app ao tocar numa notificação
         runtimeCaching: [
           { // Leitor de código de barras (boleto): baixa só quando usado e fica guardado para funcionar offline

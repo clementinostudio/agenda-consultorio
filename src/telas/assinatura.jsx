@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { I, Marca, Seg, Field, Ilustra, Sheet, BASE, todayISO, fromISO, pad, brlReal, MES_LONGO, vibrar, copiarTexto, lerJSON, servidorAvisos } from "../App.jsx";
 import { cliente } from "../nuvem.js";
+import { noApp } from "../app-nativo.js";
 import { PLANOS, LIMITE_GRATIS, planoDe, idPlano, produtoDoUso, linkSuporte, LANCAMENTO_ATE, emLancamento, AREAS, produtoDasAreas, areasDoProduto, areasDoPerfil, separadoMensal } from "../plano.js";
 
 // O que o plano inclui: as linhas de cada área marcada, mais o que só existe quando as áreas andam juntas
@@ -91,6 +92,11 @@ function situacaoDe(a) {
 
 function resumoAssinatura(a) {
   const sit = situacaoDe(a), P = planoDe(a.plano);
+  if (noApp) { // no app de celular: só a situação, sem falar de pagamento (regra da Apple e do Google)
+    if (sit.s === "pausada") return { texto: `Pausado até ${dataLonga(a.ate)}` };
+    if (sit.s === "cancelada") return { texto: `${P.nome} · até ${dataLonga(a.ate)}` };
+    return { texto: sit.s === "ativa" ? `${P.nome} · ativo` : "Versão grátis" };
+  }
   if (sit.s === "sem") return { texto: "Escolha um plano · garantia de 7 dias" };
   if (sit.s === "acabou") return { texto: "Escolha um plano para continuar", selo: "Acabou" };
   if (sit.s === "aguardando") return { texto: "Falta pagar para começar", selo: "Pagar" };
@@ -179,7 +185,39 @@ function PagarReal({ s, plano, forma, setForma, act, setTela, voltar }) {
   );
 }
 
-function AssinaturaPagina({ s, tela, setTela, act, conta }) {
+// No app de celular (regras da Apple e do Google), só a situação do plano: nada de preço, plano para escolher,
+// pagamento, código de acesso ou link para assinar. Quem assinou pelo site entra e já usa o Pro.
+function AssinaturaNoApp({ s, conta }) {
+  const hoje = todayISO();
+  if (s.situacao !== "ok") return (
+    <div className="stack">
+      <div className="assin-card">
+        <small>Seu plano</small>
+        {s.situacao === "carregando" ? <><b>Um instante…</b><p className="assin-espera"><span className="assin-gira" /> Conferindo o seu plano</p></>
+          : s.situacao === "erro" || s.situacao === "rede" ? <><b>Não deu para conferir agora</b><p>Seus dados continuam aqui. Confira a internet e tente de novo.</p><button className="btn mode" onClick={s.tentarDeNovo}>Tentar de novo</button></>
+          : <><b>Versão grátis</b><p className="assin-gratis">{gratisTxt(conta.perfil)}</p></>}
+      </div>
+    </div>
+  );
+  const { a } = s, sit = situacaoDe(a), pro = ["ativa", "pausada", "cancelada"].includes(sit.s);
+  return (
+    <div className="stack">
+      <div className={"assin-card" + (pro ? "" : " acabou")}>
+        <small>Seu plano{pro && <> · <span className="pro-selo">PRO</span></>}</small>
+        <b>{pro ? planoDe(a.plano).nome : "Versão grátis"}</b>
+        {pro ? <p>{resumoAssinatura(a).texto}</p> : <p className="assin-gratis">{gratisTxt(conta.perfil)}</p>}
+        {s.cortesiaAte && hoje < s.cortesiaAte && <div className="note mint"><I.star /><span>O Pro completo está liberado de presente até {dataLonga(s.cortesiaAte)}.</span></div>}
+      </div>
+      <a className="btn text" href={linkSuporte()} target="_blank" rel="noopener"><I.chat /> Fale com a gente</a>
+    </div>
+  );
+}
+
+function AssinaturaPagina(p) {
+  return noApp ? <AssinaturaNoApp {...p} /> : <AssinaturaSite {...p} />;
+}
+
+function AssinaturaSite({ s, tela, setTela, act, conta }) {
   const { a } = s;
   const sit = situacaoDe(a), hoje = todayISO();
   const [ocupado, setOcupado] = useState(false);
@@ -405,6 +443,14 @@ function ProSheet({ motivo, sugerido, onClose, act }) {
   const pac = motivo === "pac", lj = String(motivo || "").startsWith("loja");
   // o plano das áreas que a pessoa usa (o que travou sempre está entre elas)
   const produto = PLANOS[`${sugerido}_anual`] ? sugerido : lj ? "loja" : pac ? "consultorio" : "pessoal", P = PLANOS[`${produto}_anual`];
+  // no app de celular: só avisa do limite, sem oferecer o Pro (regra da Apple e do Google)
+  if (noApp) return (
+    <Sheet title={lj ? (motivo === "loja-equipe" ? "A loja é só sua" : `Os últimos ${LIMITE_GRATIS.lojaDias} dias da loja`) : pac ? `Você chegou a ${LIMITE_GRATIS.pacientes} pacientes` : `Você chegou a ${LIMITE_GRATIS.lancMes} lançamentos este mês`}
+      sub={lj ? (motivo === "loja-equipe" ? "Na versão grátis, só você anota na loja." : `Na versão grátis, o resumo e os gastos mostram os últimos ${LIMITE_GRATIS.lojaDias} dias.`) : pac ? `Na versão grátis, dá para acompanhar até ${LIMITE_GRATIS.pacientes} pacientes ativos.` : `Na versão grátis, dá para anotar até ${LIMITE_GRATIS.lancMes} lançamentos por mês. No mês que vem, o contador zera.`} onClose={onClose}>
+      <div className="note mint"><I.check /><span>Nada do que você já anotou se perde.</span></div>
+      <button className="btn mode" onClick={onClose}>Entendi</button>
+    </Sheet>
+  );
   return (
     <Sheet title={lj ? (motivo === "loja-equipe" ? "Sua equipe no caixa" : "Todo o histórico da loja") : pac ? `Você chegou a ${LIMITE_GRATIS.pacientes} pacientes` : `Você chegou a ${LIMITE_GRATIS.lancMes} lançamentos este mês`}
       sub={lj ? (motivo === "loja-equipe" ? "Na versão grátis, a loja é só sua. No Pro Loja, quem ajuda anota junto, cada um no seu celular." : `Na versão grátis, o resumo e os gastos mostram os últimos ${LIMITE_GRATIS.lojaDias} dias. Nada do que foi anotado se perde.`) : pac ? `Na versão grátis, dá para acompanhar até ${LIMITE_GRATIS.pacientes} pacientes ativos.` : `Na versão grátis, dá para anotar até ${LIMITE_GRATIS.lancMes} lançamentos por mês. No mês que vem, o contador zera.`} onClose={onClose}>

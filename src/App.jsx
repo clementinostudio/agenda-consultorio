@@ -26,6 +26,7 @@ const K_LOJA_INICIAL = e => `agenda-loja-inicial:${e}`;
 import { janelasDoDia } from "./horarios.js";
 import { LIMITE_GRATIS, liberadoDe, ehPro, produtoDoUso } from "./plano.js";
 import { useLinkAgendamento, linkDo } from "./link.js";
+import { noApp, chamarApp, permitirIA } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -149,6 +150,8 @@ function hapticoIOS(vezes) {
 }
 const vibrar = (tipo = "toque") => {
   if (!VIBRAR) return;
+  // no app de celular, a vibração é a do próprio aparelho (toque leve, sucesso, alerta ou erro)
+  if (noApp) { chamarApp("vibrar", tipo).catch(() => {}); return; }
   try {
     if (navigator.vibrate) navigator.vibrate(VIB[tipo] || 8);
     else if (/iPhone|iPad|iPod/.test(navigator.userAgent)) hapticoIOS(tipo === "toque" ? 1 : 2);
@@ -931,6 +934,8 @@ function useFalaServidor({ onFinal, onFalhou, prompt, onSilencio }) {
     const wav = x.chunks.length ? await montarWav(x, manual) : null;
     if (x.cancelado) return;
     if (!wav) return falhar(x, "Não ouvi nada. Toque na Bolinha e fale de novo.");
+    if (!(await permitirIA())) return falhar(x, "Tudo bem: sem a IA, use o microfone do teclado, que funciona igual.");
+    if (x.cancelado) return;
     const ctrl = new AbortController(); const tempo = setTimeout(() => ctrl.abort(), 20000);
     try {
       const corpo = JSON.stringify({ audio: paraBase64(wav), prompt: cb.current.prompt || "" });
@@ -946,7 +951,7 @@ function useFalaServidor({ onFinal, onFalhou, prompt, onSilencio }) {
         await new Promise(ok => setTimeout(ok, 700));
       }
       if (x.cancelado) return;
-      if (j.erro === "limite") return falhar(x, j.nivel === "gratis" ? "As transcrições da IA de hoje acabaram (no Avina Pro é à vontade). Por hoje, use o microfone do teclado: funciona igual."
+      if (j.erro === "limite") return falhar(x, j.nivel === "gratis" ? (noApp ? "As transcrições da IA de hoje acabaram. Amanhã renova; por hoje, use o microfone do teclado: funciona igual." : "As transcrições da IA de hoje acabaram (no Avina Pro é à vontade). Por hoje, use o microfone do teclado: funciona igual.")
         : j.nivel === "anon" ? "Sem entrar na conta, a fala pela IA tem poucos usos por dia. Use o microfone do teclado, ou entre na sua conta." : "Você falou bastante hoje! Por hoje, use o microfone do teclado: funciona igual.");
       if (r.status === 404 || r.status === 501 || j.erro === "sem-ia") { VOZ_SERVIDOR_FALHOU = true; return falhar(x, "Seu servidor ainda não sabe transcrever a fala. No computador, rode de novo: bash servidor-avisos/instalar-avisos.sh. Por enquanto, toque na Bolinha que eu uso a voz do aparelho."); }
       if (!r.ok || !j.ok) throw new Error(j.erro || "HTTP " + r.status);
@@ -1045,6 +1050,7 @@ async function cabecalhosIA() {
   return h;
 }
 async function chamarIA(rota, corpo, ms = 15000) {
+  if (!(await permitirIA())) throw new Error("sem-permissao-ia");
   const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), ms);
   try {
     const r = await fetch(`${servidorAvisos()}${rota}`, { method: "POST", headers: await cabecalhosIA(), body: JSON.stringify({ hoje: hojeTexto(), ...corpo }), signal: ctrl.signal });
@@ -1058,7 +1064,8 @@ async function chamarIA(rota, corpo, ms = 15000) {
 }
 const msgIA = e => {
   const m = String((e && e.message) || e);
-  return m === "limite:gratis" ? "Você usou as ajudas da IA de hoje. Amanhã renova, e no Avina Pro é à vontade. O resto do app funciona normal."
+  return m === "sem-permissao-ia" ? "Tudo bem: a IA só é usada quando você permite. O resto do app funciona normal."
+    : m === "limite:gratis" ? (noApp ? "Você usou as ajudas da IA de hoje. Amanhã renova; o resto do app funciona normal." : "Você usou as ajudas da IA de hoje. Amanhã renova, e no Avina Pro é à vontade. O resto do app funciona normal.")
     : m === "limite:anon" ? "Sem entrar na conta, a IA tem poucos usos por dia. Entre na sua conta para usar mais."
     : m === "limite:pro" ? "Você usou bastante a IA hoje. Amanhã renova; o resto do app funciona normal."
     : m === "cota" ? "A IA já trabalhou bastante hoje (cota grátis do dia). Amanhã ela volta; o resto do app funciona normal."
@@ -1281,6 +1288,7 @@ function tocarSom() {
   } catch (e) { return false; }
 }
 async function notificarSistema(titulo, corpo, pedir) {
+  if (noApp) return chamarApp("avisos:mostrar", { titulo, corpo, pedir: !!pedir }).catch(() => "bloqueado");
   try {
     if (!("Notification" in window)) return "indisponivel";
     if (Notification.permission === "default" && pedir) { const r = await Notification.requestPermission(); if (r !== "granted") return "negado"; }
@@ -1299,14 +1307,16 @@ const AVISOS_PADRAO = { ativo: true, antecedencia: 15, som: true, nomes: false, 
    O iPhone congela o app assim que ele sai da tela, então nenhum relógio dentro do app consegue avisar na hora.
    Quem avisa é o servidor-avisos (pasta servidor-avisos/, grátis na Cloudflare): o app manda para lá só a lista
    dos próximos 7 dias (horário + texto do aviso) e o servidor dispara cada um no minuto certo.
-   Por padrão o texto não leva o nome do paciente (aparece na tela bloqueada). */
+   Por padrão o texto não leva o nome do paciente (aparece na tela bloqueada).
+   No app de celular (app-celular/) não tem servidor no meio: a mesma lista vai para o próprio aparelho, que agenda
+   cada aviso como notificação do celular (funciona até sem internet). */
 // O endereço é público (não é segredo). A variável AVISOS_URL do GitHub, se existir, tem prioridade.
 const AVISOS_URL_PADRAO = String(import.meta.env.VITE_AVISOS_URL || "https://agenda-avisos.alvena.workers.dev").trim().replace(/\/+$/, "");
 const K_PUSH = "agenda-push";         // { ligado, id do aparelho, chave do servidor, último envio }
 const K_PUSH_URL = "agenda-push-url"; // endereço do servidor colado à mão (se o GitHub não preencheu)
 const servidorAvisos = () => String(lerJSON(K_PUSH_URL, "") || AVISOS_URL_PADRAO).trim().replace(/\/+$/, "");
 const ehIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-const appInstalado = () => (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+const appInstalado = () => noApp || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
 const pushSuportado = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const pushLigado = () => !!lerJSON(K_PUSH, {}).ligado && !!servidorAvisos();
 const b64uBytes = s => { s = String(s).replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
@@ -1315,6 +1325,7 @@ const comPrazo = (p, ms) => Promise.race([p, new Promise((_, r) => setTimeout(()
 
 // O que impede de ligar ("" = pode ligar)
 function motivoSemPush() {
+  if (noApp) return "";
   if (!servidorAvisos()) return "servidor";
   if (ehIOS() && !appInstalado()) return "instalar";
   if (!pushSuportado()) return "indisponivel";
@@ -1322,6 +1333,13 @@ function motivoSemPush() {
   return "";
 }
 async function inscreverPush(pedir) {
+  if (noApp) { // a permissão é a do celular ("ok", "permissao" ou "negado")
+    const r = await chamarApp("avisos:permissao", { pedir: !!pedir });
+    if (r !== "ok") throw new Error(r);
+    const id = lerJSON(K_PUSH, {}).id || uid() + uid();
+    gravar(K_PUSH, { ...lerJSON(K_PUSH, {}), id });
+    return { id, sub: null };
+  }
   const m = motivoSemPush(); if (m) throw new Error(m);
   if (Notification.permission !== "granted") {
     if (!pedir) throw new Error("permissao");
@@ -4219,7 +4237,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     if (!forcar && st.hash === h && st.email === conta.email && Date.now() - (st.quando || 0) < 6 * 36e5) return "ok";
     try {
       const { id, sub } = await inscreverPush(false);
-      await chamarServidor("/agendar", { id, sub, avisos, uid: conta.uid || undefined }, manter); // uid: o painel do dono pode mandar um aviso para a conta
+      if (noApp) await chamarApp("avisos:agendar", { avisos });
+      else await chamarServidor("/agendar", { id, sub, avisos, uid: conta.uid || undefined }, manter); // uid: o painel do dono pode mandar um aviso para a conta
       gravar(K_PUSH, { ...lerJSON(K_PUSH, {}), hash: h, email: conta.email, quando: Date.now(), total: avisos.length, erro: "" });
       return "ok";
     } catch (e) { gravar(K_PUSH, { ...lerJSON(K_PUSH, {}), erro: e.message }); return e.message; }
@@ -4327,7 +4346,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     plano: { libera, pro: souPro, estado: plano && plano.estado, cortesiaAte: plano && plano.cortesiaAte },
     planoMudou: mudarPlano,
     // aviso no Início: a cobrança do Avina Pro está para vencer (Pix) ou venceu
+    // (no app de celular não aparece: lá não se fala de pagamento, regra da Apple e do Google)
     falaAssinatura: () => {
+      if (noApp) return null;
       const e = plano && plano.estado, pend = e && e.pendente;
       if (!pend || !(e.status === "ativa" || e.status === "aguardando")) return null;
       const faltam = diffDias(hojePlano, pend.vencimento);
@@ -4426,15 +4447,18 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       const st = lerJSON(K_PUSH, {});
       gravar(K_PUSH, { ...st, ligado: false, hash: "" });
       setPush(false);
+      if (noApp) { chamarApp("avisos:cancelar").catch(() => {}); return; }
       try { if (st.id) await chamarServidor("/cancelar", { id: st.id }); } catch (e) {}
     },
     testarPush: async atraso => {
       try {
         const { id, sub } = await inscreverPush(true);
         const tem = av.ativo && gerarAvisos(db, av, usaPessoal).length > 0;
-        await chamarServidor("/teste", { id, sub, atraso,
+        const teste = { atraso,
           titulo: atraso ? "Teste com o app fechado" : "Teste de aviso",
-          corpo: atraso ? "Chegou! Os avisos funcionam mesmo com o app fechado." : tem ? "Funcionando. Os próximos avisos já estão guardados." : "Funcionando. Os avisos vão chegar por aqui." });
+          corpo: atraso ? "Chegou! Os avisos funcionam mesmo com o app fechado." : tem ? "Funcionando. Os próximos avisos já estão guardados." : "Funcionando. Os avisos vão chegar por aqui." };
+        if (noApp) await chamarApp("avisos:teste", teste);
+        else await chamarServidor("/teste", { id, sub, ...teste });
         return "ok";
       } catch (e) { return e.message; }
     },
@@ -4715,7 +4739,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     sair: async () => {
       // a conta saiu deste aparelho: para de mandar os avisos dela
       const st = lerJSON(K_PUSH, {});
-      if (st.ligado && st.id) { chamarServidor("/cancelar", { id: st.id }, true).catch(() => {}); gravar(K_PUSH, { ...st, hash: "" }); }
+      if (st.ligado && st.id) { (noApp ? chamarApp("avisos:cancelar") : chamarServidor("/cancelar", { id: st.id }, true)).catch(() => {}); gravar(K_PUSH, { ...st, hash: "" }); }
       if (conta.uid) { notify("Guardando tudo na nuvem…"); onSair((await sairDaNuvem()) && conta); }
       else onSair();
     },

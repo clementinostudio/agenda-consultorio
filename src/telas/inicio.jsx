@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import { PROFISSOES, fmtNum, idadeDe, PhotoPicker, Field, I, todayISO, DURACOES, num, soNumero, Seg, AVISOS_PADRAO, vibrar, Ilustra, uid, brl } from "../App.jsx";
 import { fotoDoVeiculo } from "../transporte.js";
+import { noApp } from "../app-nativo.js";
 
 // As três áreas do app: a pessoa marca uma ou mais (as mesmas do seletor de modo, do Perfil e dos planos)
 const AREAS_OB = [
@@ -140,7 +141,7 @@ function Onboarding({ conta, onDone, onSair }) {
       { id: "loja-equipe", q: "Alguém te ajuda na loja?", why: "Quem ajuda pode anotar as vendas no próprio celular, e você vê tudo na hora.",
         valida: () => equipe ? "" : "Escolha uma opção.",
         body: <><div className="choices"><Choice on={equipe === "so"} onClick={() => setEquipe("so")}>Só eu</Choice><Choice on={equipe === "ajuda"} onClick={() => setEquipe("ajuda")}>Tenho ajuda</Choice></div>
-          {equipe === "ajuda" && <div className="hint">Depois é só mandar o convite em <b>Ajustes da loja</b>. A equipe faz parte do Pro Loja, e quem ajuda não paga nada.</div>}</> },
+          {equipe === "ajuda" && <div className="hint">Depois é só mandar o convite em <b>Ajustes da loja</b>. {noApp ? "Quem ajuda não paga nada." : "A equipe faz parte do Pro Loja, e quem ajuda não paga nada."}</div>}</> },
     ] : []),
     ...(pessoal ? [
       { id: "renda", q: consult ? "Fora o consultório, entra algum dinheiro por mês?" : "Quanto entra por mês, mais ou menos?", why: "Com isso eu mostro quanto sobra no mês e aviso se o ritmo de gastos está alto.", opcional: () => setRenda(""),

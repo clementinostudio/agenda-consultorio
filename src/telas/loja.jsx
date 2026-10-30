@@ -4,6 +4,7 @@ import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, today
 import { PAGAMENTOS, pagDe, CATS_LOJA, catLoja, CEDULAS, CORES_PRODUTO, MAX_AJUDANTES, totaisDia, gaveta, maisVendidos, totaisPeriodo, porDia, pixCopiaECola, somaV } from "../loja.js";
 import { lerItem, nomeLoja } from "../nota.js";
 import { LIMITE_GRATIS } from "../plano.js";
+import { noApp } from "../app-nativo.js";
 import { NotaSheet } from "./casa.jsx";
 import { usePrecosPerto, PrecoItem, PrecosPainel } from "./precos.jsx";
 const LIMITE_GRATIS_LOJA = LIMITE_GRATIS.lojaDias;
@@ -47,7 +48,7 @@ function SemLoja({ L, conta, act, tema }) {
                   <li><b>Fechar o caixa</b>: o app diz quanto deveria ter na gaveta. Você conta e vê se bateu.</li>
                   <li><b>Gastos da loja</b> separados do seu dinheiro: insumos, embalagem, gás, ajudante…</li>
                   <li><b>A lista do que falta</b> e o resumo do dia, da semana e do mês.</li>
-                  <li><b>Quem ajuda anota junto</b>, cada um no seu celular{act.lojaPro ? "" : " (no Pro Loja)"}.</li>
+                  <li><b>Quem ajuda anota junto</b>, cada um no seu celular{act.lojaPro || noApp ? "" : " (no Pro Loja)"}.</li>
                 </ul>
               </div>
               <div className="fields"><Field label="Nome da loja" htmlFor="lj-nome"><input id="lj-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Doces da Ana, Sorveteria Gelato" maxLength={60} /></Field></div>
@@ -65,8 +66,8 @@ function SemLoja({ L, conta, act, tema }) {
 function AvisoEquipe({ L, act }) {
   if (act.lojaPro || L.membros.length < 2) return null;
   return L.souDona
-    ? <div className="note amber"><I.alert /><span>Sua equipe faz parte do <b>Pro Loja</b>. Para os ajudantes continuarem anotando, renove a assinatura. <button className="link" onClick={() => act.pedirPro("loja-equipe")}>Ver planos</button></span></div>
-    : <div className="note amber"><I.alert /><span>A assinatura da loja acabou. Peça para <b>{nomeDe(L, L.loja.dono)}</b> renovar o Pro Loja para você continuar anotando.</span></div>;
+    ? <div className="note amber"><I.alert /><span>{noApp ? "Na versão grátis, só você anota na loja. Os ajudantes continuam vendo o que já foi anotado." : <>Sua equipe faz parte do <b>Pro Loja</b>. Para os ajudantes continuarem anotando, renove a assinatura. <button className="link" onClick={() => act.pedirPro("loja-equipe")}>Ver planos</button></>}</span></div>
+    : <div className="note amber"><I.alert /><span>{noApp ? <>Por enquanto, só <b>{nomeDe(L, L.loja.dono)}</b> anota na loja. Fale com quem cuida da loja.</> : <>A assinatura da loja acabou. Peça para <b>{nomeDe(L, L.loja.dono)}</b> renovar o Pro Loja para você continuar anotando.</>}</span></div>;
 }
 const travado = (L, act) => !act.lojaPro && !L.souDona && L.membros.length > 1;
 
@@ -245,7 +246,7 @@ export function LojaGastos({ loja: L, conta, act, tema }) {
               <span>{Mai(mes.nome)} de {mes.ano}</span>
               <button className="icon-btn" onClick={() => setOff(off + 1)} aria-label="Próximo mês" disabled={off >= 0}><I.chev /></button>
             </div>
-            {travadoMes ? <div className="empty com-ilustra"><b>Meses antigos ficam no Pro Loja</b>Na versão grátis, aparecem os últimos {LIMITE_GRATIS_LOJA} dias. Nada se perde.<button className="btn mode" onClick={() => act.pedirPro("loja-historico")}>Ver o Pro Loja</button></div>
+            {travadoMes ? <div className="empty com-ilustra"><b>{noApp ? `Os últimos ${LIMITE_GRATIS_LOJA} dias` : "Meses antigos ficam no Pro Loja"}</b>Na versão grátis, aparecem os últimos {LIMITE_GRATIS_LOJA} dias. Nada se perde.{!noApp && <button className="btn mode" onClick={() => act.pedirPro("loja-historico")}>Ver o Pro Loja</button>}</div>
               : antigo ? <div className="hint">Os gastos um a um ficam guardados de {MES_LONGO[Number(L.desde.slice(5, 7)) - 1]} para cá. Para meses antigos, veja os totais no Resumo.</div> : <>
               <div className="casa-total"><Money v={total} /><small>{doMes.length} {doMes.length === 1 ? "gasto" : "gastos"} em {mes.nome}</small></div>
               {cats.length > 0 && <div className="lj-cats">
@@ -380,7 +381,7 @@ export function LojaResumo({ loja: L, conta, act, tema }) {
             <span>{Mai(mes.nome)} de {mes.ano}</span>
             <button className="icon-btn" onClick={() => setOff(off + 1)} aria-label="Próximo mês" disabled={off >= 0}><I.chev /></button>
           </div>}
-          {bloqueado ? <section className="panel"><div className="empty com-ilustra"><Ilustra n="cafe" /><b>Meses antigos ficam no Pro Loja</b>Na versão grátis, o resumo mostra os últimos {LIMITE_GRATIS_LOJA} dias. Nada se perde: assinando, tudo aparece.<button className="btn mode" onClick={() => act.pedirPro("loja-historico")}>Ver o Pro Loja</button></div></section> : <>
+          {bloqueado ? <section className="panel"><div className="empty com-ilustra"><Ilustra n="cafe" /><b>{noApp ? `Os últimos ${LIMITE_GRATIS_LOJA} dias` : "Meses antigos ficam no Pro Loja"}</b>{noApp ? `Na versão grátis, o resumo mostra os últimos ${LIMITE_GRATIS_LOJA} dias. Nada se perde.` : `Na versão grátis, o resumo mostra os últimos ${LIMITE_GRATIS_LOJA} dias. Nada se perde: assinando, tudo aparece.`}{!noApp && <button className="btn mode" onClick={() => act.pedirPro("loja-historico")}>Ver o Pro Loja</button>}</div></section> : <>
             <section className="bal lj-dia">
               <div className="bal-top"><span className="lab">Sobrou {nomeRng}</span></div>
               <div className={"bal-amt" + (P.sobrou < 0 ? " neg" : "")}><Money v={P.sobrou} /></div>
@@ -731,7 +732,7 @@ function AjustesSheet({ L, conta, onClose, act }) {
       {L.souDona && ajudantes.length < MAX_AJUDANTES && L.nuvem && (
         <button className="casa-convite" onClick={convidar} disabled={ocupado === "convite"}>
           <span className="ic"><I.share /></span>
-          <span className="tx"><b>{ocupado === "convite" ? "Criando o link…" : "Convidar quem ajuda"}</b><small>{podeEquipe(act) ? `Até ${MAX_AJUDANTES} ajudantes, cada um no seu celular. O link vale 7 dias.` : "A equipe faz parte do Pro Loja."}</small></span>
+          <span className="tx"><b>{ocupado === "convite" ? "Criando o link…" : "Convidar quem ajuda"}</b><small>{podeEquipe(act) ? `Até ${MAX_AJUDANTES} ajudantes, cada um no seu celular. O link vale 7 dias.` : noApp ? "Na versão grátis, a loja é só sua." : "A equipe faz parte do Pro Loja."}</small></span>
           <I.chev />
         </button>
       )}

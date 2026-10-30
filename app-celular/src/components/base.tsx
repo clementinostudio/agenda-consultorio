@@ -83,9 +83,11 @@ export function BotaoVidro({ children, onPress, cor, rotulo }: { children: React
 }
 
 // A tela que rola, com o título grande no topo e espaço para a barra de abas embaixo
-export function Tela({ titulo, sub, children, atualizando, aoAtualizar, direita }: { titulo: string; sub?: string; children: ReactNode; atualizando?: boolean; aoAtualizar?: () => void; direita?: ReactNode }) {
+// folha: a tela abre por cima do Avina (no iPhone, a folha já começa abaixo da barra de status)
+export function Tela({ titulo, sub, children, atualizando, aoAtualizar, direita, folha }: { titulo: string; sub?: string; children: ReactNode; atualizando?: boolean; aoAtualizar?: () => void; direita?: ReactNode; folha?: boolean }) {
   const c = useCores();
-  const topo = useSafeAreaInsets().top;
+  const ins = useSafeAreaInsets().top;
+  const topo = folha && Platform.OS === 'ios' ? 0 : ins;
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.fundo }}

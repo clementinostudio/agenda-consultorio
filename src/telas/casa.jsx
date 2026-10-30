@@ -6,6 +6,7 @@ import { cliente } from "../nuvem.js";
 import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
 import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja, cnpjDaChave } from "../nota.js";
 import { buscarCnpj } from "../cnpj.js";
+import { noApp, permitirIA } from "../app-nativo.js";
 import { lerQRs } from "./ferramentas.jsx";
 import { usePrecosPerto, PrecoItem, PrecosPainel } from "./precos.jsx";
 import { Anel, CatBolinha, Linha, useContagem } from "./visual.jsx";
@@ -799,12 +800,13 @@ export function NotaSheet({ casa: C, servidor, onClose, act, lista: listaExt, on
   // foto: a IA lê a nota inteira (motivo: por que caiu aqui em vez do QR)
   const pelaIA = async (f, motivo) => {
     if (!servidor) return falhou("Para ler a foto da nota, ligue o servidor de avisos (Perfil → Avisos).");
+    if (!(await permitirIA())) return falhou("Tudo bem: sem a IA, leia pelo QR code da nota ou anote só o total.");
     setEtapa("lendo"); setLendo(motivo || "");
     try {
       const imagem = await reduzirFoto(f, 1400, 0.72);
       const r = await fetch(`${servidor}/ler-nota`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imagem, hoje: todayISO() }), signal: AbortSignal.timeout(60000) });
       const j = await r.json().catch(() => ({}));
-      if (j.erro === "limite") return falhou(j.nivel === "pro" ? "Você usou bastante a leitura por foto hoje. Amanhã renova. Pelo QR code continua funcionando." : "As leituras por foto de hoje acabaram (no Avina Pro é à vontade). Pelo QR code continua funcionando, ou anote só o total.");
+      if (j.erro === "limite") return falhou(j.nivel === "pro" ? "Você usou bastante a leitura por foto hoje. Amanhã renova. Pelo QR code continua funcionando." : (noApp ? "As leituras por foto de hoje acabaram. Amanhã renova; pelo QR code continua funcionando, ou anote só o total." : "As leituras por foto de hoje acabaram (no Avina Pro é à vontade). Pelo QR code continua funcionando, ou anote só o total."));
       if (!r.ok || !j.nota) return falhou("Não consegui ler a foto. Tire de perto, com boa luz e a nota inteira e reta.", { foto: true });
       pronto({ ...arrumarNotaIA(j.nota), fonte: "foto", foto: await reduzirFoto(f, 800, 0.55) });
     } catch (e) { falhou("Não consegui ler a foto. Confira a internet e tente de novo.", { foto: true }); }

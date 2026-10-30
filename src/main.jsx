@@ -17,6 +17,7 @@ import "./styles.css";
 import "./modais.css"; // modais: topo e botão à vista, sem rolar de lado
 import App from "./App.jsx";
 import AvisosSistema, { avisarNovaVersao } from "./avisos.jsx";
+import { noApp, chamarApp } from "./app-nativo.js";
 
 // Quem não está logado e abriu pelo navegador vê primeiro a página de apresentação (avina.com.br, publicada à parte: veja site/).
 // Quem já está logado, ou abriu pelo app instalado, vai direto para o app.
@@ -57,7 +58,8 @@ class Protecao extends React.Component {
   render() {
     if (!this.state.erro) return this.props.children;
     // com versão nova esperando, atualizar(true) troca para ela e recarrega; senão, só recarrega
-    const recarregar = () => { try { this.props.atualizar && this.props.atualizar(true); } catch (e) {} setTimeout(() => location.reload(), 1500); };
+    // no app de celular, quem recarrega é o app (abre de novo o Avina guardado no aparelho)
+    const recarregar = () => { if (noApp) { chamarApp("recarregar").catch(() => {}); return; } try { this.props.atualizar && this.props.atualizar(true); } catch (e) {} setTimeout(() => location.reload(), 1500); };
     const msg = String((this.state.erro && this.state.erro.message) || "").slice(0, 120);
     return (
       <div role="alert" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24, textAlign: "center", fontFamily: "system-ui, sans-serif", background: "#F4F5F8", color: "#14161C" }}>
@@ -71,12 +73,13 @@ class Protecao extends React.Component {
   }
 }
 
-if (!logado && !instalado && !vemDaApresentacao && !vemDoEmail) {
+// No app de celular não tem apresentação nem service worker: o app guarda o Avina no aparelho e se atualiza sozinho.
+if (!noApp && !logado && !instalado && !vemDaApresentacao && !vemDoEmail) {
   location.replace(SITE);
 } else {
   // Service worker do PWA: deixa o app abrir offline. Quando sai uma versão nova, mostra o aviso "Atualizar"
   // (em vez de trocar sozinho no meio do uso). Procura novidades ao abrir, ao voltar para o app e a cada 30 min.
-  const atualizar = registerSW({
+  const atualizar = noApp ? null : registerSW({
     immediate: true,
     onNeedRefresh() { avisarNovaVersao(atualizar); },
     onRegisteredSW(url, reg) {

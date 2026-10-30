@@ -9,6 +9,7 @@ import { GradeHorarios, LinkAgendamento, linkDo } from "./agendamento.jsx";
 import { gradeDo, resumoGrade, periodosIniciais } from "../horarios.js";
 import { linkSuporte } from "../plano.js";
 import { nivelDe, TRILHAS } from "../conquistas.js";
+import { noApp, appIOS, chamarApp } from "../app-nativo.js";
 
 const TXT_PUSH = {
   servidor: "Falta ligar o servidor de avisos (uma vez só). No computador, dentro da pasta do app, rode: bash servidor-avisos/instalar-avisos.sh",
@@ -182,12 +183,13 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
     { grupo: "App", itens: [
       { id: "visual", ic: <I.sun />, t: "Aparência e fundo", v: temaNome },
       { id: "pessoal", ic: <I.piggy />, t: "Como você usa o app", v: [consult && "Consultório", pessoal && "Pessoal", lojaU && "Loja"].filter(Boolean).join(" e ").replace(/ e (?=.* e )/, ", ") },
-      { id: "app", ic: <I.down />, t: "Instalar e atalhos", v: appInstalado() ? "Instalado" : "Colocar na tela inicial" },
+      noApp ? { id: "trava", ic: <I.lock />, t: "Bloqueio do app", v: appIOS ? "Face ID para abrir o Avina" : "Digital ou rosto para abrir o Avina" }
+        : { id: "app", ic: <I.down />, t: "Instalar e atalhos", v: appInstalado() ? "Instalado" : "Colocar na tela inicial" },
     ] },
   ];
   const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
   const resAssin = assin.situacao === "ok" ? resumoAssinatura(assin.a) : { texto: assin.situacao === "carregando" ? "Conferindo…" : assin.situacao === "rede" ? "Sem conexão agora" : assin.situacao === "erro" ? "Não deu para abrir agora" : "Precisa da sua conta" };
-  const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", link: "Link de agendamento", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos" }[aba];
+  const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", link: "Link de agendamento", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos", trava: "Bloqueio do app" }[aba];
 
   return createPortal(
     <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
@@ -366,6 +368,8 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
 
         {aba === "assinatura" && <AssinaturaPagina s={assin} tela={sub} setTela={setSub} act={act} conta={conta} />}
 
+        {aba === "trava" && <TravaApp />}
+
         {aba === "app" && <div className="stack">
           <Ilustra n="ipad" className="perfil-ilustra" />
           <div className="hint" style={{ textAlign: "center" }}>No celular, no tablet e no computador: instale em cada um e entre na mesma conta.</div>
@@ -432,6 +436,31 @@ function ConquistasPagina({ lista }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Só no app de celular: pedir o Face ID (ou a digital) para abrir o Avina. Quem guarda a escolha e trava é o celular.
+function TravaApp() {
+  const [st, setSt] = useState(null); // { disponivel, ligado, nome: "Face ID" | "Touch ID" | "a digital"... }
+  const [erro, setErro] = useState("");
+  useEffect(() => { chamarApp("trava:estado").then(setSt).catch(() => setSt({ disponivel: false })); }, []);
+  if (!st) return <div className="hint">Conferindo o celular…</div>;
+  const mudar = async () => {
+    setErro("");
+    try { setSt(await chamarApp("trava:ligar", { ligar: !st.ligado })); vibrar("ok"); }
+    catch (e) { setErro(e.message === "cancelou" ? "" : "Não deu certo agora. Tente de novo."); }
+  };
+  return (
+    <div className="stack">
+      <div className="perfil-seguro">
+        <Ilustra n="cadeados" />
+        <span><b>{st.disponivel ? `Abrir o Avina com ${st.nome}` : "Bloqueio indisponível"}</b>
+          <small>{st.disponivel ? "Agenda, pacientes e dinheiro ficam protegidos se alguém pegar o seu celular." : "Cadastre o rosto ou a digital nos ajustes do celular e volte aqui."}</small></span>
+      </div>
+      {st.disponivel && <Toggle on={!!st.ligado} onClick={mudar}>Pedir {st.nome} ao abrir o app</Toggle>}
+      {erro && <div className="test-res"><div className="no"><I.alert /><span>{erro}</span></div></div>}
+      <div className="hint">Quando você sai do app, a tela fica escondida na lista de apps abertos. Se ficar fora por mais de 1 minuto, o Avina pede {st.disponivel ? st.nome : "o desbloqueio"} de novo.</div>
     </div>
   );
 }

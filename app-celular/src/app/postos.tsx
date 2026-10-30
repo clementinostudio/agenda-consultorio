@@ -1,5 +1,8 @@
-// Posto mais barato perto: a mesma busca do site, com cara de app.
+// Posto mais barato perto: a mesma busca do site, em tela nativa. Abre por cima do Avina quando a pessoa toca em
+// Transporte → Combustível → "Posto mais barato perto" (o site manda o combustível e o consumo do carro).
+import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
@@ -14,27 +17,36 @@ import { COMBS, haQuanto, linkMapa, resumoPostos, valeIr } from '@site/postos.js
 const K_ESCOLHA = 'agenda-postos-escolha'; // a mesma chave do site
 const RAIOS = [2, 5, 10, 20];
 const LITROS = 40;
-const CONSUMO = 11; // km/l, até o app ler o consumo real do carro
+const CONSUMO = 11; // km/l, quando o carro ainda não tem consumo anotado
 
 const abrirMapa = (p: Posto) => { vibrar(); Linking.openURL(linkMapa(p, Platform.OS === 'ios')).catch(() => {}); };
 
 export default function Postos() {
   const c = useCores();
-  const [esc, setEsc] = useState(() => lerGuardado(K_ESCOLHA, { comb: 'gasolina', raio: 5 }));
+  const q = useLocalSearchParams<{ comb?: string; consumo?: string }>();
+  const consumo = Number(q.consumo) > 0 ? Number(q.consumo) : CONSUMO;
+  const [esc, setEsc] = useState(() => {
+    const g = lerGuardado(K_ESCOLHA, { comb: 'gasolina', raio: 5 });
+    return q.comb && COMBS.some((x: { id: string }) => x.id === q.comb) ? { ...g, comb: q.comb } : g;
+  });
   const trocar = (m: Partial<typeof esc>) => { const n = { ...esc, ...m }; setEsc(n); guardar(K_ESCOLHA, n); };
   const p = usePostos(esc.comb, esc.raio);
   const r = resumoPostos(p.lista, LITROS);
   const comDist = p.lista.filter((x) => x.dist != null);
   const perto = comDist.length > 1 ? comDist.reduce((m, x) => ((x.dist as number) < (m.dist as number) ? x : m)) : null;
   const vale = r && perto && perto !== r.menor && r.menor.dist != null
-    ? valeIr({ ...r.menor, dist: Math.max(0, r.menor.dist - (perto.dist as number)) }, perto.preco, LITROS, CONSUMO)
+    ? valeIr({ ...r.menor, dist: Math.max(0, r.menor.dist - (perto.dist as number)) }, perto.preco, LITROS, consumo)
     : null;
   const nomeComb = (COMBS.find((x: { id: string }) => x.id === esc.comb) || COMBS[0]).nome.toLowerCase();
   const sub = p.fonte === 'anp' ? `Pesquisa da ANP${p.cidade ? ` em ${p.cidade}` : ''}` : 'Notas fiscais de agora';
   const rotulo = esc.raio === 20 ? (p.fonte === 'anp' ? `O mais barato de ${p.cidade}` : 'O mais barato da região') : `O mais barato a até ${esc.raio} km`;
 
   return (
-    <Tela titulo="Posto mais barato" sub={sub} atualizando={p.st === 'buscando' && p.lista.length > 0} aoAtualizar={p.buscar}>
+    <Tela folha titulo="Posto mais barato" sub={sub} atualizando={p.st === 'buscando' && p.lista.length > 0} aoAtualizar={p.buscar}
+      direita={<BotaoVidro rotulo="Fechar" onPress={() => router.back()} cor={c.cartao3}>
+        {Platform.OS === 'ios' ? <SymbolView name="xmark" size={15} weight="bold" tintColor={c.texto} /> : <Texto v="forte">Fechar</Texto>}
+      </BotaoVidro>}>
+      <StatusBar style={c.escuro || Platform.OS === 'ios' ? 'light' : 'dark'} />
       <View style={{ gap: Espaco.dois }}>
         <Chips rotulo="Combustível" valor={esc.comb} onTrocar={(comb) => trocar({ comb })} opcoes={COMBS.filter((x: { id: string }) => x.id !== 'gnv')} />
         <Chips rotulo="Distância" valor={esc.raio} onTrocar={(raio) => trocar({ raio })}

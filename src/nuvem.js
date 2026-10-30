@@ -18,7 +18,8 @@ const URL_NUVEM = import.meta.env.VITE_SUPABASE_URL;
 const CHAVE_NUVEM = import.meta.env.VITE_SUPABASE_KEY;
 export const NUVEM = !!(URL_NUVEM && CHAVE_NUVEM);
 // Para onde voltam os links dos e-mails (confirmar conta, trocar senha)
-export const ENDERECO_APP = location.origin + import.meta.env.BASE_URL;
+// (na cópia do app de celular, o endereço base já vem completo: https://app.avina.com.br/)
+export const ENDERECO_APP = /^https?:/.test(import.meta.env.BASE_URL) ? import.meta.env.BASE_URL : location.origin + import.meta.env.BASE_URL;
 
 const ler = (k, f) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch (e) { return f; } };
 const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };

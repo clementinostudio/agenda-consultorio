@@ -10,7 +10,8 @@
     "preview": "vite preview --host",
     "dev:site": "vite --config vite.site.config.js --host",
     "build:site": "vite build --config vite.site.config.js",
-    "publicar:site": "npm run build:site && cd site && npx wrangler deploy"
+    "publicar:site": "npm run build:site && cd site && npx wrangler deploy",
+    "build:celular": "node scripts/montar-celular.mjs"
   },
   "dependencies": {
     "@fontsource-variable/comfortaa": "5.3.0",

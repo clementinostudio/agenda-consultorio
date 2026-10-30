@@ -20,7 +20,11 @@
         "CFBundleLocalizations": [
           "pt-BR"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "O Avina usa a câmera para ler o QR code da nota fiscal, o código de barras do boleto e tirar foto de recibos.",
+        "NSMicrophoneUsageDescription": "O Avina usa o microfone quando você fala com a Bolinha, por exemplo para anotar um gasto falando.",
+        "NSPhotoLibraryUsageDescription": "O Avina usa as suas fotos quando você escolhe uma foto de nota, de comprovante ou de perfil.",
+        "NSPhotoLibraryAddUsageDescription": "O Avina salva nas suas fotos as imagens que você pedir para guardar, como o QR code de um convite."
       }
     },
     "android": {
@@ -35,11 +39,14 @@
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.USE_BIOMETRIC"
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.RECORD_AUDIO",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
@@ -76,7 +83,16 @@
         }
       ],
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sharing",
+      "expo-asset",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#1F3BEF"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

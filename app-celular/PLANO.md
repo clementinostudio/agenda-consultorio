@@ -4,16 +4,33 @@ App nativo para iPhone e Android, feito com Expo (SDK 58). Usa o mesmo login, os
 servidor do site. O site (PWA) continua igual e recebe as melhorias que fizerem sentido lá também.
 
 - Pasta: `app-celular/` (este repositório). Telas em `src/app/` (Expo Router).
-- A lógica que não depende de tela (`../src/*.js`: postos, preços, transporte, plano, horários, extrato...) é a mesma
-  do site. Corrigiu lá, corrigiu aqui.
+- **Tudo o que o site tem, no app:** o app leva dentro o próprio Avina do site (montado num HTML só, que abre até sem
+  internet) e põe por cima os recursos do celular. Corrigiu no site, corrigiu no app: cada publicação do site também
+  sai em `app.avina.com.br/celular/` e o app se atualiza sozinho, sem esperar a loja. Detalhes no [README](README.md).
+- As telas que ganham versão nativa (mais bonita e mais rápida) vão sendo trocadas uma a uma, começando pelo posto
+  mais barato. O resto continua igual ao site até ganhar a sua.
 
 ## Onde estamos (30/10/2026)
 
-- **Pronto:** o projeto (Expo 58), o visual do Avina, as abas com Liquid Glass, o **Início** com o cartão
-  "Combustível agora" (etanol ou gasolina pelos postos mais baratos perto) e a tela **Posto mais barato**, que usa a
-  mesma lógica do site. Monta sem erro para iPhone e Android.
-- **Próximo (fim da fase 0):** login com a mesma conta do site, Face ID, sincronização dos dados e Perfil (com
-  "Excluir conta").
+- **Pronto:**
+  - **Tudo do site dentro do app:** consultório, pessoal, loja, casa, transporte, Bolinha, Perfil e o mesmo login e
+    os mesmos dados da nuvem.
+  - **Face ID ou digital** para abrir (Perfil → Bloqueio do app). A tela fica escondida na lista de apps abertos.
+  - **Avisos do próprio celular:** sessão, contas e resumo do dia, agendados no aparelho e funcionando sem internet.
+  - **Vibração nativa, localização do celular, Compartilhar do celular** (o PDF do recibo vai direto para o WhatsApp
+    ou para Arquivos) e links abrindo nos apps certos.
+  - **Posto mais barato** em tela nativa, aberto pelo botão do Transporte.
+  - **Regras das lojas aplicadas no app:**
+    - Sem preço, plano para escolher, pagamento ou código.
+    - Pedido de permissão antes de usar a IA.
+    - "Excluir minha conta" no Perfil e a página `app.avina.com.br/excluir-conta/` (pedida pelo Google).
+- **Testado:**
+  - A cópia do site no navegador, como o app abre, nos dois modos: dentro do app e o PWA normal, que segue igual.
+  - Tipos, lint e diagnóstico do Expo.
+  - Montagem para iPhone e Android.
+- **Falta testar num celular de verdade:** rode `bash ligar-celular.sh` e abra com o Expo Go.
+- **Próximo:** barra de abas nativa com Liquid Glass, mais telas nativas (Início, agenda, gasto rápido), câmera
+  nativa para QR e boleto e, com a conta da Apple, os widgets e a Ilha Dinâmica.
 
 ---
 
@@ -55,10 +72,10 @@ No Google Play, app que só dá acesso ao que foi comprado fora é aceito, desde
 | Regra | Como o app cumpre |
 |---|---|
 | Excluir a conta dentro do app (Apple 5.1.1(v)) | Perfil → Excluir conta (cancela a assinatura antes, como no site). |
-| Página de exclusão fora do app (Google) | Criar `app.avina.com.br/excluir-conta`. |
+| Página de exclusão fora do app (Google) | Feita: `app.avina.com.br/excluir-conta/` (sai com a próxima publicação do site). |
 | Login social exige "Entrar com a Apple" (4.8) | Só e-mail e senha: não precisa. Se um dia entrar o Google, entra a Apple junto. |
-| IA de terceiros (5.1.2(i)) | Antes do primeiro uso da Bolinha, avisar que a pergunta vai para a IA da Cloudflare e pedir "Permitir". |
-| Não ser "um site dentro de um app" (4.2) | Telas nativas, widgets, Face ID, câmera, localização. Nada de WebView do site. |
+| IA de terceiros (5.1.2(i)) | Feito: antes da primeira vez (Bolinha, fala, foto de nota), o app avisa que vai para a IA da Cloudflare e pede "Permitir". |
+| Não ser "um site dentro de um app" (4.2) | O Avina vai dentro do app (abre sem internet; não carrega o site da internet) e tem o que o site não tem: Face ID, avisos do aparelho, vibração, Compartilhar e tela nativa do posto. Antes de enviar: barra de abas nativa com Liquid Glass e mais telas nativas, para o revisor ver um app de celular de verdade. |
 | Permissões | Só "enquanto usa o app" para a localização (o "sempre" o Google quase sempre recusa). Câmera, fotos, microfone e Face ID são pedidos na hora do uso, com texto claro em português. |
 | Privacidade | A política já existe no site. Eu preparo as respostas dos "rótulos de privacidade" (Apple) e da "Segurança dos dados" (Google). |
 | Conta para o revisor | Uma conta de teste com dados de exemplo e o Pro liberado, informada nas notas da revisão. |

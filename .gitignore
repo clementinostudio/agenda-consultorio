@@ -22,3 +22,6 @@ servidor-avisos/.dev.vars
 servidor-avisos/asaas.txt
 servidor-avisos/cloudflare-token.txt
 servidor-avisos/pluggy.txt
+
+# A cópia do Avina para o app de celular (npm run build:celular)
+dist-celular

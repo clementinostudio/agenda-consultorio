@@ -4,6 +4,8 @@ import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNu
 import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, postos, carroOuApp, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
 import { IconeAnel, Topo, Comparacao } from "./visual.jsx";
 import { PostoBaratoSheet } from "./postos.jsx";
+import { combDoVeiculo } from "../postos.js";
+import { noApp, chamarApp } from "../app-nativo.js";
 import { createPortal } from "react-dom";
 
 /* ---------- ícones ---------- */
@@ -293,7 +295,13 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
               <p className="transp-fonte">Preço médio {ref.onde === perfil.cidade ? `em ${ref.onde}` : ref.onde} · ANP, semana de {dm(anp.d.ini)} a {dm(anp.d.fim)}{anp.d.velho ? " · sem internet agora" : ""}</p>
               {veredito && flex && <div className={"transp-veredito " + veredito.veredito}><b>{veredito.veredito === "etanol" ? "Etanol compensa" : veredito.veredito === "gasolina" ? "Gasolina compensa" : "Tanto faz"}</b><span>O etanol está custando {Math.round(veredito.razao * 100)}% da gasolina. Ele compensa abaixo de 70%, porque rende menos.</span></div>}
             </>}
-            <button type="button" className="postos-abrir" onClick={() => { vibrar("toque"); setPostosAberto(true); }}>
+            <button type="button" className="postos-abrir" onClick={() => {
+              vibrar("toque");
+              // no app de celular, abre a tela nativa do posto mais barato (app-celular/src/app/postos.tsx)
+              if (!noApp) return setPostosAberto(true);
+              const etanol = veredito && flex && veredito.veredito === "etanol";
+              chamarApp("abrir", { tela: "postos", comb: etanol ? "etanol" : combDoVeiculo(v), consumo: comb.consumo || 0 }).catch(() => setPostosAberto(true));
+            }}>
               <span className="ic" aria-hidden="true"><I.target /></span>
               <span className="mid"><b>Posto mais barato perto</b><small>O preço do litro em cada posto, agora</small></span>
               <I.chev />

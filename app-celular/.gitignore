@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# A cópia do Avina (gerada por ../scripts/montar-celular.mjs; o ligar-celular.sh e a compilação montam de novo)
+assets/site/

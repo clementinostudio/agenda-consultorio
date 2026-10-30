@@ -36,6 +36,12 @@ jobs:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
           # Endereço do servidor de avisos (o servidor-avisos/instalar-avisos.sh preenche sozinho)
           VITE_AVISOS_URL: ${{ vars.AVISOS_URL }}
+      # A cópia do Avina para o app de celular (app-celular/): sai em /celular/ e o app baixa as versões novas sozinho.
+      # Se este passo falhar, o site publica do mesmo jeito.
+      - run: npm run build:celular -- --publicar dist
+        continue-on-error: true
+        env:
+          VITE_AVISOS_URL: ${{ vars.AVISOS_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
