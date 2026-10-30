@@ -36,6 +36,18 @@ const vemDaApresentacao = ["#entrar", "#criar", "#demo"].includes(location.hash)
 // Links dos e-mails da conta (confirmar cadastro, criar senha nova) também abrem direto no app
 const vemDoEmail = /access_token=|error_description=|type=recovery/.test(location.hash);
 
+// Logo depois de publicar uma versão nova, uma tela que abre sob demanda pode procurar um arquivo da versão
+// antiga, que já não existe: recarrega sozinho para pegar a nova (no máximo uma vez a cada 30 segundos).
+window.addEventListener("vite:preloadError", e => {
+  try {
+    const ultima = Number(sessionStorage.getItem("avina-recarregou") || 0);
+    if (Date.now() - ultima < 30000) return;
+    sessionStorage.setItem("avina-recarregou", String(Date.now()));
+  } catch (x) {}
+  e.preventDefault();
+  location.reload();
+});
+
 // Se alguma tela quebrar, mostra um aviso com "Recarregar" em vez de deixar tudo em branco.
 // Fica fora do App: o aviso de versão nova (AvisosSistema) continua aparecendo, e é ele que traz a correção.
 class Protecao extends React.Component {
@@ -51,6 +63,7 @@ class Protecao extends React.Component {
       <div role="alert" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 24, textAlign: "center", fontFamily: "system-ui, sans-serif", background: "#F4F5F8", color: "#14161C" }}>
         <b style={{ fontSize: 22 }}>Algo deu errado nesta tela</b>
         <span style={{ maxWidth: 340, color: "#5E6575" }}>Seus dados estão guardados. Toque em recarregar: se tiver uma versão nova do app, ela já entra junto.</span>
+        {msg && <small style={{ maxWidth: 340, color: "#8A90A0", fontSize: 12, wordBreak: "break-word" }}>Detalhe: {msg}</small>}
         <button onClick={recarregar} style={{ height: 52, padding: "0 28px", border: 0, borderRadius: 16, background: "#2B46FF", color: "#fff", fontWeight: 800, fontSize: 16 }}>Recarregar</button>
         <a href={`https://wa.me/5543988208714?text=${encodeURIComponent(`Oi! O Avina mostrou "Algo deu errado": ${msg}`)}`} target="_blank" rel="noopener" style={{ color: "#2B46FF", fontWeight: 700 }}>Avisar a gente no WhatsApp</a>
       </div>
