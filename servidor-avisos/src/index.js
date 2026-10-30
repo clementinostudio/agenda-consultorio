@@ -15,7 +15,7 @@
   Tudo dentro da cota grátis do Workers AI. No plano gratuito, quando a cota do dia acaba,
   a IA só para de responder até o dia seguinte (nunca gera cobrança). Nada fica guardado.
 */
-import { rotaAsaas, usarCotaIA } from "./asaas.js";
+import { rotaAsaas, usarCotaIA, quem } from "./asaas.js";
 import { rotaLink } from "./link.js";
 import { rotaAdmin, onde } from "./admin.js";
 
@@ -180,6 +180,27 @@ export default {
     if (url.pathname.startsWith("/assinatura/") || url.pathname === "/asaas/webhook") return rotaAsaas(req, env, url, json, permitida);
     // Painel do dono (app.avina.com.br/admin/): veja src/admin.js
     if (url.pathname.startsWith("/admin/")) return rotaAdmin(req, env, url, json, { ler: () => ler(env), gravar: dados => gravar(env, dados) });
+
+    // "Fulano está no mercado": avisa no celular os outros da casa. Quem pede tem que estar logado e ser da casa
+    // (a lista de membros vem do Supabase com o login da própria pessoa, então a regra da nuvem é que confere).
+    // No máximo um aviso a cada 30 minutos por casa, para não virar incômodo.
+    if (url.pathname === "/casa/mercado") {
+      if (!permitida) return json({ erro: "Origem não permitida" }, 403);
+      const eu = await quem(req, env); if (!eu) return json({ erro: "Entre na sua conta" }, 401);
+      const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const r = await fetch(`${env.SUPABASE_URL}/rest/v1/casa_membros?select=casa_id,user_id,nome`, { headers: { apikey: env.SUPABASE_KEY, Authorization: `Bearer ${token}` } });
+      const membros = r.ok ? await r.json().catch(() => []) : [];
+      const meu = membros.find(m => m.user_id === eu.id); if (!meu) return json({ erro: "Você não está numa casa" }, 403);
+      const trava = `mercado:${meu.casa_id}`;
+      if (await env.AVISOS.get(trava)) return json({ ok: true, enviados: 0, recente: true });
+      const outros = new Set(membros.filter(m => m.casa_id === meu.casa_id && m.user_id !== eu.id).map(m => m.user_id));
+      const nome = limpar(String(meu.nome || "").split(" ")[0], 30) || "Alguém da casa";
+      const aviso = { titulo: `${nome} está no mercado`, corpo: "Falta alguma coisa? Coloque agora na lista de compras da casa.", tag: "casa-mercado" };
+      const dados = await ler(env); let enviados = 0;
+      for (const d of Object.values(dados)) if (d.uid && outros.has(d.uid) && valido(d.sub) && enviados < 20) { await enviar(env, d.sub, aviso).catch(() => 0); enviados++; }
+      await env.AVISOS.put(trava, "1", { expirationTtl: 1800 });
+      return json({ ok: true, enviados });
+    }
 
     let b; try { b = await req.json(); } catch (e) { return json({ erro: "JSON inválido" }, 400); }
 

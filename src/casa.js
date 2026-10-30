@@ -154,6 +154,8 @@ export function useCasa(conta, db, setDb) {
     casa: atual && atual.casa, membros: (atual && atual.membros) || [],
     lanc: lista("lanc"), acertos: lista("acerto"), contas: lista("conta"), compras: lista("compra"),
     config: lista("config").find(x => x.id === "divisao") || { id: "divisao", modo: "igual" },
+    // lista de compras: o limite de gasto (config "lista") e as listas prontas ("compra do mês", "churrasco")
+    listaCfg: lista("config").find(x => x.id === "lista") || { id: "lista" }, modelos: lista("modelo"),
     salvar, apagar, criar, convidar, verConvite, entrar, sair, tirar, renomear, simularEntrada, recarregar: () => nuvem && carregar().catch(() => {}),
   };
 }

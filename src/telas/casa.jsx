@@ -1,6 +1,8 @@
 // Parte do app carregada sob demanda: dinheiro a dois (ou em família)
-import React, { useEffect, useMemo, useState } from "react";
-import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, ConfirmButton, iniciais, CATEGORIAS, catDe, catVars, CatIcon, TopBar, useCamada } from "../App.jsx";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, ConfirmButton, iniciais, CATEGORIAS, catDe, catVars, CatIcon, TopBar, useCamada, servidorAvisos } from "../App.jsx";
+import { cliente } from "../nuvem.js";
 import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
 import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja, cnpjDaChave } from "../nota.js";
 import { buscarCnpj } from "../cnpj.js";
@@ -425,23 +427,88 @@ export function ContaCasaSheet({ casa: C, inicial, onClose, act }) {
 }
 
 /* ---------- lista de compras da casa (aparece na hora no celular de todos) ---------- */
+const mesmoItem = (a, b) => combina(a, b) && combina(b, a); // "leite" e "Leite" são o mesmo; "leite" e "leite condensado", não
+const diasEntre = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5);
+// Sugestões pelas notas: o que a casa compra de tempos em tempos e já está na hora ("café: a cada 10 dias, a última foi há 12").
+// Enquanto as notas ainda não mostram o ritmo de nada (é preciso o mesmo produto em dois dias diferentes), fica o jeito antigo:
+// o que aparece em mais notas.
+function sugerir(hist, compras) {
+  const naLista = w => compras.some(x => combina(x.texto, w) || combina(w, x.texto));
+  const datas = {};
+  Object.entries(hist).forEach(([k, v]) => { const w = k.split(" ")[0]; if (w.length < 3) return; const s = datas[w] || (datas[w] = new Set()); v.forEach(x => x.data && s.add(x.data)); });
+  const hoje = todayISO(), ritmo = [];
+  let temRitmo = false;
+  for (const [w, s] of Object.entries(datas)) {
+    const ds = [...s].sort(), gaps = ds.slice(1).map((d, i) => diasEntre(ds[i], d)).filter(g => g >= 2).sort((a, b) => a - b);
+    if (!gaps.length) continue;
+    temRitmo = true;
+    const cada = gaps[Math.floor(gaps.length / 2)], faz = diasEntre(ds[ds.length - 1], hoje);
+    // na hora (ou um pouco antes); muito atrasado é sinal de que pararam de comprar
+    if (faz >= cada * 0.85 && faz <= cada * 4 && !naLista(w)) ritmo.push({ nome: w, cada, faz, r: faz / cada });
+  }
+  if (temRitmo) return { ritmo: true, itens: ritmo.sort((a, b) => b.r - a.r).slice(0, 6) };
+  const vezes = Object.entries(hist).filter(([, v]) => v.length >= 2).sort((a, b) => b[1].length - a[1].length).map(([k]) => k.split(" ")[0]);
+  return { ritmo: false, itens: vezes.filter((w, i) => vezes.indexOf(w) === i && !naLista(w)).slice(0, 6).map(nome => ({ nome })) };
+}
+
 function ListaCompras({ C, act }) {
   const [txt, setTxt] = useState("");
+  const [editar, setEditar] = useState(null); // o item aberto para mudar
+  const [prontas, setProntas] = useState(false); // o painel das listas prontas
+  const [mercado, setMercado] = useState(false); // "Estou no mercado"
+  const [limTxt, setLimTxt] = useState(null); // null = não está mudando o limite
   const hist = useMemo(() => historico(C.lanc), [C.lanc]);
   const preco = x => { const u = ultimoPreco(hist, x.texto); return u ? { ...u, total: u.unit * (x.qtd || 1) } : null; };
   const ordem = Object.fromEntries([...SECOES.map(s => s[0]), "outros"].map((s, i) => [s, i]));
   const abertos = C.compras.filter(x => !x.feito).map(x => ({ ...x, secao: x.secao || secaoDe(x.texto) })).sort((a, b) => ordem[a.secao] - ordem[b.secao] || (a.criado || 0) - (b.criado || 0));
   const feitos = C.compras.filter(x => x.feito).sort((a, b) => (a.criado || 0) - (b.criado || 0));
   const comPreco = abertos.map(preco).filter(Boolean), estimado = comPreco.reduce((s, p) => s + p.total, 0);
+  const limite = Number(C.listaCfg.limite) || 0, passou = limite > 0 && estimado > limite;
   const perto = usePrecosPerto(abertos); // onde está mais barato (Nota Paraná)
-  // o que a casa sempre compra e não está na lista (pelas notas): sugestão de "acabou?"
-  const sugestoes = useMemo(() => Object.entries(hist).filter(([, v]) => v.length >= 2).sort((a, b) => b[1].length - a[1].length)
-    .map(([k]) => k.split(" ")[0]).filter((w, i, arr) => arr.indexOf(w) === i && !C.compras.some(x => combina(x.texto, w) || combina(w, x.texto))).slice(0, 6), [hist, C.compras]);
-  const adicionar = textos => textos.forEach((s, i) => { const it = lerItem(s); if (it.texto) C.salvar("compra", { texto: it.texto, qtd: it.qtd, secao: secaoDe(it.texto), feito: false, criado: Date.now() + i, autor: C.eu }); });
-  const add = e => { e.preventDefault(); const t = txt.trim(); if (!t) return; adicionar(t.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean)); setTxt(""); vibrar("toque"); };
-  const limpar = () => feitos.forEach(x => C.apagar("compra", x.id));
+  const sug = useMemo(() => sugerir(hist, C.compras), [hist, C.compras]);
+  // passou do limite agora (não na hora de abrir): avisa uma vez
+  const passouAntes = useRef(passou);
+  useEffect(() => { if (passou && !passouAntes.current) { vibrar("aviso"); act.toast(`A lista passou do limite de ${brl(limite)}`); } passouAntes.current = passou; }, [passou]);
+
+  // Coloca na lista. O que já está lá não repete: digitando, soma a quantidade ("leite" + "2 leite" = 3×);
+  // vindo de uma lista pronta, fica como está (somar = false).
+  const adicionar = (novos, { somar = true } = {}) => {
+    const lista = C.compras.filter(x => !x.feito).map(x => ({ ...x })), mudou = new Set(), ja = [];
+    novos.forEach((n, i) => {
+      if (!n.texto) return;
+      const igual = lista.find(x => mesmoItem(x.texto, n.texto));
+      if (igual) {
+        ja.push(igual);
+        if (somar) { igual.qtd = (igual.qtd || 1) + (n.qtd || 1); mudou.add(igual); }
+        if (n.obs && !igual.obs) { igual.obs = n.obs; mudou.add(igual); }
+        return;
+      }
+      const it = { texto: n.texto, qtd: n.qtd || 1, ...(n.obs ? { obs: n.obs } : {}), secao: secaoDe(n.texto), feito: false, criado: Date.now() + i, autor: C.eu };
+      lista.push(it); mudou.add(it);
+    });
+    mudou.forEach(x => C.salvar("compra", x));
+    return { novos: [...mudou].filter(x => !x.id).length, ja: ja.filter((x, i) => x.id && ja.indexOf(x) === i) };
+  };
+  const add = e => {
+    e.preventDefault(); const t = txt.trim(); if (!t) return;
+    const { ja } = adicionar(t.split(/[,;\n]+/).map(s => lerItem(s.trim())));
+    if (ja.length === 1) act.toast(`${Mai(ja[0].texto)} já estava na lista: agora ${ja[0].qtd}×`);
+    else if (ja.length > 1) act.toast(`${ja.length} itens já estavam na lista: somei as quantidades`);
+    setTxt(""); vibrar("toque");
+  };
+  const tirar = x => { C.apagar("compra", x.id); vibrar("toque"); act.toast(`${Mai(x.texto)} saiu da lista`, () => C.salvar("compra", x)); };
+  const limpar = () => {
+    const foram = feitos; foram.forEach(x => C.apagar("compra", x.id));
+    act.toast(`${foram.length} ${foram.length === 1 ? "item tirado" : "itens tirados"} do carrinho`, () => foram.forEach(x => C.salvar("compra", x)));
+  };
+  const marcar = x => { vibrar("toque"); C.salvar("compra", { ...x, feito: !x.feito, por: C.eu }); };
+  const usarModelo = m => {
+    const { novos, ja } = adicionar(m.itens, { somar: false });
+    vibrar("ok"); act.toast(`${novos} ${novos === 1 ? "item" : "itens"} de "${m.nome}" na lista${ja.length ? ` · ${ja.length} já ${ja.length === 1 ? "estava" : "estavam"}` : ""}`);
+  };
+  const salvarLimite = () => { C.salvar("config", { ...C.listaCfg, id: "lista", limite: num(limTxt || "") || 0 }); setLimTxt(null); vibrar("ok"); };
   const mandar = async () => {
-    const linhas = abertos.map(x => `• ${x.qtd > 1 ? x.qtd + "× " : ""}${x.texto}`).join("\n");
+    const linhas = abertos.map(x => `• ${x.qtd > 1 ? x.qtd + "× " : ""}${x.texto}${x.obs ? ` (${x.obs})` : ""}`).join("\n");
     const texto = `Lista de compras (${C.casa.nome}):\n${linhas}`;
     if (navigator.share) { try { await navigator.share({ text: texto }); return; } catch (e) { if (e.name === "AbortError") return; } }
     window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank", "noopener");
@@ -449,10 +516,16 @@ function ListaCompras({ C, act }) {
   const grupos = []; abertos.forEach(x => { const g = grupos[grupos.length - 1]; if (g && g.secao === x.secao) g.itens.push(x); else grupos.push({ secao: x.secao, itens: [x] }); });
   const Item = ({ x }) => { const p = !x.feito && preco(x); return (
     <div className={"casa-item" + (x.feito ? " feito" : "")}>
-      <button className={"box " + (x.feito ? "done" : "up")} onClick={() => { vibrar("toque"); C.salvar("compra", { ...x, feito: !x.feito, por: C.eu }); }} aria-label={x.feito ? `Desmarcar ${x.texto}` : `Marcar ${x.texto}`}>{x.feito && <I.check />}</button>
-      <span>{x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== C.eu ? <small> · {nomeDe(C, x.autor)}</small> : null}{!x.feito && <PrecoItem r={perto.res[x.id]} />}</span>
+      <button className={"box " + (x.feito ? "done" : "up")} onClick={() => marcar(x)} aria-label={x.feito ? `Desmarcar ${x.texto}` : `Marcar ${x.texto}`}>{x.feito && <I.check />}</button>
+      <span className="casa-item-m">
+        <button type="button" className="casa-item-t" onClick={() => setEditar(x)} title="Mudar quantidade ou anotar a marca">
+          {x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== C.eu ? <small> · {nomeDe(C, x.autor)}</small> : null}
+          {x.obs && <small className="casa-item-obs">{x.obs}</small>}
+        </button>
+        {!x.feito && <PrecoItem r={perto.res[x.id]} />}
+      </span>
       {p && <small className="casa-item-p" title={`Último preço: ${brlReal(p.unit)} em ${p.loja}, ${dm(p.data)}`}>~{brl(p.total)}</small>}
-      <button className="casa-item-x" onClick={() => C.apagar("compra", x.id)} aria-label={`Tirar ${x.texto}`}><I.x /></button>
+      <button className="casa-item-x" onClick={() => tirar(x)} aria-label={`Tirar ${x.texto}`}><I.x /></button>
     </div>
   ); };
   return (
@@ -462,9 +535,18 @@ function ListaCompras({ C, act }) {
         <input value={txt} onChange={e => setTxt(e.target.value)} placeholder="Adicionar (ex.: 2 leite, pão, café)" aria-label="Item da lista de compras" enterKeyHint="done" />
         <button type="submit" className="icon-btn" aria-label="Adicionar" disabled={!txt.trim()}><I.plus /></button>
       </form>
-      {sugestoes.length > 0 && <div className="casa-sug"><small>Vocês sempre compram. Acabou?</small>{sugestoes.map(s => <button key={s} type="button" onClick={() => { adicionar([s]); vibrar("toque"); }}><I.plus />{s}</button>)}</div>}
+      {sug.itens.length > 0 && <div className="casa-sug">
+        <small>{sug.ritmo ? "Pelas notas, está na hora de comprar" : "Vocês sempre compram. Acabou?"}</small>
+        {sug.itens.map(s => <button key={s.nome} type="button" onClick={() => { adicionar([{ texto: s.nome, qtd: 1 }]); vibrar("toque"); }} title={s.cada ? `Vocês compram a cada ${s.cada} dias; a última foi há ${s.faz}` : undefined}>
+          <I.plus />{s.nome}{s.cada && <em>a cada {s.cada} dias · há {s.faz}</em>}
+        </button>)}
+      </div>}
+      {C.modelos.length > 0 && <div className="casa-sug casa-prontas">
+        <small>Listas prontas</small>
+        {C.modelos.slice().sort((a, b) => a.nome.localeCompare(b.nome)).map(m => <button key={m.id} type="button" onClick={() => usarModelo(m)}><I.plus />{m.nome}<em>{m.itens.length}</em></button>)}
+      </div>}
       <PrecosPainel p={perto} n={abertos.length} />
-      {C.compras.length === 0 && <div className="hint">O que um coloca aparece na hora para os outros, já separado por corredor. Depois da compra, leia a nota: os itens da lista se riscam sozinhos e os preços ficam guardados.</div>}
+      {C.compras.length === 0 && <div className="hint">O que um coloca aparece na hora para os outros, já separado por corredor. Toque num item para mudar a quantidade ou anotar a marca. Depois da compra, leia a nota: os itens da lista se riscam sozinhos e os preços ficam guardados.</div>}
       {grupos.map(g => (
         <div key={g.secao} className="casa-secao">
           {abertos.length >= 4 && <small className="casa-secao-t">{nomeSecao(g.secao)}</small>}
@@ -472,13 +554,186 @@ function ListaCompras({ C, act }) {
         </div>
       ))}
       {feitos.length > 0 && <div className="casa-secao feitos"><small className="casa-secao-t">No carrinho</small>{feitos.map(x => <Item key={x.id} x={x} />)}</div>}
-      {estimado > 0 && <div className="casa-estimado"><span>Estimativa da lista</span><b className="num">{brl(estimado)}</b><small>pelo último preço de {comPreco.length} {comPreco.length === 1 ? "item" : "itens"}</small></div>}
-      <button className="btn mode" onClick={() => act.lerNotaCasa()}><I.receipt /> Ler a nota do mercado</button>
-      {(abertos.length > 0 || feitos.length > 0) && <div className="btn-row">
-        {abertos.length > 0 && <button className="btn ghost" onClick={mandar}><I.share /> Mandar a lista</button>}
-        {feitos.length > 0 && <button className="btn ghost" onClick={limpar}>Limpar comprados</button>}
-      </div>}
+      {limTxt !== null ? (
+        <form className="casa-limite-form" onSubmit={e => { e.preventDefault(); salvarLimite(); }}>
+          <label htmlFor="cl-lim">Gastar até</label>
+          <input id="cl-lim" inputMode="decimal" value={limTxt} onChange={e => setLimTxt(soNumero(e.target.value))} placeholder="R$ 0,00" autoFocus />
+          <button type="submit" className="bub-act">OK</button>
+          {limite > 0 && <button type="button" className="link" onClick={() => { C.salvar("config", { ...C.listaCfg, id: "lista", limite: 0 }); setLimTxt(null); }}>Sem limite</button>}
+        </form>
+      ) : (estimado > 0 || (limite > 0 && abertos.length > 0)) && (
+        <div className={"casa-estimado" + (passou ? " passou" : "")}>
+          <span>Estimativa da lista</span><b className="num">{brl(estimado)}</b>
+          {limite > 0 && <span className="casa-limite-barra" aria-hidden="true"><i style={{ width: `${Math.min(100, (estimado / limite) * 100)}%` }} /></span>}
+          <small>
+            {limite > 0 ? (passou ? `Passou ${brl(estimado - limite)} do limite de ${brl(limite)}` : `Cabe no limite de ${brl(limite)} · sobram ${brl(limite - estimado)}`)
+              : `pelo último preço de ${comPreco.length} ${comPreco.length === 1 ? "item" : "itens"}`}
+            {" · "}<button type="button" className="link-in" onClick={() => setLimTxt(limite ? fmtNum(limite) : "")}>{limite ? "mudar o limite" : "pôr um limite"}</button>
+          </small>
+        </div>
+      )}
+      {abertos.length > 0 ? <>
+        <button className="btn mode" onClick={() => { setMercado(true); vibrar("toque"); }}><I.cart /> Estou no mercado</button>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={() => act.lerNotaCasa()}><I.receipt /> Ler a nota</button>
+          <button className="btn ghost" onClick={mandar}><I.share /> Mandar a lista</button>
+        </div>
+      </> : <button className="btn mode" onClick={() => act.lerNotaCasa()}><I.receipt /> Ler a nota do mercado</button>}
+      <div className="casa-compras-links">
+        <button className="link" onClick={() => setProntas(true)}><I.star /> Listas prontas</button>
+        {feitos.length > 0 && <button className="link" onClick={limpar}>Limpar comprados</button>}
+      </div>
+      {editar && <ItemCompraSheet C={C} x={C.compras.find(y => y.id === editar.id) || editar} onTirar={tirar} onClose={() => setEditar(null)} />}
+      {prontas && <ListasProntasSheet C={C} act={act} abertos={abertos} onUsar={usarModelo} onClose={() => setProntas(false)} />}
+      {mercado && <ModoMercado C={C} act={act} grupos={grupos} abertos={abertos} feitos={feitos} preco={preco} limite={limite} marcar={marcar} adicionar={adicionar} onClose={() => setMercado(false)} />}
     </section>
+  );
+}
+
+// Os painéis da lista abrem por cima de tudo (a página tem animações que prenderiam o painel dentro do bloco).
+// Vão para dentro do .shell, que tem as cores do modo, mas fora do .app, que encolhe quando um painel abre.
+const PorCima = ({ children }) => createPortal(children, document.querySelector(".shell") || document.body);
+
+// Mudar um item: nome, quantidade (− e +) e uma observação ("o integral", "marca X")
+function ItemCompraSheet({ C, x, onTirar, onClose }) {
+  const [texto, setTexto] = useState(x.texto), [qtd, setQtd] = useState(x.qtd || 1), [obs, setObs] = useState(x.obs || "");
+  const ok = texto.trim().length > 0;
+  const salvar = () => {
+    const t = texto.trim(), o = obs.trim().slice(0, 80);
+    const { obs: _o, ...resto } = x;
+    C.salvar("compra", { ...resto, texto: t, qtd, ...(o ? { obs: o } : {}), secao: t === x.texto ? x.secao || secaoDe(t) : secaoDe(t) });
+    vibrar("ok"); onClose();
+  };
+  return (
+    <PorCima><Sheet title="Item da lista" sub={x.autor && x.autor !== C.eu ? `Colocado por ${nomeDe(C, x.autor)}` : "Muda para todos da casa na hora"} onClose={onClose}>
+      <form className="stack" onSubmit={e => { e.preventDefault(); if (ok) salvar(); }}>
+        <div className="fields"><Field label="O que é" htmlFor="ic-t"><input id="ic-t" value={texto} onChange={e => setTexto(e.target.value)} maxLength={80} autoComplete="off" /></Field></div>
+        <div className="casa-qtd" role="group" aria-label="Quantidade">
+          <span>Quantidade</span>
+          <button type="button" onClick={() => { setQtd(q => Math.max(1, q - 1)); vibrar("toque"); }} disabled={qtd <= 1} aria-label="Menos um">−</button>
+          <b className="num" aria-live="polite">{qtd}</b>
+          <button type="button" onClick={() => { setQtd(q => Math.min(99, q + 1)); vibrar("toque"); }} aria-label="Mais um">+</button>
+        </div>
+        <div className="fields"><Field label="Observação" htmlFor="ic-o"><input id="ic-o" value={obs} onChange={e => setObs(e.target.value)} maxLength={80} placeholder="Ex.: o integral, marca X, o mais barato" autoComplete="off" /></Field></div>
+        <button type="submit" className="btn mode" disabled={!ok}><I.check /> Salvar</button>
+        <button type="button" className="btn ghost" onClick={() => { onTirar(x); onClose(); }}><I.trash /> Tirar da lista</button>
+      </form>
+    </Sheet></PorCima>
+  );
+}
+
+// Listas prontas: guarda a lista de agora com um nome e, depois, coloca tudo de volta num toque
+function ListasProntasSheet({ C, act, abertos, onUsar, onClose }) {
+  const SUG = ["Compra do mês", "Semana", "Churrasco", "Café da manhã", "Limpeza", "Festa"];
+  const [nome, setNome] = useState("");
+  const modelos = C.modelos.slice().sort((a, b) => a.nome.localeCompare(b.nome));
+  const existe = modelos.find(m => m.nome.toLowerCase() === nome.trim().toLowerCase());
+  const guardar = () => {
+    const n = nome.trim().slice(0, 40); if (!n || !abertos.length) return;
+    const itens = abertos.map(x => ({ texto: x.texto, qtd: x.qtd || 1, ...(x.obs ? { obs: x.obs } : {}) }));
+    C.salvar("modelo", { ...(existe || {}), nome: n, itens, criado: (existe && existe.criado) || Date.now(), autor: (existe && existe.autor) || C.eu });
+    vibrar("ok"); act.toast(existe ? `"${n}" atualizada` : `"${n}" guardada`); setNome("");
+  };
+  const apagar = m => { C.apagar("modelo", m.id); act.toast(`"${m.nome}" apagada`, () => C.salvar("modelo", m)); };
+  return (
+    <PorCima><Sheet title="Listas prontas" sub="Para as compras que se repetem" onClose={onClose}>
+      {abertos.length > 0 ? <>
+        <b className="casa-prontas-t">Guardar a lista de agora ({abertos.length} {abertos.length === 1 ? "item" : "itens"})</b>
+        <div className="casa-chips">{SUG.filter(s => !modelos.some(m => m.nome === s)).map(s => <button key={s} type="button" className={nome === s ? "on" : ""} onClick={() => setNome(s)}>{s}</button>)}</div>
+        <form className="casa-compras-add" onSubmit={e => { e.preventDefault(); guardar(); }}>
+          <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome (ex.: Compra do mês)" aria-label="Nome da lista pronta" maxLength={40} enterKeyHint="done" />
+          <button type="submit" className="icon-btn" aria-label="Guardar" disabled={!nome.trim()}><I.check /></button>
+        </form>
+        {existe && <small className="casa-prontas-aviso">Já existe uma "{existe.nome}": guardar troca os itens dela pelos de agora.</small>}
+      </> : <div className="hint">Monte a lista como de costume e volte aqui para guardar com um nome. Depois, um toque coloca tudo de novo.</div>}
+      {modelos.length > 0 && <b className="casa-prontas-t">Guardadas</b>}
+      {modelos.map(m => (
+        <div key={m.id} className="casa-pronta">
+          <span><b>{m.nome}</b><small>{m.itens.map(i => (i.qtd > 1 ? `${i.qtd}× ` : "") + i.texto).join(", ")}</small></span>
+          <button className="bub-act" onClick={() => { onUsar(m); onClose(); }}>Pôr na lista</button>
+          <button className="casa-item-x" onClick={() => apagar(m)} aria-label={`Apagar ${m.nome}`}><I.trash /></button>
+        </div>
+      ))}
+    </Sheet></PorCima>
+  );
+}
+
+// Tela acesa enquanto está no mercado (Screen Wake Lock; onde não existe, segue normal)
+function useTelaAcesa() {
+  useEffect(() => {
+    if (!("wakeLock" in navigator)) return;
+    let trava = null, vivo = true;
+    const pedir = () => { if (document.visibilityState === "visible") navigator.wakeLock.request("screen").then(t => { if (vivo) trava = t; else t.release(); }).catch(() => {}); };
+    pedir();
+    document.addEventListener("visibilitychange", pedir);
+    return () => { vivo = false; document.removeEventListener("visibilitychange", pedir); try { trava && trava.release(); } catch (e) {} };
+  }, []);
+}
+
+// "Estou no mercado": a lista em tela cheia, letra e caixas grandes, a tela não apaga,
+// o total do carrinho contra o limite e um toque para avisar quem mora junto.
+function ModoMercado({ C, act, grupos, abertos, feitos, preco, limite, marcar, adicionar, onClose }) {
+  useTelaAcesa();
+  useCamada(onClose, { escurece: false });
+  const [txt, setTxt] = useState(""), [aviso, setAviso] = useState("");
+  useEffect(() => { const prev = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = prev; }; }, []);
+  const total = abertos.length + feitos.length;
+  const noCarrinho = feitos.map(preco).filter(Boolean).reduce((s, p) => s + p.total, 0);
+  const falta = abertos.map(preco).filter(Boolean).reduce((s, p) => s + p.total, 0);
+  const passou = limite > 0 && noCarrinho > limite;
+  const sozinho = C.membros.length < 2;
+  const avisarCasa = async () => {
+    setAviso("enviando");
+    try {
+      const { data } = await (await cliente()).auth.getSession(); if (!data.session) throw new Error("sem login");
+      const r = await fetch(`${servidorAvisos()}/casa/mercado`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` }, body: "{}" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.erro || "HTTP " + r.status);
+      setAviso("ok"); vibrar("ok");
+      act.toast(j.recente ? "A casa já foi avisada há pouco" : j.enviados ? "Avisei quem mora aqui" : "Ninguém da casa ligou os avisos no celular ainda");
+    } catch (e) { setAviso(""); act.toast("Não consegui avisar agora. Confira a internet."); }
+  };
+  const add = e => { e.preventDefault(); const t = txt.trim(); if (!t) return; adicionar(t.split(/[,;\n]+/).map(s => lerItem(s.trim()))); setTxt(""); vibrar("toque"); };
+  const MercadoLinha = ({ x }) => { const p = preco(x); return (
+    <button className={"mercado-item" + (x.feito ? " feito" : "")} onClick={() => marcar(x)} aria-pressed={!!x.feito}>
+      <span className="mercado-box" aria-hidden="true">{x.feito && <I.check />}</span>
+      <span className="mercado-t">{x.qtd > 1 && <b>{x.qtd}× </b>}{x.texto}{x.obs && <small>{x.obs}</small>}</span>
+      {p && <small className="mercado-p num">~{brl(p.total)}</small>}
+    </button>
+  ); };
+  return (
+    <PorCima><div className="mercado" role="dialog" aria-modal="true" aria-label="Estou no mercado">
+      <header className="mercado-topo">
+        <button className="mercado-x" onClick={onClose} aria-label="Sair do modo mercado"><I.x /></button>
+        <div><b>No mercado</b><small>{feitos.length} de {total} no carrinho</small></div>
+        <span className="mercado-barra" aria-hidden="true"><i style={{ width: `${total ? (feitos.length / total) * 100 : 0}%` }} /></span>
+      </header>
+      <div className="mercado-lista">
+        <form className="casa-compras-add" onSubmit={add}>
+          <input value={txt} onChange={e => setTxt(e.target.value)} placeholder="Lembrei de mais uma coisa…" aria-label="Adicionar à lista" enterKeyHint="done" />
+          <button type="submit" className="icon-btn" aria-label="Adicionar" disabled={!txt.trim()}><I.plus /></button>
+        </form>
+        {!abertos.length && <div className="mercado-fim"><I.check /><b>Tudo no carrinho!</b><small>No caixa, leia a nota: os preços ficam guardados e a lista se limpa sozinha.</small></div>}
+        {grupos.map(g => (
+          <div key={g.secao} className="mercado-secao">
+            <small className="casa-secao-t">{nomeSecao(g.secao)}</small>
+            {g.itens.map(x => <MercadoLinha key={x.id} x={x} />)}
+          </div>
+        ))}
+        {feitos.length > 0 && <div className="mercado-secao feitos"><small className="casa-secao-t">No carrinho</small>{feitos.map(x => <MercadoLinha key={x.id} x={x} />)}</div>}
+      </div>
+      <footer className={"mercado-rodape" + (passou ? " passou" : "")}>
+        {(noCarrinho > 0 || falta > 0) && <div className="mercado-conta">
+          <span><small>No carrinho</small><b className="num">~{brl(noCarrinho)}</b></span>
+          {falta > 0 && <span><small>Falta pegar</small><b className="num">~{brl(falta)}</b></span>}
+          {limite > 0 && <span><small>{passou ? "Passou do limite" : "Limite"}</small><b className="num">{passou ? `+${brl(noCarrinho - limite)}` : brl(limite)}</b></span>}
+        </div>}
+        <div className="btn-row">
+          {!sozinho && C.nuvem && <button className="btn ghost" onClick={avisarCasa} disabled={!!aviso}><I.bell /> {aviso === "ok" ? "Casa avisada" : aviso ? "Avisando…" : "Avisar a casa"}</button>}
+          <button className="btn mode" onClick={() => { onClose(); act.lerNotaCasa(); }}><I.receipt /> Ler a nota</button>
+        </div>
+      </footer>
+    </div></PorCima>
   );
 }
 

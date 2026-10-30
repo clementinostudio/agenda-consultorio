@@ -136,3 +136,77 @@
 @media (prefers-reduced-motion: reduce) {
   .c2-bloco, .c2-barras .g-mes i { animation: none !important; }
 }
+
+/* ---------- lista de compras: tocar no item muda, listas prontas, limite de gasto ---------- */
+.casa-item-m { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.casa-item-t { display: block; width: 100%; padding: 4px 0; background: none; border: 0; color: inherit; font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.casa-item.feito .casa-item-t { color: var(--muted); text-decoration: line-through; }
+.casa-item-t small { color: var(--muted); font-size: 12px; }
+.casa-item-obs { display: block; font-style: italic; }
+.casa-sug button em { font-style: normal; font-weight: 600; font-size: 11.5px; color: var(--muted); text-transform: none; margin-left: 2px; }
+.casa-prontas button { border-style: solid; border-color: color-mix(in srgb, var(--mode) 35%, transparent); }
+.casa-prontas button em { font-style: normal; font-size: 11.5px; font-weight: 800; color: var(--mode-text); background: var(--mode-soft); border-radius: 99px; padding: 0 6px; margin-left: 2px; }
+.casa-compras-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; }
+.casa-compras-links .link { display: inline-flex; align-items: center; gap: 6px; padding: 6px 2px; color: var(--mode-text); font-weight: 800; font-size: 13.5px; }
+.casa-compras-links .link svg { width: 15px; height: 15px; }
+.casa-estimado.passou { background: var(--rose-soft); }
+.casa-estimado.passou small, .casa-estimado.passou b { color: var(--rose); }
+.casa-limite-barra { grid-column: 1 / -1; height: 6px; margin: 6px 0 4px; border-radius: 99px; background: color-mix(in srgb, var(--fg) 10%, transparent); overflow: hidden; }
+.casa-limite-barra i { display: block; height: 100%; border-radius: inherit; background: var(--mode); transition: width .3s ease; }
+.casa-estimado.passou .casa-limite-barra i { background: var(--rose); }
+.casa-estimado .link-in { padding: 0; background: none; border: 0; color: var(--mode-text); font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+.casa-estimado.passou .link-in { color: var(--rose); }
+.casa-limite-form { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-radius: 14px; background: var(--surface-2); }
+.casa-limite-form label { font-weight: 700; font-size: 14px; white-space: nowrap; }
+.casa-limite-form input { flex: 1; min-width: 0; border: 0; background: none; color: var(--fg); font: inherit; font-size: 16px; font-variant-numeric: tabular-nums; outline: none; padding: 6px 0; }
+.casa-limite-form .link { padding: 6px 4px; color: var(--muted); font-weight: 700; font-size: 13px; white-space: nowrap; }
+/* quantidade com − e + (no painel do item) */
+.casa-qtd { display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 14px; border-radius: 16px; background: var(--surface-2); }
+.casa-qtd span { flex: 1; font-weight: 700; }
+.casa-qtd button { width: 44px; height: 44px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); font-size: 22px; font-weight: 700; line-height: 1; }
+.casa-qtd button:disabled { opacity: .35; }
+.casa-qtd b { min-width: 2ch; text-align: center; font-size: 20px; color: var(--fg); }
+/* painel das listas prontas */
+.casa-prontas-t { font-size: 13px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
+.casa-prontas-aviso { color: var(--muted); font-size: 12.5px; }
+.casa-pronta { display: flex; align-items: center; gap: 10px; padding: 10px 4px 10px 14px; border-radius: 16px; background: var(--surface-2); }
+.casa-pronta span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.casa-pronta small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- "Estou no mercado": a lista em tela cheia, para usar com uma mão andando pelos corredores ---------- */
+.mercado { position: fixed; inset: 0; z-index: 52; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); animation: fade .2s ease; }
+.mercado-topo { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 12px; padding: calc(12px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid var(--line); }
+.mercado-topo b { display: block; font-family: var(--f-display); font-size: 22px; letter-spacing: -.02em; }
+.mercado-topo small { color: var(--muted); font-weight: 700; font-size: 13px; }
+.mercado-x { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); color: var(--fg); }
+.mercado-x svg { width: 20px; height: 20px; }
+.mercado-barra { grid-column: 1 / -1; height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+.mercado-barra i { display: block; height: 100%; border-radius: inherit; background: var(--mode); transition: width .3s ease; }
+.mercado-lista { flex: 1; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 6px; padding: 12px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); width: 100%; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
+.mercado-secao { display: flex; flex-direction: column; gap: 6px; }
+.mercado-item { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 62px; padding: 10px 14px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--card-shadow); color: var(--fg); font: inherit; text-align: left; }
+.mercado-box { flex: none; width: 34px; height: 34px; border-radius: 11px; border: 2.5px solid var(--mode); display: grid; place-items: center; color: var(--mode-ink); }
+.mercado-box svg { width: 20px; height: 20px; }
+.mercado-t { flex: 1; min-width: 0; font-size: 19px; font-weight: 600; line-height: 1.25; }
+.mercado-t b { color: var(--mode-text); }
+.mercado-t small { display: block; font-size: 13.5px; font-weight: 500; font-style: italic; color: var(--muted); }
+.mercado-p { color: var(--muted); font-size: 14px; font-weight: 700; flex: none; }
+.mercado-item.feito { background: transparent; box-shadow: none; }
+.mercado-item.feito .mercado-box { background: var(--mode); }
+.mercado-item.feito .mercado-t { color: var(--muted); text-decoration: line-through; }
+.mercado-secao.feitos { opacity: .75; }
+.mercado-fim { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 28px 12px; }
+.mercado-fim svg { width: 44px; height: 44px; padding: 10px; border-radius: 50%; background: var(--mode); color: var(--mode-ink); }
+.mercado-fim b { font-family: var(--f-display); font-size: 22px; }
+.mercado-fim small { color: var(--muted); font-size: 14px; max-width: 32ch; }
+.mercado-rodape { display: flex; flex-direction: column; gap: 10px; padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); border-top: 1px solid var(--line); background: var(--surface); }
+.mercado-rodape > * { width: 100%; max-width: 640px; margin: 0 auto; }
+.mercado-rodape .btn svg { width: 18px; height: 18px; flex: none; }
+.mercado-conta { display: flex; gap: 8px; }
+.mercado-conta span { flex: 1; display: flex; flex-direction: column; padding: 8px 12px; border-radius: 14px; background: var(--surface-2); }
+.mercado-conta small { color: var(--muted); font-size: 12px; font-weight: 700; }
+.mercado-conta b { font-size: 17px; }
+.mercado-rodape.passou .mercado-conta span:last-child { background: var(--rose-soft); }
+.mercado-rodape.passou .mercado-conta span:last-child b, .mercado-rodape.passou .mercado-conta span:last-child small { color: var(--rose); }
+/* no mercado, o aviso de baixo ("Desfazer", limite) sobe para não tapar os totais */
+.shell:has(.mercado) .toast { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
