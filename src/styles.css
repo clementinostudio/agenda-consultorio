@@ -2655,3 +2655,22 @@ a.perfil-row { text-decoration: none; }
 .tour-prox { padding: 10px 18px; border-radius: 14px; background: var(--mode); color: var(--mode-ink); font-weight: 700; }
 .tour-prox:active, .tour-pular:active { transform: scale(.96); }
 @media (prefers-reduced-motion: reduce) { .tour-luz, .tour-bal { animation: none; transition: none; } }
+
+/* No banco agora (Open Finance, src/telas/bancos.jsx) */
+.panel.bancos { margin-bottom: 12px; }
+.bk-totais { display: flex; gap: 10px; margin: 2px 0 8px; }
+.bk-totais > div { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); display: flex; flex-direction: column; gap: 2px; }
+.bk-totais span { color: var(--muted); font-size: 12.5px; font-weight: 700; }
+.bk-totais b { font-family: var(--f-display); font-size: 20px; font-weight: 700; }
+.bk-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.bk-row:first-of-type { border-top: 0; }
+.bk-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.bk-nm { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bk-sb { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.bk-sb.bk-perto { color: var(--rose); font-weight: 800; }
+.bk-v { font-weight: 800; font-size: 15px; flex: none; }
+.bk-v.neg, .bk-totais b.neg { color: var(--rose); }
+.bk-limite { height: 4px; margin-top: 3px; }
+.bk-ligar { align-self: flex-start; margin-top: 4px; font: inherit; font-size: 12.5px; font-weight: 800; color: var(--mode-text); background: var(--surface-2); border: 0; border-radius: 999px; padding: 5px 10px; max-width: 100%; }
+.bk-aviso { width: 100%; text-align: left; margin: 4px 0; }
+.bk-trazer { margin-top: 10px; width: 100%; }

@@ -404,7 +404,7 @@ function situacaoConta(conta, chave) {
 // Caixinhas com "separar sozinho": cada entrada nova manda a porcentagem para a caixinha
 function separarAuto(P, entrada) {
   if (!entrada || !(entrada.valor > 0)) return P;
-  const cx = (P.caixinhas || []).map(c => c.autoPct > 0 ? { ...c, movs: [...(c.movs || []), { id: uid(), data: entrada.data, valor: Math.round(entrada.valor * c.autoPct) / 100, auto: true }] } : c);
+  const cx = (P.caixinhas || []).map(c => c.autoPct > 0 && !c.banco ? { ...c, movs: [...(c.movs || []), { id: uid(), data: entrada.data, valor: Math.round(entrada.valor * c.autoPct) / 100, auto: true }] } : c);
   return cx.some((c, i) => c !== P.caixinhas[i]) ? { ...P, caixinhas: cx } : P;
 }
 function gastoPorCat(db, chave) {
@@ -4617,6 +4617,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     gastoDoBoleto: b => setSheet({ type: "lanc", tipo: "saida", n: Date.now(), pre: { tipo: "saida", valor: b.valor, cat: b.cat, desc: b.tipo === "banco" ? "Boleto" : b.emissor, data: todayISO() } }),
     // Extrato do banco
     importar: () => setSheet({ type: "importar" }),
+    // Open Finance (src/telas/bancos.jsx): já abre buscando no banco; e o valor real dos investimentos nas caixinhas ligadas
+    importarDoBanco: () => setSheet({ type: "importar", doBanco: true, n: Date.now() }),
+    bancoNasCaixinhas: mud => setP(P => ({ ...P, caixinhas: (P.caixinhas || []).map(x => (mud[x.id] ? { ...x, banco: mud[x.id] } : x)) })),
     importarLanc: lista => {
       if (limite("lanc", lista.length)) return;
       const ids = new Set(lista.map(l => l.id));
@@ -4793,7 +4796,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "boleto" && <Suspense fallback={null}><BoletoSheet key={sheet.n || "boleto"} texto={sheet.texto} act={act} onClose={close} /></Suspense>}
-      {sheet && sheet.type === "importar" && <Suspense fallback={null}><ImportarSheet key={sheet.n} db={db} act={act} onClose={close} arquivo={sheet.arquivo} /></Suspense>}
+      {sheet && sheet.type === "importar" && <Suspense fallback={null}><ImportarSheet key={sheet.n} db={db} act={act} onClose={close} arquivo={sheet.arquivo} doBanco={sheet.doBanco} /></Suspense>}
       {sheet && sheet.type === "caixinha" && <Suspense fallback={null}><CaixinhaSheet key={sheet.id || "nova"} cx={(db.pessoal.caixinhas || []).find(x => x.id === sheet.id) || null} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "parcelado" && <Suspense fallback={null}><ParceladoSheet onClose={close} /></Suspense>}
       {sheet && sheet.type === "aluguel" && <Suspense fallback={null}><AluguelSheet onClose={close} /></Suspense>}

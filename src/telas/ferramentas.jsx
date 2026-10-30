@@ -4,7 +4,7 @@ import { I, Sheet, Field, brlReal, dm, todayISO, diffDias, uid, catDe, CATEGORIA
 import { normalizar, marcaPorId } from "../marcas.js";
 import { lerBoleto } from "../boleto.js";
 import { lerExtrato, ehInterno, faturaParaImportar } from "../extrato.js";
-import { estadoBanco, conectarBanco, lancamentosBanco, desligarBanco } from "../banco.js";
+import { estadoBanco, conectarBanco, lancamentosBanco, desligarBanco, esquecerResumo } from "../banco.js";
 // O leitor de código de barras (zxing) vem junto com o app: funciona sem internet e não depende de CDN
 import wasmLeitor from "zxing-wasm/reader/zxing_reader.wasm?url";
 
@@ -156,7 +156,7 @@ const COMO = [
   ["Fatura em PDF (qualquer banco)", "Escolha o PDF da fatura do cartão. Se ele tiver senha (quase sempre os primeiros números do CPF), eu peço aqui."],
 ];
 
-export function ImportarSheet({ db, act, onClose, arquivo }) {
+export function ImportarSheet({ db, act, onClose, arquivo, doBanco }) {
   const [itens, setItens] = useState(null);
   const [erro, setErro] = useState("");
   const [lendo, setLendo] = useState(false);
@@ -223,14 +223,14 @@ export function ImportarSheet({ db, act, onClose, arquivo }) {
     setErro(""); setOcupado(itemId || "novo");
     try {
       const novo = await conectarBanco({ itemId, teste: banco && banco.teste, escuro: window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches });
-      if (novo) setBanco(b => ({ ...b, bancos: [...b.bancos.filter(x => x.id !== novo.id), novo] }));
+      if (novo) { esquecerResumo(); setBanco(b => ({ ...b, bancos: [...b.bancos.filter(x => x.id !== novo.id), novo] })); }
     } catch (e2) { setErro(e2.message); }
     setOcupado("");
   };
   const desligar = async x => {
     if (!confirm(`Desligar ${x.nome}? O Avina para de receber os lançamentos desse banco (o que já entrou continua aqui).`)) return;
     setErro(""); setOcupado(x.id);
-    try { await desligarBanco(x.id); setBanco(b => ({ ...b, bancos: b.bancos.filter(y => y.id !== x.id) })); } catch (e2) { setErro(e2.message); }
+    try { await desligarBanco(x.id); esquecerResumo(); setBanco(b => ({ ...b, bancos: b.bancos.filter(y => y.id !== x.id) })); } catch (e2) { setErro(e2.message); }
     setOcupado("");
   };
   const trazer = async () => {
@@ -249,6 +249,9 @@ export function ImportarSheet({ db, act, onClose, arquivo }) {
   const mudar = (k, patch) => setItens(l => l.map(x => (x.k === k ? { ...x, ...patch } : x)));
   const inverter = () => setItens(l => l.map(x => { const tipo = x.tipo === "saida" ? "entrada" : "saida"; return { ...x, tipo, cat: tipo === "entrada" ? "outros-e" : "outros" }; }));
   const marcados = (itens || []).filter(x => x.on && !x.ja);
+  // veio do "Trazer lançamentos novos" do painel do banco: já começa buscando
+  const jaBuscou = useRef(false);
+  useEffect(() => { if (doBanco && !jaBuscou.current && banco && banco.ligado && banco.bancos.length) { jaBuscou.current = true; trazer(); } }, [banco]);
   const importar = () => act.importarLanc(marcados.map(x => ({ id: uid(), tipo: x.tipo, valor: x.valor, cat: x.cat, desc: x.desc, data: x.data, marca: x.marca, importId: x.importId })));
   if (!itens) return (
     <Sheet title="Importar extrato" sub="Traz os lançamentos do banco de uma vez. O arquivo é lido aqui no aparelho e não vai para lugar nenhum." onClose={onClose}>

@@ -20,6 +20,21 @@ async function pedir(rota, corpo = {}) {
 // { ligado, bancos }: ligado = false quando ainda não está aberto para esta conta (ou sem internet)
 export const estadoBanco = () => pedir("estado").catch(() => ({ ligado: false, bancos: [] }));
 export const lancamentosBanco = dias => pedir("lancamentos", { dias });
+
+// Saldos de agora (contas, cartões, investimentos). Fica 15 minutos guardado no aparelho para não pedir
+// ao banco a cada tela; quem não tem a opção liberada só pergunta de novo no dia seguinte.
+const K_RESUMO = "avina-banco-resumo";
+export function resumoGuardado() { try { return JSON.parse(localStorage.getItem(K_RESUMO) || "null"); } catch (e) { return null; } }
+export async function resumoBanco(forcar) {
+  const g = resumoGuardado();
+  const validade = g && g.dados && g.dados.ligado ? 15 * 60e3 : 24 * 3600e3;
+  if (!forcar && g && Date.now() - g.em < validade) return g.dados;
+  if (!NUVEM) return { ligado: false };
+  const dados = await pedir("resumo").catch(e => (g && g.dados && g.dados.ligado ? { ...g.dados, erro: e.message } : { ligado: false }));
+  if (!dados.erro) try { localStorage.setItem(K_RESUMO, JSON.stringify({ em: Date.now(), dados })); } catch (e) {}
+  return dados;
+}
+export const esquecerResumo = () => { try { localStorage.removeItem(K_RESUMO); } catch (e) {} };
 export const desligarBanco = itemId => pedir("desligar", { itemId });
 
 // Abre a janela da Pluggy (escolher o banco e autorizar). itemId = reconectar um banco que pediu autorização de novo.

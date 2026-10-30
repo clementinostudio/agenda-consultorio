@@ -9,6 +9,7 @@
   - /banco/estado       { ligado, teste, bancos: [{ id, nome, status, atualizado }] }
   - /banco/token        token de uso único para abrir a janela da Pluggy no app: { itemId? } para reconectar
   - /banco/guardar      { itemId } depois que a pessoa conectou
+  - /banco/resumo       saldos de agora: { contas: [conta ou cartão com fatura e limite], investimentos }
   - /banco/lancamentos  { dias } os lançamentos dos últimos dias (até 365), de todos os bancos conectados
   - /banco/desligar     { itemId } apaga a conexão na Pluggy
 
@@ -116,6 +117,40 @@ export async function rotaBanco(req, env, url, json, permitida) {
       if (await itemDe(env, eu.id, b.itemId)) await pluggy(env, "DELETE", `/items/${b.itemId}`).catch(e => { if (e.status !== 404) throw e; });
       await gravarLista(env, eu.id, lista.filter(x => x.id !== b.itemId));
       return json({ ok: true });
+    }
+
+    // Saldos de agora: contas, cartões (fatura aberta, vencimento, limite livre) e investimentos
+    if (rota === "resumo") {
+      const lista = (await lerLista(env, eu.id)).slice(0, 8);
+      const contas = [], investimentos = [], bancos = [];
+      await Promise.all(lista.map(async x => {
+        const it = await itemDe(env, eu.id, x.id).catch(() => null);
+        if (!it) return;
+        const nome = resumo(it).nome; bancos.push(resumo(it));
+        const [cs, inv] = await Promise.all([
+          pluggy(env, "GET", `/accounts?itemId=${it.id}`).then(r => r.results || []).catch(() => []),
+          pluggy(env, "GET", `/investments?itemId=${it.id}`).then(r => r.results || []).catch(() => []),
+        ]);
+        for (const c of cs) {
+          const cd = c.creditData || {}, bd = c.bankData || {}, cartao = c.type === "CREDIT";
+          contas.push({
+            id: c.id, itemId: it.id, banco: nome, nome: c.marketingName || c.name || (cartao ? "Cartão" : "Conta"), final: String(c.number || "").slice(-4),
+            tipo: cartao ? "cartao" : "conta", saldo: Math.round((Number(c.balance) || 0) * 100) / 100,
+            ...(cartao ? { limite: cd.creditLimit ?? null, livre: cd.availableCreditLimit ?? null, vence: cd.balanceDueDate ? dia(cd.balanceDueDate) : null, fecha: cd.balanceCloseDate ? dia(cd.balanceCloseDate) : null, minimo: cd.minimumPayment ?? null }
+              : { especial: bd.overdraftContractedLimit ?? null, especialUsado: bd.overdraftUsedLimit ?? null, aplicadoAuto: bd.automaticallyInvestedBalance ?? null }),
+          });
+        }
+        for (const i of inv) {
+          if (i.status === "TOTAL_WITHDRAWAL" || !(Number(i.balance) > 0)) continue;
+          const aplicado = Number(i.amountOriginal ?? i.amount) || null;
+          investimentos.push({
+            id: i.id, itemId: it.id, banco: (i.institution && i.institution.name) || nome, nome: i.name || "Investimento", tipo: i.type, subtipo: i.subtype || null,
+            saldo: Math.round(Number(i.balance) * 100) / 100, aplicado: aplicado && Math.round(aplicado * 100) / 100,
+            rendeu: i.amountProfit != null ? Math.round(Number(i.amountProfit) * 100) / 100 : null, vence: i.dueDate ? dia(i.dueDate) : null,
+          });
+        }
+      }));
+      return json({ ligado: true, bancos, contas, investimentos, em: new Date().toISOString() });
     }
 
     if (rota === "lancamentos") {
