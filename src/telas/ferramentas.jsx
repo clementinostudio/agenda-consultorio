@@ -4,6 +4,7 @@ import { I, Sheet, Field, brlReal, dm, todayISO, diffDias, uid, catDe, CATEGORIA
 import { normalizar, marcaPorId } from "../marcas.js";
 import { lerBoleto } from "../boleto.js";
 import { lerExtrato, ehInterno, faturaParaImportar } from "../extrato.js";
+import { estadoBanco, conectarBanco, lancamentosBanco, desligarBanco } from "../banco.js";
 // O leitor de código de barras (zxing) vem junto com o app: funciona sem internet e não depende de CDN
 import wasmLeitor from "zxing-wasm/reader/zxing_reader.wasm?url";
 
@@ -162,6 +163,11 @@ export function ImportarSheet({ db, act, onClose, arquivo }) {
   const [comSenha, setComSenha] = useState(null); // { f, errou }: PDF com senha esperando a senha
   const [senha, setSenha] = useState("");
   const arq = useRef(null);
+  // Open Finance: só aparece quando o servidor libera para esta conta (src/banco.js)
+  const [banco, setBanco] = useState(null);
+  const [ocupado, setOcupado] = useState("");
+  const [avisos, setAvisos] = useState([]);
+  useEffect(() => { let vivo = true; estadoBanco().then(e => vivo && setBanco(e)); return () => { vivo = false; }; }, []);
   // o que você já corrigiu antes vale para as próximas importações (mesma loja -> mesma categoria)
   const aprendido = useMemo(() => {
     const m = {}; [...db.pessoal.lanc].sort((a, b) => a.data.localeCompare(b.data)).forEach(l => { if (l.desc) m[normalizar(l.desc)] = { cat: l.cat, marca: l.marca || null }; });
@@ -213,6 +219,30 @@ export function ImportarSheet({ db, act, onClose, arquivo }) {
     } catch (e2) { setErro("Não consegui ler esse arquivo. Use o OFX, o CSV ou o PDF da fatura."); }
     setLendo(false);
   };
+  const conectar = async itemId => {
+    setErro(""); setOcupado(itemId || "novo");
+    try {
+      const novo = await conectarBanco({ itemId, escuro: window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches });
+      if (novo) setBanco(b => ({ ...b, bancos: [...b.bancos.filter(x => x.id !== novo.id), novo] }));
+    } catch (e2) { setErro(e2.message); }
+    setOcupado("");
+  };
+  const desligar = async x => {
+    if (!confirm(`Desligar ${x.nome}? O Avina para de receber os lançamentos desse banco (o que já entrou continua aqui).`)) return;
+    setErro(""); setOcupado(x.id);
+    try { await desligarBanco(x.id); setBanco(b => ({ ...b, bancos: b.bancos.filter(y => y.id !== x.id) })); } catch (e2) { setErro(e2.message); }
+    setOcupado("");
+  };
+  const trazer = async () => {
+    setErro(""); setAvisos([]); setOcupado("trazer");
+    try {
+      const r = await lancamentosBanco(90);
+      setAvisos(r.avisos || []);
+      if (!r.itens.length) setErro((r.avisos || []).length ? "" : "O banco não mandou lançamentos dos últimos 90 dias.");
+      else setItens(preparar(r.itens.map(x => ({ ...x, fid: `of:${x.id}` }))));
+    } catch (e2) { setErro(e2.message); }
+    setOcupado("");
+  };
   const comASenha = async e => { e.preventDefault(); if (!senha.trim() || !comSenha) return; setLendo(true); await lerPdf(comSenha.f, senha.trim()); setLendo(false); };
   // chegou pelo "Compartilhar" do celular: já começa lendo
   useEffect(() => { if (arquivo) ler(arquivo); }, []);
@@ -236,6 +266,25 @@ export function ImportarSheet({ db, act, onClose, arquivo }) {
         <input ref={arq} type="file" accept=".ofx,.qfx,.csv,.txt,.pdf,text/csv,application/pdf,application/x-ofx,application/vnd.intu.qfx" hidden onChange={escolher} />
       </>}
       {erro && <div className="error">{erro}</div>}
+      {avisos.map(a => <div key={a} className="note"><I.alert /><span>{a}</span></div>)}
+      {banco && banco.ligado && !comSenha && (
+        <div className="imp-como imp-banco">
+          <b>Direto do banco (Open Finance)</b>
+          <p>Você autoriza no app do seu banco e os lançamentos chegam sem baixar arquivo. Dá para desligar quando quiser.</p>
+          {banco.bancos.map(x => {
+            const pede = x.status === "LOGIN_ERROR" || x.status === "OUTDATED" || x.status === "WAITING_USER_INPUT";
+            return (
+              <div key={x.id} className="imp-banco-row">
+                <span><span>{x.nome}</span> {x.status === "UPDATING" ? "· atualizando…" : pede ? "· precisa autorizar de novo" : x.atualizado ? `· atualizado ${relativo(new Date(new Date(x.atualizado) - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10)).toLowerCase()}` : ""}</span>
+                {pede && <button type="button" className="pill-btn" disabled={!!ocupado} onClick={() => conectar(x.id)}>Autorizar</button>}
+                <button type="button" className="pill-btn" disabled={!!ocupado} onClick={() => desligar(x)}>{ocupado === x.id ? "…" : "Desligar"}</button>
+              </div>
+            );
+          })}
+          {banco.bancos.length > 0 && <button className="btn mode" onClick={trazer} disabled={!!ocupado}><I.check /> {ocupado === "trazer" ? "Buscando no banco…" : "Trazer os lançamentos (90 dias)"}</button>}
+          <button className="btn ghost" onClick={() => conectar()} disabled={!!ocupado}><I.plus /> {ocupado === "novo" ? "Abrindo…" : banco.bancos.length ? "Conectar outro banco" : "Conectar meu banco"}</button>
+        </div>
+      )}
       <div className="imp-como">
         <b>Como baixar o arquivo</b>
         {COMO.map(([b, t]) => <p key={b}><span>{b}:</span> {t}</p>)}

@@ -16,6 +16,9 @@
     // Dia em que a cobrança de verdade começou (o ligar-asaas.sh producao preenche). Contas mais antigas ganham 30 dias de Pro.
     "COBRANCA_INICIO": "2026-10-28",
     // Painel do dono (src/admin.js): números da Cloudflare. O token NÃO fica aqui: vai como segredo CF_API_TOKEN (ligar-cloudflare-painel.sh).
-    "CF_ACCOUNT_ID": "44dd13e1f157411e2f8e7c3ba92daf48", "KV_ID": "9f010db2187d4adf8a567f0c41cf2a9f", "CF_ZONA": "avina.com.br" },
+    "CF_ACCOUNT_ID": "44dd13e1f157411e2f8e7c3ba92daf48", "KV_ID": "9f010db2187d4adf8a567f0c41cf2a9f", "CF_ZONA": "avina.com.br",
+    // Conectar o banco (src/banco.js, Pluggy): "admin" = só quem é admin (testes); "todos" = todo mundo.
+    // A chave da Pluggy NÃO fica aqui: vai como segredos PLUGGY_ID e PLUGGY_SECRET (ligar-banco.sh).
+    "BANCO_ABERTO": "admin" },
   "kv_namespaces": [{ "binding": "AVISOS", "id": "9f010db2187d4adf8a567f0c41cf2a9f" }]
 }

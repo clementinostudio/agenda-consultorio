@@ -18,6 +18,7 @@
 import { rotaAsaas, usarCotaIA, quem } from "./asaas.js";
 import { rotaLink } from "./link.js";
 import { rotaAdmin, onde } from "./admin.js";
+import { rotaBanco } from "./banco.js";
 
 const CHAVE = "dados"; // tudo fica numa chave só do KV (um app pessoal, poucos aparelhos)
 const enc = new TextEncoder();
@@ -178,6 +179,9 @@ export default {
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     // Assinatura pelo Asaas (cobrança do app): veja src/asaas.js
     if (url.pathname.startsWith("/assinatura/") || url.pathname === "/asaas/webhook") return rotaAsaas(req, env, url, json, permitida);
+    // Conectar o banco pelo Open Finance (Pluggy): veja src/banco.js
+    if (url.pathname.startsWith("/banco/")) return rotaBanco(req, env, url, json, permitida);
+
     // Painel do dono (app.avina.com.br/admin/): veja src/admin.js
     if (url.pathname.startsWith("/admin/")) return rotaAdmin(req, env, url, json, { ler: () => ler(env), gravar: dados => gravar(env, dados) });
 
