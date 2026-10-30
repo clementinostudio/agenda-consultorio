@@ -24,12 +24,12 @@ export const desligarBanco = itemId => pedir("desligar", { itemId });
 
 // Abre a janela da Pluggy (escolher o banco e autorizar). itemId = reconectar um banco que pediu autorização de novo.
 // Devolve o banco conectado, ou null se a pessoa fechou.
-export async function conectarBanco({ itemId, escuro } = {}) {
+export async function conectarBanco({ itemId, escuro, teste } = {}) {
   const [{ token }, { PluggyConnect }] = await Promise.all([pedir("token", itemId ? { itemId } : {}), import("pluggy-connect-sdk")]);
   return new Promise((ok, falhou) => {
     let feito = false;
     const pc = new PluggyConnect({
-      connectToken: token, updateItem: itemId, language: "pt", theme: escuro ? "dark" : "light", countries: ["BR"],
+      connectToken: token, updateItem: itemId, includeSandbox: !!teste, language: "pt", theme: escuro ? "dark" : "light", countries: ["BR"],
       onSuccess: async ({ item }) => { feito = true; try { ok((await pedir("guardar", { itemId: item.id })).banco); } catch (e) { falhou(e); } },
       // erro no banco: a própria janela mostra e deixa tentar de novo; fechando, conta como desistência
       onClose: () => { if (!feito) ok(null); },

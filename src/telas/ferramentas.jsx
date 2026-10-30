@@ -222,7 +222,7 @@ export function ImportarSheet({ db, act, onClose, arquivo }) {
   const conectar = async itemId => {
     setErro(""); setOcupado(itemId || "novo");
     try {
-      const novo = await conectarBanco({ itemId, escuro: window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches });
+      const novo = await conectarBanco({ itemId, teste: banco && banco.teste, escuro: window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches });
       if (novo) setBanco(b => ({ ...b, bancos: [...b.bancos.filter(x => x.id !== novo.id), novo] }));
     } catch (e2) { setErro(e2.message); }
     setOcupado("");

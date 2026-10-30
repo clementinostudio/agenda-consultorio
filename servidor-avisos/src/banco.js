@@ -6,7 +6,7 @@
   o app nunca vê. Cada conexão (o "item" da Pluggy) nasce marcada com o id da conta do Avina,
   e este servidor confere isso antes de ler qualquer coisa.
 
-  - /banco/estado       { ligado, bancos: [{ id, nome, status, atualizado }] }
+  - /banco/estado       { ligado, teste, bancos: [{ id, nome, status, atualizado }] }
   - /banco/token        token de uso único para abrir a janela da Pluggy no app: { itemId? } para reconectar
   - /banco/guardar      { itemId } depois que a pessoa conectou
   - /banco/lancamentos  { dias } os lançamentos dos últimos dias (até 365), de todos os bancos conectados
@@ -89,7 +89,8 @@ export async function rotaBanco(req, env, url, json, permitida) {
       // null = apagada na Pluggy (sai da lista); undefined = a Pluggy não respondeu agora (fica)
       const itens = await Promise.all(lista.map(x => itemDe(env, eu.id, x.id).catch(() => undefined)));
       if (itens.some(x => x === null)) await gravarLista(env, eu.id, lista.filter((x, i) => itens[i] !== null));
-      return json({ ligado: true, bancos: itens.filter(Boolean).map(resumo) });
+      // teste = ainda só para admin: a janela mostra também o banco de mentira da Pluggy (Pluggy Bank)
+      return json({ ligado: true, teste: String(env.BANCO_ABERTO || "admin") !== "todos", bancos: itens.filter(Boolean).map(resumo) });
     }
 
     if (rota === "token") {
