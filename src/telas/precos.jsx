@@ -16,7 +16,7 @@ const ler = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || "null
 const ondePadrao = () => ({ cidade: null, raio: 5, loja: null, ...ler(K_ONDE, {}) });
 
 // lat/lon de onde a pessoa está (ou mora): guardado por 30 dias para não perguntar toda vez
-async function obterLocal(forcar) {
+export async function obterLocal(forcar) {
   const salvo = ler(K_LOCAL, null);
   if (!forcar && salvo && Date.now() - salvo.t < 30 * 864e5) return salvo;
   let lat, lon;

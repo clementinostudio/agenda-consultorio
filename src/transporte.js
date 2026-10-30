@@ -211,10 +211,10 @@ export const valorFipe = s => Number(String(s || "").replace(/[^\d,]/g, "").repl
    quem lê é o próprio aparelho, uma vez por semana, e guarda só o que interessa (seu estado e sua cidade). */
 const K_ANP = "agenda-anp";
 const PRODUTOS = { "GASOLINA COMUM": "gasolina", "GASOLINA ADITIVADA": "aditivada", "ETANOL HIDRATADO": "etanol", "OLEO DIESEL S10": "diesel", "GNV": "gnv" };
-const chaveNome = s => semAcento(s).toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+export const chaveNome = s => semAcento(s).toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
 // .xlsx é um zip: lê o diretório central e descompacta só os arquivos pedidos (DecompressionStream do navegador)
-async function lerZip(buf, nomes) {
+export async function lerZip(buf, nomes) {
   const u8 = new Uint8Array(buf), dv = new DataView(buf), out = {};
   let fim = u8.length - 22; while (fim >= 0 && dv.getUint32(fim, true) !== 0x06054b50) fim--;
   if (fim < 0) throw new Error("zip");
@@ -230,8 +230,8 @@ async function lerZip(buf, nomes) {
   }
   return out;
 }
-const xmlTexto = s => s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
-function linhasDaPlanilha(xml, comuns) {
+export const xmlTexto = s => s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+export function linhasDaPlanilha(xml, comuns) {
   return [...xml.matchAll(/<row [^>]*>([\s\S]*?)<\/row>/g)].map(r => {
     const linha = {};
     for (const c of r[1].matchAll(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {

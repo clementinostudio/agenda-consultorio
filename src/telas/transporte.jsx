@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar, ProximaConquista } from "../App.jsx";
 import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, postos, carroOuApp, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
 import { IconeAnel, Topo, Comparacao } from "./visual.jsx";
+import { PostoBaratoSheet } from "./postos.jsx";
+import { createPortal } from "react-dom";
 
 /* ---------- ícones ---------- */
 const Svg = ({ children }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
@@ -172,6 +174,7 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
   const veredito = ref ? etanolOuGasolina(ref.p) : null;
   const flex = !v || !v.combustivel || v.combustivel === "flex";
   const temCarro = !v || v.tipo === "carro" || v.tipo === "moto";
+  const [postosAberto, setPostosAberto] = useState(false);
   // calculadora de viagem
   const [kmViagem, setKmViagem] = useState("");
   const [idaVolta, setIdaVolta] = useState(true);
@@ -290,6 +293,12 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
               <p className="transp-fonte">Preço médio {ref.onde === perfil.cidade ? `em ${ref.onde}` : ref.onde} · ANP, semana de {dm(anp.d.ini)} a {dm(anp.d.fim)}{anp.d.velho ? " · sem internet agora" : ""}</p>
               {veredito && flex && <div className={"transp-veredito " + veredito.veredito}><b>{veredito.veredito === "etanol" ? "Etanol compensa" : veredito.veredito === "gasolina" ? "Gasolina compensa" : "Tanto faz"}</b><span>O etanol está custando {Math.round(veredito.razao * 100)}% da gasolina. Ele compensa abaixo de 70%, porque rende menos.</span></div>}
             </>}
+            <button type="button" className="postos-abrir" onClick={() => { vibrar("toque"); setPostosAberto(true); }}>
+              <span className="ic" aria-hidden="true"><I.target /></span>
+              <span className="mid"><b>Posto mais barato perto</b><small>O preço do litro em cada posto, agora</small></span>
+              <I.chev />
+            </button>
+            {postosAberto && createPortal(<PostoBaratoSheet veiculo={v} consumo={comb.consumo} sugerido={veredito && flex && veredito.veredito === "etanol" ? "etanol" : undefined} onClose={() => setPostosAberto(false)} />, document.querySelector(".shell") || document.body)}
             <div className="transp-linhas">
               <div><span>Seu consumo</span><b>{comb.consumo ? `${kml(comb.consumo)} km/l` : "—"}</b></div>
               <div><span>Custo por km</span><b>{comb.custoKm ? brlReal(comb.custoKm) : "—"}</b></div>

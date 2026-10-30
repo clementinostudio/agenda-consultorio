@@ -162,7 +162,9 @@ export default {
         const pag = await fetch("https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos/levantamento-de-precos-de-combustiveis-ultimas-semanas-pesquisadas", { headers: UA });
         const html = await pag.text();
         // a mais recente é a de data final maior (os nomes misturam "_" e "-")
-        const links = [...new Set(html.match(/https?:\/\/[^"'\s]+resumo_semanal_lpc_[^"'\s]+\.xlsx/gi) || [])];
+        // ?postos=1: a planilha posto por posto (posto mais barato fora do Paraná); sem ela, a dos preços médios
+        const re = url.searchParams.get("postos") ? /https?:\/\/[^"'\s]+revendas_lpc_[^"'\s]+\.xlsx/gi : /https?:\/\/[^"'\s]+resumo_semanal_lpc_[^"'\s]+\.xlsx/gi;
+        const links = [...new Set(html.match(re) || [])];
         const fim = s => (s.match(/(\d{4})[-_](\d{2})[-_](\d{2})\.xlsx$/i) || []).slice(1).join("");
         links.sort((a, b) => fim(b).localeCompare(fim(a)));
         if (!links.length) return json({ erro: "Planilha da ANP não encontrada" }, 502);

@@ -105,7 +105,7 @@ export const precoGuardado = (item, gh, raio, estab) => { const c = lerCache()[c
 
 const espera = ms => new Promise(r => setTimeout(r, ms));
 // O site recusa muitas buscas de uma vez (e a recusa chega como "falha de rede"): uma tentativa a mais, com calma
-async function pegar(url) {
+export async function pegar(url) {
   for (let i = 0; i < 2; i++) {
     const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 12000);
     try { const r = await fetch(url, { signal: ctrl.signal }); if (r.ok) return await r.json(); } catch (e) {} finally { clearTimeout(t); }
