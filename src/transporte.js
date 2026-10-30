@@ -226,6 +226,8 @@ export async function lerZip(buf, nomes) {
     if (!nomes.some(f => f === nome || (f.endsWith("/") && nome.startsWith(f)))) continue;
     const ini = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true), dados = u8.subarray(ini, ini + tam);
     if (metodo === 0) out[nome] = new TextDecoder().decode(dados);
+    // no app do celular não há DecompressionStream: ele passa o descompactador dele (fflate) em globalThis.inflarZip
+    else if (typeof DecompressionStream === "undefined" && globalThis.inflarZip) out[nome] = new TextDecoder().decode(globalThis.inflarZip(dados));
     else out[nome] = await new Response(new Blob([dados]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
   }
   return out;
