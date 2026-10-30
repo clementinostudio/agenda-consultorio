@@ -522,7 +522,7 @@ function ListaCompras({ C, act }) {
           {x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== C.eu ? <small> · {nomeDe(C, x.autor)}</small> : null}
           {x.obs && <small className="casa-item-obs">{x.obs}</small>}
         </button>
-        {!x.feito && <PrecoItem r={perto.res[x.id]} />}
+        {!x.feito && <PrecoItem r={perto.res[x.id]} loja={perto.onde.loja} />}
       </span>
       {p && <small className="casa-item-p" title={`Último preço: ${brlReal(p.unit)} em ${p.loja}, ${dm(p.data)}`}>~{brl(p.total)}</small>}
       <button className="casa-item-x" onClick={() => tirar(x)} aria-label={`Tirar ${x.texto}`}><I.x /></button>

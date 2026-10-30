@@ -295,7 +295,7 @@ export function LojaLista({ loja: L, conta, act, tema }) {
   const Item = ({ x }) => (
     <div className={"casa-item" + (x.feito ? " feito" : "")}>
       <button className={"box " + (x.feito ? "done" : "up")} onClick={() => { vibrar("toque"); L.salvar("falta", { ...x, feito: !x.feito, por: L.eu }); }} aria-label={x.feito ? `Desmarcar ${x.texto}` : `Comprei ${x.texto}`}>{x.feito && <I.check />}</button>
-      <span>{x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== L.eu ? <small> · {nomeDe(L, x.autor)}</small> : null}{!x.feito && <PrecoItem r={perto.res[x.id]} />}</span>
+      <span>{x.qtd > 1 && <b className="casa-item-q">{x.qtd}×</b>}{x.texto}{x.autor && x.autor !== L.eu ? <small> · {nomeDe(L, x.autor)}</small> : null}{!x.feito && <PrecoItem r={perto.res[x.id]} loja={perto.onde.loja} />}</span>
       <button className="casa-item-x" onClick={() => L.apagar("falta", x.id)} aria-label={`Tirar ${x.texto}`}><I.x /></button>
     </div>
   );

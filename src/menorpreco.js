@@ -62,12 +62,13 @@ const lojaDe = e => {
 const mediana = xs => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; };
 
 // Da lista que a API devolve: só o produto certo, dos últimos 15 dias, o mais recente de cada loja,
-// e os 3 mais baratos (por kg/litro quando a maioria tem o tamanho no nome)
-export function melhores(item, produtos, agora = Date.now()) {
+// e os 3 mais baratos (por kg/litro quando a maioria tem o tamanho no nome).
+// Num mercado só (umaLoja): as 3 opções mais baratas dele (marcas e tamanhos diferentes), em vez de uma por rede.
+export function melhores(item, produtos, agora = Date.now(), { dias = 15, umaLoja = false } = {}) {
   const vistos = {};
   (produtos || []).forEach(p => {
     const valor = Number(p.valor), quando = Date.parse(p.datahora);
-    if (!(valor > 0) || !mesmoProduto(item, p.desc) || !(agora - quando < 15 * 864e5)) return;
+    if (!(valor > 0) || !mesmoProduto(item, p.desc) || !(agora - quando < dias * 864e5)) return;
     const k = `${p.estabelecimento && p.estabelecimento.codigo}|${sem(p.desc)}`;
     if (!vistos[k] || vistos[k].quando < quando) vistos[k] = { valor, quando, desc: p.desc, loja: lojaDe(p.estabelecimento), bairro: (p.estabelecimento && p.estabelecimento.bairro) || "", dist: Number(p.distkm) || null, codigo: p.estabelecimento && p.estabelecimento.codigo, med: medida(p.desc) };
   });
@@ -83,6 +84,7 @@ export function melhores(item, produtos, agora = Date.now()) {
   xs = xs.filter(x => preco(x) >= md * 0.4) // preço baixo demais costuma ser outro produto (ou erro na nota)
     .sort((a, b) => preco(a) - preco(b) || (a.dist || 99) - (b.dist || 99));
   // uma linha por rede (três filiais do mesmo mercado não ajudam): fica a mais barata, e a mais perto no empate
+  if (umaLoja) return xs.slice(0, 3);
   const redes = new Set();
   return xs.filter(x => { const k = sem(x.loja); if (redes.has(k)) return false; redes.add(k); return true; }).slice(0, 3);
 }
@@ -97,7 +99,9 @@ function guardar(chave, r) {
     localStorage.setItem(K, JSON.stringify(c));
   } catch (e) {}
 }
-export const precoGuardado = (item, gh) => { const c = lerCache()[`${gh.slice(0, 6)}|${sem(item)}`]; return c && Date.now() - c.t < VALE ? c.r : null; };
+// a chave lembra também o raio e o mercado escolhidos (preço "perto, 5 km" não serve para "só no Condor")
+const chaveDe = (item, gh, raio = 5, estab = "") => `${gh.slice(0, 6)}|${raio}|${estab}|${sem(item)}`;
+export const precoGuardado = (item, gh, raio, estab) => { const c = lerCache()[chaveDe(item, gh, raio, estab)]; return c && Date.now() - c.t < VALE ? c.r : null; };
 
 const espera = ms => new Promise(r => setTimeout(r, ms));
 // O site recusa muitas buscas de uma vez (e a recusa chega como "falha de rede"): uma tentativa a mais, com calma
@@ -110,24 +114,58 @@ async function pegar(url) {
   return null;
 }
 
-// Os 3 lugares mais baratos para um item, a até "raio" km. Primeiro as notas mais recentes;
-// se vier pouco do produto certo, também as mais baratas.
-export async function buscarPrecos(item, gh, raio = 5) {
+// Os 3 lugares mais baratos para um item, a até "raio" km (a API vai até uns 20 km: a cidade toda).
+// Primeiro as notas mais recentes; se vier pouco do produto certo, também as mais baratas.
+// Com "estab" (o código de um mercado), só os preços daquele mercado, dos últimos 30 dias (num mercado só há menos notas).
+export async function buscarPrecos(item, gh, raio = 5, estab = "") {
   const termo = palavras(item).join(" ") || sem(item);
   if (!termo) return [];
-  const salvo = precoGuardado(item, gh);
+  const salvo = precoGuardado(item, gh, raio, estab);
   if (salvo) return salvo;
-  const url = ordem => `${API}?local=${gh}&termo=${encodeURIComponent(termo)}&offset=0&raio=${raio}&data=-1&ordem=${ordem}`;
+  const url = ordem => `${API}?local=${gh}&termo=${encodeURIComponent(termo)}&offset=0&raio=${raio}&data=-1&ordem=${ordem}${estab ? `&estab=${encodeURIComponent(estab)}` : ""}`;
+  const opc = estab ? { dias: 30, umaLoja: true } : {};
   const recentes = await pegar(url(2));
   let produtos = (recentes && recentes.produtos) || [];
-  let r = melhores(item, produtos);
+  let r = melhores(item, produtos, Date.now(), opc);
   if (r.length < 2) {
     const baratos = await pegar(url(0));
     if (!recentes && !baratos) throw new Error("fora");
     produtos = produtos.concat((baratos && baratos.produtos) || []);
-    r = melhores(item, produtos);
+    r = melhores(item, produtos, Date.now(), opc);
   }
-  guardar(`${gh.slice(0, 6)}|${sem(item)}`, r);
+  guardar(chaveDe(item, gh, raio, estab), r);
+  return r;
+}
+
+// Os mercados da região, para a pessoa escolher um: procura alguns itens da lista e o básico (arroz, feijão…),
+// dos mais perto e dos mais recentes, e fica com as lojas que vendem pelo menos 2 deles
+// (assim saem o restaurante do "arroz à grega" e a loja de pesca do "chumbo arroz"). Guardado por 1 dia.
+const BASICOS = ["arroz", "feijao", "leite", "cafe", "acucar", "oleo"];
+// quem vende leite e café mas não é onde se faz a compra da semana
+const NAO_MERCADO = /farm[aá]cia|drogari|droga ?raia|posto|combust[ií]ve|restaurante|lanchonete|pizzari|churrascari|hotel|choperia|cafeteria/i;
+export async function buscarMercados(gh, raio, itens = [], aoAchar) {
+  const chave = `${K}-lojas:${gh.slice(0, 6)}|${raio}`;
+  try { const c = JSON.parse(localStorage.getItem(chave) || "null"); if (c && Date.now() - c.t < 864e5 && c.r.length) return c.r; } catch (e) {}
+  const termos = [...new Set([...itens.map(t => palavras(t)[0]).filter(w => w && w.length >= 3).slice(0, 3), ...BASICOS])].slice(0, 7);
+  const lojas = {};
+  const lista = () => Object.values(lojas).filter(x => x.achou.size >= 2).map(({ achou, ...x }) => ({ ...x, n: achou.size }))
+    .sort((a, b) => b.n - a.n || (a.dist ?? 99) - (b.dist ?? 99));
+  let respostas = 0;
+  for (const termo of termos) for (const ordem of [1, 2]) {
+    const j = await pegar(`${API}?local=${gh}&termo=${encodeURIComponent(termo)}&offset=0&raio=${raio}&data=-1&ordem=${ordem}`);
+    if (j) respostas++;
+    ((j && j.produtos) || []).forEach(p => {
+      const e = p.estabelecimento; if (!e || !e.codigo || !mesmoProduto(termo, p.desc) || NAO_MERCADO.test(`${e.nm_fan || ""} ${e.nm_emp || ""}`)) return;
+      const d = Number(p.distkm);
+      const c = lojas[e.codigo] || (lojas[e.codigo] = { codigo: e.codigo, loja: lojaDe(e), bairro: e.bairro || "", mun: e.mun || "", dist: null, achou: new Set() });
+      c.achou.add(termo); if (d >= 0 && (c.dist == null || d < c.dist)) c.dist = d;
+    });
+    if (aoAchar) aoAchar(lista());
+    await espera(200);
+  }
+  if (!respostas) throw new Error("fora");
+  const r = lista().slice(0, 60);
+  try { localStorage.setItem(chave, JSON.stringify({ t: Date.now(), r })); } catch (e) {}
   return r;
 }
 

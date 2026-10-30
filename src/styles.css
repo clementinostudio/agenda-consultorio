@@ -2213,6 +2213,20 @@ body::after { content: ""; position: fixed; left: 0; right: 0; top: 0; height: e
 .precos-melhor { display: flex; gap: 10px; align-items: center; width: 100%; padding: 10px 12px; border-radius: 14px; background: var(--mint-soft); color: var(--fg); font-size: 14px; }
 .precos-melhor svg { width: 20px; height: 20px; flex: none; color: var(--mint); }
 .precos-melhor small { display: block; color: var(--muted); font-size: 12px; }
+/* região e mercado da busca de preços (toque abre a escolha) */
+.precos-onde { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.precos-onde button { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 6px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--fg); font-weight: 700; font-size: 13px; }
+.precos-onde button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.precos-onde button svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.precos-onde button.on { border-color: var(--mint); background: var(--mint-soft); }
+.precos-onde button.on svg:first-child { color: var(--mint); }
+.precos-t { font-size: 13px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 6px; }
+.precos-loja { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 14px; border-radius: 16px; background: var(--surface-2); border: 2px solid transparent; color: var(--fg); font: inherit; text-align: left; }
+.precos-loja span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.precos-loja b { font-size: 15px; }
+.precos-loja small { color: var(--muted); font-size: 12.5px; }
+.precos-loja svg { width: 18px; height: 18px; flex: none; color: var(--mint); }
+.precos-loja.on { border-color: var(--mint); }
 .casa-item-p { color: var(--muted); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
 .casa-estimado { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; padding: 10px 14px; border-radius: 14px; background: var(--surface-2); }
 .casa-estimado span { font-weight: 700; font-size: 14px; }
