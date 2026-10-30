@@ -194,7 +194,7 @@ const corDe = p => CORES.find(c => c.id === (p && p.color)) || CORES[[...String(
 const corVars = p => { const c = corDe(p); return { "--pc": c.cor, "--pc-ink": c.ink }; };
 const catDe = id => CATEGORIAS.find(c => c.id === id) || CAT_ENTRADA.find(c => c.id === id) || CATEGORIAS[CATEGORIAS.length - 1];
 // --ci: cor do ícone em cima da bolinha cheia (branco nas cores fortes; escuro no laranja e no amarelo, onde o branco some)
-const catVars = cat => { const c = CORES.find(x => x.id === cat.cor) || CORES[0]; return { "--cc": c.cor, "--cc-ink": c.ink, "--ci": c.id === "laranja" || c.id === "amarelo" ? c.ink : "#fff" }; };
+const catVars = cat => { const c = CORES.find(x => x.id === (cat && cat.cor)) || CORES[0]; return { "--cc": c.cor, "--cc-ink": c.ink, "--ci": c.id === "laranja" || c.id === "amarelo" ? c.ink : "#fff" }; };
 
 const lerJSON = (k, f) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch (e) { return f; } };
 const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
@@ -1495,7 +1495,7 @@ const I = {
   upload: () => <Svg><path d="M12 15.5V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4.5 14v4.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V14"/></Svg>,
   gauge: () => <Svg><path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13l3.5-4"/><circle cx="12" cy="13" r="1.2"/></Svg>,
 };
-const CatIcon = ({ cat }) => { const C = I[cat.ic] || I.more; return <C />; };
+const CatIcon = ({ cat }) => { const C = (cat && I[cat.ic]) || I.more; return <C />; };
 
 /* =========================================================
    7. PEÇAS REUTILIZÁVEIS
@@ -3112,7 +3112,8 @@ function MarcaLogo({ marca, site, nome, cat, className = "" }) {
   const rotulo = (m && m.nome) || nome || alvo || "";
   if (foto) return <span className={className + " logo foto"} title={rotulo}><img src={foto} alt="" /></span>;
   if (alvo) return <LogoDoSite key={alvo} site={alvo} rotulo={rotulo} className={className} />;
-  if (m) return <Monograma nome={rotulo} className={className} />;
+  // marca conhecida sem logo, ou sem categoria (o banco do Open Finance): as iniciais do nome
+  if (m || (!cat && rotulo)) return <Monograma nome={rotulo} className={className} />;
   return <span className={className + " cat"} style={catVars(cat)}><CatIcon cat={cat} /></span>;
 }
 // Tenta as fontes em ordem (ícone grande do site > Google novo > Google antigo); se nada servir, mostra as iniciais
