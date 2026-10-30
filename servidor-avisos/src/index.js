@@ -18,7 +18,7 @@
 import { rotaAsaas, usarCotaIA, quem } from "./asaas.js";
 import { rotaLink } from "./link.js";
 import { rotaAdmin, onde } from "./admin.js";
-import { rotaBanco } from "./banco.js";
+import { rotaBanco, rotaWebhookPluggy } from "./banco.js";
 
 const CHAVE = "dados"; // tudo fica numa chave só do KV (um app pessoal, poucos aparelhos)
 const enc = new TextEncoder();
@@ -176,6 +176,8 @@ export default {
     if (url.pathname.startsWith("/link/")) return rotaLink(req, env, url, json, ctx, async (id, aviso) => { const d = (await ler(env))[id]; if (d && valido(d.sub)) await enviar(env, d.sub, aviso); });
     // Cidade aproximada de quem abriu o app (vai junto no registro de acesso): veja src/admin.js
     if (url.pathname === "/onde") return new Response(JSON.stringify(onde(req)), { headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    // Avisos da Pluggy (Open Finance): https://agenda-avisos.alvena.workers.dev/pluggy/webhook
+    if (url.pathname === "/pluggy/webhook") return rotaWebhookPluggy(req, json);
     if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
     // Assinatura pelo Asaas (cobrança do app): veja src/asaas.js
     if (url.pathname.startsWith("/assinatura/") || url.pathname === "/asaas/webhook") return rotaAsaas(req, env, url, json, permitida);

@@ -153,3 +153,10 @@ export async function rotaBanco(req, env, url, json, permitida) {
   }
   return json({ erro: "Rota desconhecida" }, 404);
 }
+
+// Avisos da Pluggy (webhook cadastrado no painel dela): conexão criada, atualizada, com erro, lançamentos novos.
+// Por enquanto só responde "recebi" (a Pluggy exige resposta em até 5 segundos); o app busca os lançamentos quando a pessoa pede.
+export function rotaWebhookPluggy(req, json) {
+  if (req.method !== "POST") return json({ erro: "Use POST" }, 405);
+  return json({ received: true });
+}
