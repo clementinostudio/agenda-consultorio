@@ -70,9 +70,10 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Guarda o app para abrir offline (só as fontes .woff2 dos alfabetos latinos, para ficar leve)
+        // Guarda o app para abrir offline (só as fontes .woff2 dos alfabetos latinos, para ficar leve). app-nativo-areas
+        // só roda dentro do app de celular (que usa a cópia de celular/, sem service worker): o PWA não precisa dele
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,webp,woff2}"],
-        globIgnores: ["**/leitor-pdf-*", "**/pdf-extra-*", "**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**", "**/admin/**", "**/admin-*", "**/celular/**"],
+        globIgnores: ["**/leitor-pdf-*", "**/pdf-extra-*", "**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**", "**/admin/**", "**/admin-*", "**/celular/**", "**/app-nativo-areas-*"],
         navigateFallback: "index.html",
         // termos, privacidade, cookies e excluir conta são páginas próprias (public/), e o painel (admin/) também: o app
         // instalado não pode trocá-las pela tela do app. celular/ é a cópia do Avina que o app de celular baixa.

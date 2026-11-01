@@ -1,7 +1,7 @@
 // Parte do app carregada sob demanda: aba "Transporte" do modo Pessoal (também abre ao tocar em Transporte, em Gastos).
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar, ProximaConquista } from "../App.jsx";
-import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, postos, carroOuApp, precosCombustivel, etanolOuGasolina, fipe } from "../transporte.js";
+import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, postos, carroOuApp, precosCombustivel, etanolOuGasolina, fipe, ufDaCidade, montarGastoTransp, fipeDoMes } from "../transporte.js";
 import { IconeAnel, Topo, Comparacao } from "./visual.jsx";
 import { PostoBaratoSheet } from "./postos.jsx";
 import { combDoVeiculo } from "../postos.js";
@@ -24,15 +24,6 @@ const Ic = {
 const IconeSub = ({ id }) => { const C = Ic[id] || Ic.outros; return <C />; };
 const EMOJI = { moto: "🏍️", bike: "🚲", nenhum: "🚌" };
 
-// Estado (UF) da cidade do perfil, para achar o preço da ANP (Open-Meteo, grátis; fica guardado)
-async function ufDaCidade(cidade) {
-  const k = "agenda-uf:" + String(cidade || "").toLowerCase();
-  try { const s = localStorage.getItem(k); if (s) return s; } catch (e) {}
-  const g = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cidade)}&count=1&language=pt&countryCode=BR`)).json();
-  const uf = (g.results && g.results[0] && g.results[0].admin1) || "";
-  try { if (uf) localStorage.setItem(k, uf); } catch (e) {}
-  return uf;
-}
 const preco = v => (v > 0 ? `R$ ${v.toFixed(2).replace(".", ",")}` : "—");
 const kml = c => (Math.round(c * 10) / 10).toLocaleString("pt-BR");
 // data com o ano quando não é o ano de agora ("27/10/2027")
@@ -194,14 +185,7 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
   const custo = useMemo(() => temCarro && v ? custoReal(db, v, hoje) : null, [db, v, hoje]);
   // FIPE do mês: uma vez por mês busca o valor de novo e guarda o histórico (mostra quanto o carro desvalorizou)
   useEffect(() => {
-    if (!v || !v.fipe || !v.fipe.ids) return;
-    const mesAtual = hoje.slice(0, 7), hist = v.fipeHist || [];
-    if (hist.length && hist[hist.length - 1].quando === mesAtual) return;
-    const { tipo, marca, modelo, ano } = v.fipe.ids;
-    fipe.valor(tipo, marca, modelo, ano).then(r => {
-      const val = valorFipe(r.Valor); if (!val) return;
-      act.atualizarVeiculo(v.id, { fipe: { ...v.fipe, valor: r.Valor, mes: r.MesReferencia }, fipeHist: [...hist.filter(h => h.quando !== mesAtual), { quando: mesAtual, valor: val }].slice(-36) });
-    }).catch(() => {});
+    fipeDoMes(v, hoje.slice(0, 7)).then(mud => { if (mud) act.atualizarVeiculo(v.id, mud); }).catch(() => {});
   }, [v && v.fipe && v.fipe.codigo, hoje.slice(0, 7)]);
   const pagarDoc = d => {
     act.salvarLanc({ id: uid(), veiculoId: v.id, tipo: "saida", cat: "transporte", sub: "documentos", valor: d.valor, data: hoje, desc: `${d.nome} ${d.data.slice(0, 4)}` });
@@ -412,16 +396,9 @@ export function GastoTransporteSheet({ sub0, manut0, inicial, veiculos = [], vei
   const litrosCalc = l || (v && p ? v / p : 0), precoCalc = p || (v && l ? v / l : 0);
   const ehComb = sub === "combustivel", ehManut = sub === "manutencao" || sub === "melhorias";
   const ok = v > 0;
+  // a montagem é a mesma do pedido do app de celular (montarGastoTransp, em transporte.js)
   const salvar = () => {
-    const nomeManut = (MANUTENCOES.find(m => m[0] === manut) || [, ""])[1];
-    onSave({
-      ...(inicial || {}), id: inicial ? inicial.id : uid(), veiculoId: vid || undefined, tipo: "saida", cat: "transporte", valor: v, data, sub,
-      desc: desc.trim() || (ehComb ? `Abastecimento (${(COMBUSTIVEIS.find(c => c[0] === combustivel) || [, "combustível"])[1].toLowerCase()})` : ehManut ? nomeManut : subInfo(sub).nome),
-      litros: ehComb && litrosCalc ? Math.round(litrosCalc * 100) / 100 : undefined,
-      precoLitro: ehComb && precoCalc ? Math.round(precoCalc * 1000) / 1000 : undefined,
-      combustivel: ehComb ? combustivel : undefined, manut: ehManut ? manut : undefined,
-      km: (ehComb || ehManut) && num(km) > 0 ? Math.round(num(km)) : undefined,
-    });
+    onSave(montarGastoTransp({ id: uid(), veiculoId: vid, sub, valor: v, data, desc, litros: l, precoLitro: p, combustivel, km: num(km), manut }, inicial));
     vibrar("ok");
   };
   return (

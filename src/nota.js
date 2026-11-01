@@ -213,3 +213,30 @@ export async function reduzirFoto(file, max = 1400, q = 0.7) {
 export const nomeLoja = s => String(s || "")
   .replace(/\b(ltda|s\.?\/?a|eireli|epp|me|cia)\b\.?/gi, "").replace(/[-–,.]+\s*$/g, "").replace(/\s{2,}/g, " ").trim()
   .toLowerCase().replace(/(^|[\s/(-])([a-zà-ú])/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(De|Da|Do|Das|Dos|E)\b/g, w => w.toLowerCase());
+
+/* ---------- lista de compras da casa (a página da casa e os pedidos do app de celular usam a mesma regra) ---------- */
+// "leite" e "Leite" são o mesmo; "leite" e "leite condensado", não
+export const mesmoItem = (a, b) => combina(a, b) && combina(b, a);
+// Coloca na lista. O que já está lá não repete: digitando, soma a quantidade ("leite" + "2 leite" = 3×);
+// vindo de uma lista pronta, fica como está (somar = false).
+// Devolve { salvar: os itens para gravar (novos sem id), novos: quantos entraram, ja: os que já estavam }
+export function juntarNaLista(compras, novos, { somar = true, eu = null } = {}) {
+  const lista = compras.filter(x => !x.feito).map(x => ({ ...x })), mudou = new Set(), ja = [];
+  novos.forEach((n, i) => {
+    if (!n.texto) return;
+    const igual = lista.find(x => mesmoItem(x.texto, n.texto));
+    if (igual) {
+      ja.push(igual);
+      if (somar) { igual.qtd = (igual.qtd || 1) + (n.qtd || 1); mudou.add(igual); }
+      if (n.obs && !igual.obs) { igual.obs = n.obs; mudou.add(igual); }
+      return;
+    }
+    const it = { texto: n.texto, qtd: n.qtd || 1, ...(n.obs ? { obs: n.obs } : {}), secao: secaoDe(n.texto), feito: false, criado: Date.now() + i, autor: eu };
+    lista.push(it); mudou.add(it);
+  });
+  const salvar = [...mudou];
+  return { salvar, novos: salvar.filter(x => !x.id).length, ja: ja.filter((x, i) => x.id && ja.indexOf(x) === i) };
+}
+// Preços que mudaram entre as duas últimas compras do mesmo produto (3% ou mais), os que mais mudaram primeiro
+export const precosQueMudaram = (hist, n = 5) => Object.values(hist).filter(v => v.length >= 2).map(v => { const a = v[v.length - 2], b = v[v.length - 1]; return { nome: b.nome, de: a, para: b, pct: a.unit > 0 ? (b.unit - a.unit) / a.unit : 0 }; })
+  .filter(x => Math.abs(x.pct) >= 0.03).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, n);

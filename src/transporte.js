@@ -271,8 +271,7 @@ export async function lerPlanilhaANP(buf, uf, cidade) {
 }
 // Busca (no máximo a cada 3 dias) e guarda só o que interessa
 export async function precosCombustivel(servidor, uf, cidade, forcar) {
-  const lerLS = () => { try { return JSON.parse(localStorage.getItem(K_ANP) || "null"); } catch (e) { return null; } };
-  const salvo = lerLS(), U = chaveNome(uf), C = chaveNome(cidade);
+  const salvo = anpGuardado(), U = chaveNome(uf), C = chaveNome(cidade);
   if (!forcar && salvo && salvo.uf === U && salvo.nomeCidade === C && Date.now() - salvo.em < 3 * 864e5) return salvo;
   if (!servidor) { if (salvo) return { ...salvo, velho: true }; throw new Error("sem-servidor"); }
   try {
@@ -282,10 +281,55 @@ export async function precosCombustivel(servidor, uf, cidade, forcar) {
     return out;
   } catch (e) { if (salvo) return { ...salvo, velho: true }; throw e; }
 }
+// Estado (UF) da cidade do perfil, para achar o preço da ANP (Open-Meteo, grátis; fica guardado)
+const K_UF = cidade => "agenda-uf:" + String(cidade || "").toLowerCase();
+export async function ufDaCidade(cidade) {
+  const k = K_UF(cidade);
+  try { const s = localStorage.getItem(k); if (s) return s; } catch (e) {}
+  const g = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cidade)}&count=1&language=pt&countryCode=BR`)).json();
+  const uf = (g.results && g.results[0] && g.results[0].admin1) || "";
+  try { if (uf) localStorage.setItem(k, uf); } catch (e) {}
+  return uf;
+}
+// O que ficou guardado da última busca na ANP (cidade, estado, brasil, ini, fim, em, uf, nomeCidade), ou null
+export function anpGuardado() { try { return JSON.parse(localStorage.getItem(K_ANP) || "null"); } catch (e) { return null; } }
+// Os preços prontos para mostrar: da cidade, senão do estado, senão do Brasil (a mesma escolha da aba Transporte),
+// com de onde são e a semana. É o formato que vai para o app de celular (PrecosANP).
+export function infoPrecos(d, cidade) {
+  if (!d) return null;
+  const tem = o => !!o && Object.keys(o).length > 0;
+  const onde = tem(d.cidade) ? "cidade" : tem(d.estado) ? "estado" : "brasil";
+  let nomeUf = null; try { nomeUf = cidade ? localStorage.getItem(K_UF(cidade)) : null; } catch (e) {}
+  const nome = onde === "cidade" ? (cidade || d.nomeCidade || null) : onde === "estado" ? (nomeUf || d.uf || null) : null;
+  // mais de uma semana sem atualizar (ou a busca de agora falhou): o app avisa que pode estar velho
+  const velho = !!d.velho || !(Date.now() - (d.em || 0) < 8 * 864e5);
+  return { p: d[onde] || {}, onde, nome, ini: d.ini || null, fim: d.fim || null, em: d.em || 0, ...(velho ? { velho: true } : {}) };
+}
+export const precosGuardadosInfo = cidade => infoPrecos(anpGuardado(), cidade);
 // O último preço buscado (da cidade, ou do estado), para a janela de abastecer comparar sem esperar a internet
 export function precosGuardados() {
-  try { const s = JSON.parse(localStorage.getItem(K_ANP) || "null"); if (!s) return null; return Object.keys(s.cidade || {}).length ? s.cidade : Object.keys(s.estado || {}).length ? s.estado : s.brasil || null; } catch (e) { return null; }
+  const s = anpGuardado(); if (!s) return null;
+  return Object.keys(s.cidade || {}).length ? s.cidade : Object.keys(s.estado || {}).length ? s.estado : s.brasil || null;
 }
+// Um gasto de transporte pronto para guardar (a janela de abastecer do site e o pedido do app de celular).
+// f: { id, veiculoId, sub, valor, data, desc, litros, precoLitro, combustivel, km, manut } com os números já convertidos.
+// Litros e preço do litro: com dois dos três (valor, litros, preço), o terceiro sai sozinho. Ao editar, o resto
+// do lançamento antigo continua (banco, casaId...).
+export function montarGastoTransp(f, inicial) {
+  const sub = f.sub, v = f.valor, l = f.litros || 0, p = f.precoLitro || 0;
+  const litrosCalc = l || (v && p ? v / p : 0), precoCalc = p || (v && l ? v / l : 0);
+  const ehComb = sub === "combustivel", ehManut = sub === "manutencao" || sub === "melhorias";
+  const nomeManut = (MANUTENCOES.find(m => m[0] === f.manut) || [, ""])[1];
+  return {
+    ...(inicial || {}), id: inicial ? inicial.id : f.id, veiculoId: f.veiculoId || undefined, tipo: "saida", cat: "transporte", valor: v, data: f.data, sub,
+    desc: String(f.desc || "").trim() || (ehComb ? `Abastecimento (${(COMBUSTIVEIS.find(c => c[0] === f.combustivel) || [, "combustível"])[1].toLowerCase()})` : ehManut ? nomeManut : subInfo(sub).nome),
+    litros: ehComb && litrosCalc ? Math.round(litrosCalc * 100) / 100 : undefined,
+    precoLitro: ehComb && precoCalc ? Math.round(precoCalc * 1000) / 1000 : undefined,
+    combustivel: ehComb ? f.combustivel : undefined, manut: ehManut ? f.manut : undefined,
+    km: (ehComb || ehManut) && f.km > 0 ? Math.round(f.km) : undefined,
+  };
+}
+
 // Etanol ou gasolina? (regra dos 70%: o etanol rende cerca de 70% da gasolina)
 export function etanolOuGasolina(precos) {
   const g = precos && precos.gasolina, e = precos && precos.etanol;
@@ -302,6 +346,18 @@ export const fipe = {
   anos: (tipo, marca, modelo) => fetch(`${FIPE}/${tipo}/marcas/${marca}/modelos/${modelo}/anos`).then(r => r.json()),
   valor: (tipo, marca, modelo, ano) => fetch(`${FIPE}/${tipo}/marcas/${marca}/modelos/${modelo}/anos/${ano}`).then(r => r.json()),
 };
+
+// FIPE do mês: uma vez por mês busca o valor de novo e guarda o histórico (mostra quanto o carro desvalorizou).
+// Devolve o que mudar no veículo, ou null (sem FIPE, já buscou este mês ou a FIPE não respondeu um valor).
+export async function fipeDoMes(v, mesAtual) {
+  if (!v || !v.fipe || !v.fipe.ids) return null;
+  const hist = v.fipeHist || [];
+  if (hist.length && hist[hist.length - 1].quando === mesAtual) return null;
+  const { tipo, marca, modelo, ano } = v.fipe.ids;
+  const r = await fipe.valor(tipo, marca, modelo, ano);
+  const val = valorFipe(r.Valor); if (!val) return null;
+  return { fipe: { ...v.fipe, valor: r.Valor, mes: r.MesReferencia }, fipeHist: [...hist.filter(h => h.quando !== mesAtual), { quando: mesAtual, valor: val }].slice(-36) };
+}
 
 // Postos onde a pessoa abastece: pelo nome anotado no abastecimento, com o preço médio do litro
 export function postos(db, veiculo) {

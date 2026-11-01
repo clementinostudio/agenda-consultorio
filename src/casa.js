@@ -31,6 +31,12 @@ export function useCasa(conta, db, setDb) {
 
   // ---------- nuvem ----------
   const guardar = d => { setDados(d); if (d) gravar(K_CACHE(conta.uid), d); else localStorage.removeItem(K_CACHE(conta.uid)); };
+  // muda a partir do estado mais novo (e não do "dados" deste render): duas gravações seguidas, ou um pedido do app
+  // de celular antes de a tela redesenhar, não apagam uma à outra
+  const mudar = fn => setDados(atual => { if (!atual) return atual; const n = fn(atual); gravar(K_CACHE(conta.uid), n); return n; });
+  const dadosRef = useRef(dados); dadosRef.current = dados;
+  // grava na nuvem; sem o cliente ou sem internet, devolve o erro (quem chama põe na fila)
+  const enviar = async linha => { try { const sb = sbRef.current || (sbRef.current = await cliente()); return await sb.from("casa_itens").upsert(linha); } catch (e) { return { error: e }; } };
   const carregar = async () => {
     const sb = sbRef.current || (sbRef.current = await cliente());
     const { data: m, error: e1 } = await sb.from("casa_membros").select("casa_id").eq("user_id", conta.uid).maybeSingle();
@@ -101,18 +107,18 @@ export function useCasa(conta, db, setDb) {
   const salvar = async (colecao, item) => {
     const it = { ...item, id: item.id || novoId() };
     if (!nuvem) { setLocal(c => ({ ...c, itens: { ...(c.itens || {}), [`${colecao}|${it.id}`]: it } })); return it; }
-    const linha = { casa_id: dados.casa.id, colecao, id: it.id, dados: it, apagado: false };
-    guardar({ ...dados, itens: { ...dados.itens, [`${colecao}|${it.id}`]: it } });
-    const { error } = await (sbRef.current || (sbRef.current = await cliente())).from("casa_itens").upsert(linha).then(r => r, e => ({ error: e }));
+    const linha = { casa_id: dadosRef.current.casa.id, colecao, id: it.id, dados: it, apagado: false };
+    mudar(d => ({ ...d, itens: { ...d.itens, [`${colecao}|${it.id}`]: it } }));
+    const { error } = await enviar(linha);
     if (error) gravar(K_FILA(conta.uid), [...ler(K_FILA(conta.uid), []).filter(f => !(f.colecao === colecao && f.id === it.id)), linha]);
     return it;
   };
   const apagar = async (colecao, id) => {
     if (!nuvem) { setLocal(c => { const itens = { ...(c.itens || {}) }; delete itens[`${colecao}|${id}`]; return { ...c, itens }; }); return; }
-    const itens = { ...dados.itens }; delete itens[`${colecao}|${id}`]; guardar({ ...dados, itens });
-    const linha = { casa_id: dados.casa.id, colecao, id, dados: null, apagado: true };
-    const { error } = await sbRef.current.from("casa_itens").upsert(linha).then(r => r, e => ({ error: e }));
-    if (error) gravar(K_FILA(conta.uid), [...ler(K_FILA(conta.uid), []), linha]);
+    mudar(d => { const itens = { ...d.itens }; delete itens[`${colecao}|${id}`]; return { ...d, itens }; });
+    const linha = { casa_id: dadosRef.current.casa.id, colecao, id, dados: null, apagado: true };
+    const { error } = await enviar(linha);
+    if (error) gravar(K_FILA(conta.uid), [...ler(K_FILA(conta.uid), []).filter(f => !(f.colecao === colecao && f.id === id)), linha]);
   };
   const rpc = async (fn, args) => { const sb = sbRef.current || (sbRef.current = await cliente()); const { data, error } = await sb.rpc(fn, args); if (error) throw error; return data; };
   const criar = async nome => {
@@ -152,10 +158,14 @@ export function useCasa(conta, db, setDb) {
   return {
     nuvem, eu, estado: nuvem ? st : local ? "ok" : "sem",
     casa: atual && atual.casa, membros: (atual && atual.membros) || [],
+    // o objeto dos itens como está guardado: só muda quando algo da casa muda (o retrato do app de celular depende dele)
+    itens: (atual && atual.itens) || null,
     lanc: lista("lanc"), acertos: lista("acerto"), contas: lista("conta"), compras: lista("compra"),
     config: lista("config").find(x => x.id === "divisao") || { id: "divisao", modo: "igual" },
     // lista de compras: o limite de gasto (config "lista") e as listas prontas ("compra do mês", "churrasco")
     listaCfg: lista("config").find(x => x.id === "lista") || { id: "lista" }, modelos: lista("modelo"),
-    salvar, apagar, criar, convidar, verConvite, entrar, sair, tirar, renomear, simularEntrada, recarregar: () => nuvem && carregar().catch(() => {}),
+    salvar, apagar, criar, convidar, verConvite, entrar, sair, tirar, renomear, simularEntrada,
+    // puxa a casa da nuvem de novo, mandando antes o que ficou na fila (o app de celular pede ao voltar para a frente)
+    recarregar: async () => { if (!nuvem) return; await enviarFila().catch(() => {}); await carregar().catch(() => {}); },
   };
 }

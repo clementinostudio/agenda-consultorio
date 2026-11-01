@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, ConfirmButton, iniciais, CATEGORIAS, catDe, catVars, CatIcon, TopBar, useCamada, servidorAvisos, voltarDaTela } from "../App.jsx";
 import { cliente } from "../nuvem.js";
 import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
-import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja, cnpjDaChave } from "../nota.js";
+import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja, cnpjDaChave, juntarNaLista, precosQueMudaram } from "../nota.js";
 import { buscarCnpj } from "../cnpj.js";
 import { noApp, permitirIA } from "../app-nativo.js";
 import { lerQRs } from "./ferramentas.jsx";
@@ -35,7 +35,10 @@ const diasNoMes = ch => { const [a, m] = ch.split("-").map(Number); return new D
 // Cada bloco da página: a posição no celular (order) e o atraso da entrada (--i)
 const Bloco = ({ o, children, className = "" }) => <div className={"c2-bloco " + className} style={{ order: o, "--i": Math.min(o, 9) }}>{children}</div>;
 
-export function CasaPagina({ casa: C, conta, pix, act, tema }) {
+// foco: { k, n } quando o app de celular pede uma parte da casa que fica no site ("convidar", "divisao", "pessoas", "listas").
+// Vale uma vez por pedido (o n muda a cada pedido; guardado fora do componente, para não repetir se a página montar de novo).
+const FOCO_FEITO = { pagina: 0, listas: 0 };
+export function CasaPagina({ casa: C, conta, pix, act, tema, foco }) {
   const voltar = () => act.setTab("p-home");
   // voltar do Android volta ao Início (no app de celular, se foi o app que abriu a casa, volta para ele)
   useCamada(() => voltarDaTela(voltar), { escurece: false });
@@ -47,6 +50,19 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
   const [novoNome, setNovoNome] = useState(null); // null = não está mudando o nome
   const [verQR, setVerQR] = useState(false);
   const faz = async (k, fn) => { setOcupado(k); setErro(""); try { await fn(); } catch (e) { setErro(erroDe(e)); vibrar("erro"); } setOcupado(""); };
+  // o pedido do app: rola até a parte pedida (e, no convite, já cria o link); espera a casa carregar
+  const convidarRef = useRef(null);
+  useEffect(() => {
+    if (!foco || !C.casa || FOCO_FEITO.pagina >= foco.n) return;
+    FOCO_FEITO.pagina = foco.n;
+    const t = setTimeout(() => {
+      const alvo = { convidar: ".c2-pessoas", pessoas: ".c2-ajustes", divisao: ".casa-divide", listas: ".casa-compras" }[foco.k];
+      const el = alvo && (document.querySelector(`.casa-pg ${alvo}`) || document.querySelector(".casa-pg .c2-pessoas"));
+      if (el) el.scrollIntoView({ block: "center", behavior: window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      if (foco.k === "convidar" && convidarRef.current) convidarRef.current();
+    }, 350); // depois da entrada da página
+    return () => clearTimeout(t);
+  }, [foco && foco.n, !!C.casa]);
 
   if (!C.casa) return (
     <div className="page casa-pg c2">
@@ -81,6 +97,7 @@ export function CasaPagina({ casa: C, conta, pix, act, tema }) {
     const url = await C.convidar(); setLink(url); setVerQR(false);
     if (navigator.share && C.nuvem) { try { await navigator.share({ title: "Convite para a casa", text: textoConvite(), url }); } catch (e) {} }
   });
+  convidarRef.current = C.membros.length < MAX_PESSOAS ? convidar : null;
   // QR code: para convidar pessoalmente (a pessoa aponta a câmera) ou mandar como imagem
   const mostrarQR = () => { if (verQR) return setVerQR(false); if (link) return setVerQR(true); faz("convite", async () => { setLink(await C.convidar()); setVerQR(true); }); };
   const textoConvite = () => `${conta.nome} te chamou para dividir as contas da casa "${C.casa.nome}" no Avina. É grátis: abra o link, crie sua conta e você entra na casa.`;
@@ -139,7 +156,7 @@ ${link}`)}`, "_blank", "noopener");
 
         <div className="c2-col">
           <Bloco o={5}><ContasDaCasa C={C} act={act} /></Bloco>
-          <Bloco o={6}><ListaCompras C={C} act={act} /></Bloco>
+          <Bloco o={6}><ListaCompras C={C} act={act} foco={foco} /></Bloco>
           <Bloco o={8}><MercadoCasa C={C} act={act} /></Bloco>
           {!sozinho && doMes.length > 0 && <Bloco o={9}><section className="panel"><div className="panel-head"><h3>Quem pagou em {mes.nome}</h3></div><GraficoQuem C={C} itens={doMes} /></section></Bloco>}
           <Bloco o={10}><GraficoMeses C={C} off={off} onEscolher={trocarMes} /></Bloco>
@@ -429,7 +446,6 @@ export function ContaCasaSheet({ casa: C, inicial, onClose, act }) {
 }
 
 /* ---------- lista de compras da casa (aparece na hora no celular de todos) ---------- */
-const mesmoItem = (a, b) => combina(a, b) && combina(b, a); // "leite" e "Leite" são o mesmo; "leite" e "leite condensado", não
 const diasEntre = (a, b) => Math.round((new Date(b) - new Date(a)) / 864e5);
 // Sugestões pelas notas: o que a casa compra de tempos em tempos e já está na hora ("café: a cada 10 dias, a última foi há 12").
 // Enquanto as notas ainda não mostram o ritmo de nada (é preciso o mesmo produto em dois dias diferentes), fica o jeito antigo:
@@ -453,10 +469,12 @@ function sugerir(hist, compras) {
   return { ritmo: false, itens: vezes.filter((w, i) => vezes.indexOf(w) === i && !naLista(w)).slice(0, 6).map(nome => ({ nome })) };
 }
 
-function ListaCompras({ C, act }) {
+function ListaCompras({ C, act, foco }) {
   const [txt, setTxt] = useState("");
   const [editar, setEditar] = useState(null); // o item aberto para mudar
   const [prontas, setProntas] = useState(false); // o painel das listas prontas
+  // o app de celular pediu as listas prontas (guardar e apagar ficam no site)
+  useEffect(() => { if (foco && foco.k === "listas" && FOCO_FEITO.listas < foco.n) { FOCO_FEITO.listas = foco.n; setProntas(true); } }, [foco && foco.n]);
   const [mercado, setMercado] = useState(false); // "Estou no mercado"
   const [limTxt, setLimTxt] = useState(null); // null = não está mudando o limite
   const hist = useMemo(() => historico(C.lanc), [C.lanc]);
@@ -472,24 +490,12 @@ function ListaCompras({ C, act }) {
   const passouAntes = useRef(passou);
   useEffect(() => { if (passou && !passouAntes.current) { vibrar("aviso"); act.toast(`A lista passou do limite de ${brl(limite)}`); } passouAntes.current = passou; }, [passou]);
 
-  // Coloca na lista. O que já está lá não repete: digitando, soma a quantidade ("leite" + "2 leite" = 3×);
-  // vindo de uma lista pronta, fica como está (somar = false).
+  // Coloca na lista (juntarNaLista, em nota.js: a mesma regra dos pedidos do app de celular). O que já está lá
+  // não repete: digitando, soma a quantidade ("leite" + "2 leite" = 3×); vindo de uma lista pronta, fica como está.
   const adicionar = (novos, { somar = true } = {}) => {
-    const lista = C.compras.filter(x => !x.feito).map(x => ({ ...x })), mudou = new Set(), ja = [];
-    novos.forEach((n, i) => {
-      if (!n.texto) return;
-      const igual = lista.find(x => mesmoItem(x.texto, n.texto));
-      if (igual) {
-        ja.push(igual);
-        if (somar) { igual.qtd = (igual.qtd || 1) + (n.qtd || 1); mudou.add(igual); }
-        if (n.obs && !igual.obs) { igual.obs = n.obs; mudou.add(igual); }
-        return;
-      }
-      const it = { texto: n.texto, qtd: n.qtd || 1, ...(n.obs ? { obs: n.obs } : {}), secao: secaoDe(n.texto), feito: false, criado: Date.now() + i, autor: C.eu };
-      lista.push(it); mudou.add(it);
-    });
-    mudou.forEach(x => C.salvar("compra", x));
-    return { novos: [...mudou].filter(x => !x.id).length, ja: ja.filter((x, i) => x.id && ja.indexOf(x) === i) };
+    const { salvar, novos: n, ja } = juntarNaLista(C.compras, novos, { somar, eu: C.eu });
+    salvar.forEach(x => C.salvar("compra", x));
+    return { novos: n, ja };
   };
   const add = e => {
     e.preventDefault(); const t = txt.trim(); if (!t) return;
@@ -747,8 +753,7 @@ function MercadoCasa({ C, act }) {
   const ch = todayISO().slice(0, 7);
   const mesMercado = C.lanc.filter(l => (l.data || "").startsWith(ch) && (l.cat === "mercado" || l.nota)).reduce((s, l) => s + l.valor, 0);
   // preços que mudaram entre as duas últimas compras do mesmo produto
-  const mudou = Object.values(hist).filter(v => v.length >= 2).map(v => { const a = v[v.length - 2], b = v[v.length - 1]; return { nome: b.nome, de: a, para: b, pct: a.unit > 0 ? (b.unit - a.unit) / a.unit : 0 }; })
-    .filter(x => Math.abs(x.pct) >= 0.03).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 5);
+  const mudou = precosQueMudaram(hist, 5);
   return (
     <section className="panel casa-mercado">
       <Ilustra n="carrinho" className="casa-mercado-ilu" />

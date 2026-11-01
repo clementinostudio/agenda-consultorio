@@ -404,6 +404,9 @@ function conversa(db, now, act, perfil) {
    ========================================================= */
 const pessoalVazio = () => ({ lanc: [], contas: [], caixinhas: [], incluirConsultorio: true });
 const vencimento = (conta, chave) => `${chave}-${pad(Math.min(conta.dia, diasNoMes(chave)))}`;
+// Marcar (e desmarcar) uma conta fixa como paga num mês ('AAAA-MM'): o "Paguei" do site e o pedido do app de celular
+const pagarContaP = (P, id, mes, data) => ({ ...P, contas: P.contas.map(x => x.id === id ? { ...x, pagas: { ...(x.pagas || {}), [mes]: data } } : x) });
+const despagarContaP = (P, id, mes) => ({ ...P, contas: P.contas.map(x => { if (x.id !== id) return x; const pg = { ...(x.pagas || {}) }; delete pg[mes]; return { ...x, pagas: pg }; }) });
 function situacaoConta(conta, chave) {
   const t = todayISO();
   if (conta.pagas && conta.pagas[chave]) return { st: "paga", txt: `Paga em ${dm(conta.pagas[chave])}` };
@@ -4253,20 +4256,36 @@ const logoParaApp = (x, nome) => {
   return { marca: marca || null, site: (m && m.site) || x.logoSite || null };
 };
 const nomeDoBanco = b => (typeof b === "string" && b.trim() && !/meu\s*pluggy/i.test(b) ? b.trim() : null);
-function retratoNativo({ conta, perfil, db, modos, modo, tema, plano, souPro, bancoLigado }) {
+// Limite do plano grátis para lançamentos pessoais novos pedidos pelo app: só avisa, com texto neutro (dentro do
+// app não se fala em assinar). Contas fixas e a casa não contam, como no site. n: { libera, hojePlano, db }
+const limiteDoApp = (n, novos) => {
+  const ch = n.hojePlano.slice(0, 7);
+  return novos && n.libera && !n.libera.pessoal && n.db.pessoal.lanc.filter(l => l.data && l.data.startsWith(ch)).length + novos > LIMITE_GRATIS.lancMes
+    ? { ok: false, erro: "limite", texto: `O plano grátis tem até ${LIMITE_GRATIS.lancMes} lançamentos por mês.` } : null;
+};
+// Contas fixas, Transporte e Nossa casa no app (src/app-nativo-areas.js: o retrato dessas áreas e os pedidos delas).
+// Só carrega dentro do app de celular; aí o retrato passa a levar os extras das contas e dos gastos, transporte,
+// casa e recursos
+let AREAS = null;
+let FOCO_N = 0; // cada pedido de uma parte da casa ganha um número novo (a página da casa faz cada um uma vez só)
+
+function retratoNativo({ conta, perfil, db, modos, modo, tema, plano, souPro, bancoLigado, casa }) {
   const hoje = todayISO(), ch = hoje.slice(0, 7), desde = addDays(hoje, -400);
   const P = db.pessoal || pessoalVazio();
   const e = plano && plano.estado;
+  const vs = AREAS ? veiculosDe(db) : null;
   const pessoal = !modos.includes("pessoal") ? null : {
     lanc: P.lanc.filter(l => l && l.data >= desde).map(l => ({
       id: l.id, tipo: l.tipo === "entrada" ? "entrada" : "saida", valor: Number(l.valor) || 0, data: l.data, cat: l.cat, desc: l.desc || "",
       ...logoParaApp(l, l.desc), banco: nomeDoBanco(l.banco),
       ...(l.moeda && l.moeda !== "BRL" ? { moeda: l.moeda, valorOrig: l.valorOrig ?? null } : {}),
       ...(l.obs ? { obs: String(l.obs) } : {}),
+      ...(AREAS ? AREAS.extrasLanc(l, vs) : {}), // transporte (transp) e casa (casaId)
     })),
     contas: P.contas.map(c => ({
       id: c.id, nome: c.nome, valor: Number(c.valor) || 0, dia: c.dia, cat: c.cat || null, paga: !!(c.pagas && c.pagas[ch]), vence: vencimento(c, ch),
       assinatura: !!c.assinatura, ...logoParaApp(c, c.nome),
+      ...(AREAS ? AREAS.extrasConta(c, hoje, vs) : {}), // situação, histórico de pagamentos, boleto, moeda, transporte
     })),
     caixinhas: (P.caixinhas || []).map(c => {
       const B = c.banco && typeof c.banco.valor === "number" ? c.banco : null;
@@ -4300,12 +4319,19 @@ function retratoNativo({ conta, perfil, db, modos, modo, tema, plano, souPro, ba
     servidor: servidorAvisos(), bancoLigado: !!bancoLigado,
     categorias: CATEGORIAS.map(catParaApp), catEntrada: CAT_ENTRADA.map(catParaApp),
     pessoal, consultorio,
+    // Transporte e Nossa casa são do Pessoal: desligado, vão null (como o pessoal)
+    ...(AREAS ? {
+      transporte: pessoal ? AREAS.retratoTransporte(db, hoje, (perfil && perfil.cidade) || null) : null,
+      casa: pessoal ? AREAS.retratoCasa(casa, db.settings && db.settings.pix, hoje) : null,
+      recursos: AREAS.RECURSOS,
+    } : {}),
   };
 }
 // Sem login (ou cadastro pela metade): o app deixa a tela do site na frente
 const retratoSemLogin = tema => ({
   v: 1, em: Date.now(), logado: false, tema: tema.modo, conta: null, modos: [], modo: null, termo: "Paciente", plano: null,
   servidor: servidorAvisos(), bancoLigado: false, categorias: [], catEntrada: [], pessoal: null, consultorio: null,
+  transporte: null, casa: null,
 });
 const TEMAS_VALIDOS = ["auto", "dark", "light"];
 // "abrir" das telas nativas: nomes amigáveis das abas de cada área
@@ -4388,6 +4414,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   LOGOS = (db.pessoal && db.pessoal.logos) || {};
   const [modo, setModoSt] = useState(() => lerJSON(K.modo(conta.email), "consultorio"));
   const [veicAtual, setVeicAtual] = useState(null); // veículo mostrado no carrossel do Transporte
+  const [casaFoco, setCasaFoco] = useState(null); // app de celular: a parte da casa que ele pediu ({ k, n }, ver CasaPagina)
   const [tab, setTab] = useState(() => inicioDo(lerJSON(K.modo(conta.email), "consultorio")));
   const modoEf = modos.includes(modo) ? modo : modos[0];
   const trocarModoSt = m => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(inicioDo(m)); };
@@ -4755,9 +4782,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     lerNotaCasa: () => setSheet({ type: "casa-nota", n: Date.now() }),
     verNotaCasa: l => setSheet({ type: "casa-nota-ver", lanc: l, n: Date.now() }),
     trazerParaCasa: ids => setSheet({ type: "casa-trazer", ids: ids || [], n: Date.now() }),
-    // gastos pessoais que a pessoa escolheu levar para a casa (dividindo entre todos ou só mostrando)
-    compartilharComCasa: async (ids, dividir = true) => {
-      if (!casa.casa) return;
+    // gastos pessoais que a pessoa escolheu levar para a casa (dividindo entre todos ou só mostrando).
+    // levarParaCasa é o miolo, sem aviso nem vibração (o pedido "casaTrazer" do app de celular usa direto): devolve quantos foram
+    levarParaCasa: async (ids, dividir = true) => {
+      if (!casa.casa) return null;
       const ls = db.pessoal.lanc.filter(l => ids.includes(l.id) && !l.casaId && l.tipo === "saida");
       const marcas = {};
       for (const l of ls) {
@@ -4766,7 +4794,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         marcas[l.id] = it.id;
       }
       setP(P => ({ ...P, lanc: P.lanc.map(l => marcas[l.id] ? { ...l, casaId: marcas[l.id] } : l) }));
-      vibrar("ok"); notify(ls.length === 1 ? "Gasto levado para a casa" : `${ls.length} gastos levados para a casa`);
+      return ls.length;
+    },
+    compartilharComCasa: async (ids, dividir = true) => {
+      const n = await act.levarParaCasa(ids, dividir);
+      if (n === null) return;
+      vibrar("ok"); notify(n === 1 ? "Gasto levado para a casa" : `${n} gastos levados para a casa`);
     },
     desligarDaCasa: casaItemId => setP(P => ({ ...P, lanc: P.lanc.map(l => l.casaId === casaItemId ? (({ casaId, ...r }) => r)(l) : l) })),
     casa,
@@ -5012,10 +5045,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     apagarConta: id => { setP(P => ({ ...P, contas: P.contas.filter(x => x.id !== id) })); close(); notify("Conta apagada"); },
     pagarConta: id => {
       const ch = chaveAtual(), c = db.pessoal.contas.find(x => x.id === id); vibrar("ok");
-      setP(P => ({ ...P, contas: P.contas.map(x => x.id === id ? { ...x, pagas: { ...(x.pagas || {}), [ch]: todayISO() } } : x) }));
-      notify(`${c ? c.nome : "Conta"} marcada como paga`, () => setP(P => ({ ...P, contas: P.contas.map(x => { if (x.id !== id) return x; const pg = { ...(x.pagas || {}) }; delete pg[ch]; return { ...x, pagas: pg }; }) })));
+      setP(P => pagarContaP(P, id, ch, todayISO()));
+      notify(`${c ? c.nome : "Conta"} marcada como paga`, () => setP(P => despagarContaP(P, id, ch)));
     },
-    despagarConta: id => { const ch = chaveAtual(); setP(P => ({ ...P, contas: P.contas.map(x => { if (x.id !== id) return x; const pg = { ...(x.pagas || {}) }; delete pg[ch]; return { ...x, pagas: pg }; }) })); notify("Voltou para a pagar"); },
+    despagarConta: id => { const ch = chaveAtual(); setP(P => despagarContaP(P, id, ch)); notify("Voltou para a pagar"); },
     toggleIncluir: () => setP(P => ({ ...P, incluirConsultorio: !P.incluirConsultorio })),
     salvarRenda: renda => setP(P => { const n = { ...P }; if (renda) n.renda = renda; else delete n.renda; return n; }),
     // Teto do mês por categoria
@@ -5170,11 +5203,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     import("./banco.js").then(b => b.estadoBanco()).then(e => { if (vivo && (e.ligado || navigator.onLine !== false)) guardarBanco(!!e.ligado); }).catch(() => {});
     return () => { vivo = false; };
   }, [conta.uid]);
-  const retrato = () => retratoNativo({ conta, perfil, db, modos, modo: modoEf, tema, plano, souPro, bancoLigado });
+  const retrato = () => retratoNativo({ conta, perfil, db, modos, modo: modoEf, tema, plano, souPro, bancoLigado, casa });
   const nat = useRef(null);
-  nat.current = { retrato, act, db, usaPessoal, libera, hojePlano, tema, sheet, close, trocarModoSt, setTab, setP, modos, conta };
-  // manda de novo quando algo muda (e a cada 5 minutos: a agenda de hoje muda de "próxima" para "faltou marcar")
-  useEffect(() => { if (nativoV2) enviarEstado(() => nat.current.retrato()); }, [db, conta, plano, tema.modo, modoEf, bancoLigado, perfil, Math.floor(now.getTime() / 3e5)]);
+  // a folha que o app abriu (pedido "abrir" com acao): true até aparecer, depois { tab } (a aba do site por trás dela)
+  const folhaDoApp = useRef(null);
+  nat.current = { retrato, act, db, usaPessoal, libera, hojePlano, tema, sheet, close, trocarModoSt, setTab, setP, modos, conta, perfil, folhaDoApp, setCasaFoco };
+  // manda de novo quando algo muda (e a cada 5 minutos: a agenda de hoje muda de "próxima" para "faltou marcar").
+  // A casa vive fora do db (nuvem, tempo real): os itens, as pessoas e o estado dela também contam
+  useEffect(() => { if (nativoV2) enviarEstado(() => nat.current.retrato()); }, [db, conta, plano, tema.modo, modoEf, bancoLigado, perfil, Math.floor(now.getTime() / 3e5), casa.estado, casa.casa ? casa.itens : null, casa.casa ? casa.membros : null, casa.casa && casa.casa.nome]);
   useEffect(() => {
     if (!nativoV2) return;
     const N = () => nat.current;
@@ -5191,30 +5227,63 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       rolarTopo();
       return aba || inicioDo(m);
     };
-    return registrarNativo({
+    // Contas fixas, Transporte e Nossa casa (src/app-nativo-areas.js): uma camada a mais de pedidos, e o retrato
+    // passa a levar essas áreas (e "recursos") assim que o arquivo carrega
+    let vivo = true, tirarAreas = null;
+    import("./app-nativo-areas.js").then(m => {
+      if (!vivo) return;
+      AREAS = m; tirarAreas = registrarNativo(m.acoesDasAreas(N));
+      enviarEstado(() => N().retrato());
+    }).catch(() => {});
+    const tirar = registrarNativo({
       estado: () => N().retrato(),
       // abrir { area, tela, acao, id }: a área (e a aba) do site e/ou um painel dele
       abrir: (d = {}) => {
-        const n = N(), a = n.act;
+        const n = N(), a = n.act, C = a.casa;
         const acao = d.acao || (!d.area ? d.tela : null);
+        n.folhaDoApp.current = null; // um pedido novo: a folha de antes (se ainda aberta) já não volta sozinha para o app
+        // as partes da casa que ficam no site (convite, divisão, ajustes, listas prontas) e as folhas da casa precisam dela
+        const FOCO_CASA = { "casa-convidar": "convidar", "casa-divisao": "divisao", "casa-pessoas": "pessoas", "casa-listas": "listas" };
+        if (acao && (FOCO_CASA[acao] || /^casa-/.test(acao)) && !(n.usaPessoal && C && C.casa)) throw new Error("sem-casa");
+        if (FOCO_CASA[acao]) { a.abrirCasa(); ABA_DO_APP = "p-casa"; n.setCasaFoco({ k: FOCO_CASA[acao], n: ++FOCO_N }); return null; }
         if (d.area) {
           if (d.area === "casa" && n.usaPessoal) { a.abrirCasa(); ABA_DO_APP = "p-casa"; } // (fecham o painel aberto sozinhas)
           else if (d.area === "transporte" && n.usaPessoal) { a.abrirTransporte(); ABA_DO_APP = "p-transp"; }
           else { if (n.sheet) n.close(); ABA_DO_APP = irPara(d.area === "casa" || d.area === "transporte" ? "pessoal" : d.area, d.tela); }
         }
         if (!acao) return null;
+        const lanc = id => (id && n.db.pessoal.lanc.find(l => l.id === id)) || null;
+        if (acao === "contas") { irPara("pessoal", "contas"); return null; }
         if (acao === "ajustes" || acao === "perfil") a.openSettings();
         else if (acao === "avisos") a.openSettings("avisos");
         else if (acao === "excluir-conta") a.openSettings("excluir");
         else if (acao === "importar-banco") a.importarDoBanco();
         else if (acao === "importar") a.importar();
-        else if (acao === "editar-lanc") { if (d.id && n.db.pessoal.lanc.some(l => l.id === d.id)) a.editLanc(d.id); else throw new Error("nao-achei"); }
+        else if (acao === "editar-lanc") { if (lanc(d.id)) a.editLanc(d.id); else throw new Error("nao-achei"); }
         else if (acao === "caixinha") a.abrirCaixinha(d.id || null);
-        else if (acao === "contas") irPara("pessoal", "contas");
         else if (acao === "nova-conta") a.novaConta();
         else if (acao === "teto") a.abrirTeto(d.id || null);
         else if (acao === "novo-lanc") a.novoLanc(d.id === "entrada" || d.tipo === "entrada" ? "entrada" : "saida");
+        // Contas fixas: o que a folha nativa não faz (logo ou foto, moeda de fora, código do boleto) e ler o boleto
+        else if (acao === "editar-conta") { if (d.id && n.db.pessoal.contas.some(c => c.id === d.id)) a.editConta(d.id); else throw new Error("nao-achei"); }
+        else if (acao === "ler-boleto") a.lerBoleto();
+        // Transporte: o veículo (tipo, foto, FIPE, IPVA e seguro, troca de óleo); id "novo" cria um
+        // (abrirVeiculo(null) abriria o primeiro)
+        else if (acao === "veiculo") {
+          if (!d.id || d.id === "novo") a.abrirVeiculo("novo");
+          else if (veiculosDe(n.db).some(v => v.id === d.id)) a.abrirVeiculo(d.id);
+          else throw new Error("nao-achei");
+        }
+        else if (acao === "transp-gasto") { const l = lanc(d.id); if (d.id && !l) throw new Error("nao-achei"); a.abrirGastoTransp(l ? { inicial: l } : { sub: d.sub, veiculoId: d.veiculoId }); }
+        // Nossa casa: ler a nota (câmera, QR, Sefaz), ver a foto da nota e as folhas de reserva
+        else if (acao === "casa-nota") a.lerNotaCasa();
+        else if (acao === "casa-nota-ver") { const l = C.lanc.find(x => x.id === d.id); if (!l || !l.nota) throw new Error("nao-achei"); a.verNotaCasa(l); }
+        else if (acao === "casa-trazer") a.trazerParaCasa();
+        else if (acao === "casa-gasto") a.abrirGastoCasa((d.id && C.lanc.find(x => x.id === d.id)) || undefined);
+        else if (acao === "casa-conta") a.abrirContaCasa((d.id && C.contas.find(x => x.id === d.id)) || undefined);
         else if (!d.area) throw new Error("tela");
+        else return null;
+        n.folhaDoApp.current = true; // abriu uma folha: ao fechar, volta para o app
         return null;
       },
       // lancar { itens }: anota (ou atualiza, se o id já existe) no Pessoal, sem painel e sem aviso na tela do site
@@ -5225,10 +5294,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         if (!n.usaPessoal) return { ok: false, erro: "pessoal", texto: "Para anotar gastos, ligue o Pessoal em Perfil → Como você usa o app." };
         const existentes = new Map(n.db.pessoal.lanc.map(l => [l.id, l]));
         const novos = lista.filter(it => !(it.id && existentes.has(it.id))).length;
-        // limite do plano grátis: só avisa (dentro do app não se fala em assinar)
-        const ch = n.hojePlano.slice(0, 7);
-        if (novos && n.libera && !n.libera.pessoal && n.db.pessoal.lanc.filter(l => l.data && l.data.startsWith(ch)).length + novos > LIMITE_GRATIS.lancMes)
-          return { ok: false, erro: "limite", texto: `O plano grátis tem até ${LIMITE_GRATIS.lancMes} lançamentos por mês.` };
+        const lim = limiteDoApp(n, novos); if (lim) return lim;
         const prontos = lista.map(it => {
           const tipo = it.tipo === "entrada" ? "entrada" : "saida", cats = tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
           const desc = String(it.desc || "").trim().slice(0, 80);
@@ -5277,15 +5343,22 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         return novo ? comLogo({ bancos: [novo] }).bancos[0] : null;
       },
       tema: ({ modo } = {}) => { if (TEMAS_VALIDOS.includes(modo)) N().tema.setModo(modo); return null; },
-      // puxar da nuvem agora: o mesmo caminho de quando a pessoa volta para o app (nuvem, casa, loja, pedidos do link)
+      // puxar da nuvem agora: o mesmo caminho de quando a pessoa volta para o app (nuvem, loja, pedidos do link).
+      // A casa não escuta o "voltou para a frente" (e o tempo real perde o que chegou com o app no fundo): recarrega
+      // daqui, mandando antes o que ficou na fila dela
       sincronizar: async () => {
         try { if (document.visibilityState === "visible") document.dispatchEvent(new Event("visibilitychange")); } catch (e) {}
-        await new Promise(ok => setTimeout(ok, 900));
+        const C = N().act.casa;
+        await Promise.all([
+          new Promise(ok => setTimeout(ok, 900)),
+          Promise.race([Promise.resolve(C && C.recarregar && C.recarregar()).catch(() => {}), new Promise(ok => setTimeout(ok, 8000))]),
+        ]);
         return null;
       },
       // sair: o mesmo do botão "Sair da conta" do Perfil
       sair: async () => { await N().act.sair(); return null; },
     });
+    return () => { vivo = false; tirar(); if (tirarAreas) tirarAreas(); };
   }, []);
 
   const t = todayISO(), ch = t.slice(0, 7);
@@ -5295,6 +5368,15 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const tabEf = modoDaAba(tab) === modoEf ? tab : inicioDo(modoEf);
   // trocou de aba no site: o voltar da tela nova já não leva de volta ao app (ABA_DO_APP)
   useEffect(() => { if (ABA_DO_APP && ABA_DO_APP !== tabEf) ABA_DO_APP = null; }, [tabEf]);
+  // a folha que o app abriu fechou, com a pessoa na mesma tela do site: volta para a tela nativa de onde ela veio
+  // (se no meio do caminho ela foi para outra tela do site, fica no site)
+  useEffect(() => {
+    const f = folhaDoApp.current;
+    if (!nativoV2 || !f) return;
+    if (sheet) { if (f === true) folhaDoApp.current = { tab: tabEf }; return; }
+    folhaDoApp.current = null;
+    if (f !== true && f.tab === tabEf) chamarApp("nativo:voltar").catch(() => {});
+  }, [sheet, tabEf]);
   const abas = modoEf === "loja"
     ? [{ id: "l-caixa", l: "Caixa", ic: <I.wallet />, on: <I.walletOn />, n: 0 }, { id: "l-gastos", l: "Gastos", ic: <I.bill />, on: <I.billOn />, n: 0 }, { id: "l-lista", l: "Falta", ic: <I.cart />, on: <I.cart />, n: loja.faltas.filter(x => !x.feito).length }, { id: "l-resumo", l: "Resumo", ic: <I.chart />, on: <I.chartOn />, n: 0 }]
     : modoEf === "pessoal"
@@ -5372,7 +5454,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         {tabEf === "p-home" && <Suspense fallback={null}><PessoalHome db={db} conta={conta} now={now} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-gastos" && <Suspense fallback={null}><GastosTab db={db} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-contas" && <Suspense fallback={null}><ContasTab db={db} act={act} tema={tema} /></Suspense>}
-        {tabEf === "p-casa" && <Suspense fallback={null}><CasaPagina casa={casa} conta={conta} pix={db.settings.pix} act={act} tema={tema} /></Suspense>}
+        {tabEf === "p-casa" && <Suspense fallback={null}><CasaPagina casa={casa} conta={conta} pix={db.settings.pix} act={act} tema={tema} foco={casaFoco} /></Suspense>}
         {tabEf === "l-caixa" && <Suspense fallback={null}><LojaCaixa loja={loja} conta={conta} act={act} tema={tema} /></Suspense>}
         {tabEf === "l-gastos" && <Suspense fallback={null}><LojaGastos loja={loja} conta={conta} act={act} tema={tema} /></Suspense>}
         {tabEf === "l-lista" && <Suspense fallback={null}><LojaLista loja={loja} conta={conta} act={act} tema={tema} /></Suspense>}
@@ -5521,6 +5603,6 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar, voltarDaTela };
+export { Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar, voltarDaTela, pagarContaP, despagarContaP, limiteDoApp };
 
 export default App;
