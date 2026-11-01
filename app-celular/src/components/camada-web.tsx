@@ -28,7 +28,7 @@ import { Cores } from '@/constants/theme';
 import * as avisos from '@/lib/avisos';
 import {
   esconderWeb, lerEstado, lerWeb, ligarInjetor, mostrarWeb, receberEstado, receberResposta, siteProntoParaPedidos,
-  siteReiniciou, useLogado, useWeb, type Estado,
+  siteReiniciou, temRecurso, useLogado, useWeb, type Estado,
 } from '@/lib/motor';
 import { resposta, scriptDaPonte, type Pedido } from '@/lib/ponte';
 import { carregarSite, ENDERECO, procurarVersaoNova } from '@/lib/site';
@@ -53,7 +53,7 @@ const VOLTAR_JS = `(function(){ if (history.state && history.state.alvenaGuarda)
 // iPhone: modais e folhas (presentation modal/formSheet em _layout.tsx) o iOS apresenta por cima de tudo, até da
 // camada do site; com elas abertas o site pode continuar na frente, atrás da folha. As telas empurradas (e todas
 // no Android) ficam dentro do <Stack>: com elas abertas o site vai para trás, senão ficariam escondidas.
-const POR_CIMA_IOS = /^\/(postos|chat|novo|widgets|lancamento)(\/|$)/;
+const POR_CIMA_IOS = /^\/(postos|chat|novo|widgets|lancamento|conta)(\/|$)/;
 
 // Links que abrem nos apps do celular (WhatsApp, mapas, telefone, e-mail); o resto abre no navegador do app
 const NOS_APPS = /^(tel|mailto|sms|geo|whatsapp|maps|comgooglemaps):|^https:\/\/(wa\.me|api\.whatsapp\.com|maps\.apple\.com|maps\.google\.|www\.google\.com\/maps|goo\.gl\/maps)/i;
@@ -259,6 +259,10 @@ export function CamadaWeb() {
         if (d.tela === 'postos') router.push({ pathname: '/postos', params: { comb: d.comb || '', consumo: String(d.consumo || '') } });
         else if (d.tela === 'chat') router.push('/chat');
         else if (d.tela === 'bancos') router.push('/bancos');
+        // as telas nativas novas, quando o site atende (Estado.recursos): o site pode abrir direto nelas
+        else if (d.tela === 'contas' && temRecurso(lerEstado(), 'contas2')) router.push('/contas');
+        else if (d.tela === 'transporte' && temRecurso(lerEstado(), 'transporte')) router.push('/transporte');
+        else if (d.tela === 'casa' && temRecurso(lerEstado(), 'casa')) router.push('/casa');
         else if (d.tela === 'inicio') esconderWeb();
         else throw new Error('tela');
         return null;

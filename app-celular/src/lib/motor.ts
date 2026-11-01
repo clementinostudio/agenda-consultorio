@@ -13,6 +13,19 @@ import { useSyncExternalStore } from 'react';
 export type TemaEscolhido = 'auto' | 'dark' | 'light';
 export type Modo = 'consultorio' | 'pessoal' | 'loja';
 
+// Os campos marcados "novo" vieram com as telas nativas de Contas fixas, Transporte e Nossa casa. Todos são opcionais:
+// um retrato antigo (guardado no aparelho, ou de uma cópia do site de antes) continua valendo.
+
+/* Transporte (as tabelas fixas, como SUBS e MANUTENCOES, vêm de @site/transporte.js, não do retrato) */
+export type SubTransp = 'combustivel' | 'app' | 'publico' | 'manutencao' | 'melhorias' | 'estacionamento' | 'documentos' | 'outros'; // SUBS
+export type IdManut = 'revisao' | 'oleo' | 'pneus' | 'freios' | 'bateria' | 'conserto' | 'funilaria' | 'lavagem' | 'pecas' | 'acessorios' | 'alinhamento'; // MANUTENCOES
+export type CombAbast = 'gasolina' | 'etanol' | 'diesel' | 'gnv'; // o combustível de um abastecimento
+export type LancTransp = {
+  sub: SubTransp; // l.sub, ou adivinhado pela descrição (subDe)
+  veiculoId: string | null; // de qual veículo (donoDoGasto, já resolvido pelo site); null sem veículo
+  litros?: number; precoLitro?: number; combustivel?: CombAbast; km?: number; manut?: IdManut;
+};
+
 export type Lanc = {
   id: string;
   tipo: 'entrada' | 'saida';
@@ -26,14 +39,19 @@ export type Lanc = {
   moeda?: string | null; // compra em outra moeda (o valor já está em reais)
   valorOrig?: number | null;
   obs?: string | null;
+  transp?: LancTransp; // novo: só nos gastos com cat 'transporte'
+  casaId?: string | null; // novo: o gasto também está na casa (Nossa casa)
 };
 
 export type Categoria = { id: string; nome: string; cor: string; ink: string; ic: string };
 
+// A situação da conta no mês de agora (situacaoConta do site): ≤ 5 dias para vencer é 'breve'
+export type SituacaoConta = 'paga' | 'atrasada' | 'hoje' | 'breve' | 'ok';
+
 export type ContaFixa = {
   id: string;
   nome: string;
-  valor: number;
+  valor: number; // em reais (numa conta em outra moeda, já convertido, com IOF)
   dia: number; // dia do vencimento
   cat: string | null;
   paga: boolean; // paga no mês de agora
@@ -41,11 +59,124 @@ export type ContaFixa = {
   assinatura: boolean;
   marca: string | null;
   site?: string | null;
+  // novos
+  st?: SituacaoConta;
+  dias?: number; // dias de hoje até o vencimento (< 0: atrasada há N dias; 0: vence hoje)
+  pagaEm?: string | null; // AAAA-MM-DD do pagamento deste mês
+  pagas?: Record<string, string>; // os pagamentos dos últimos 12 meses: 'AAAA-MM' → 'AAAA-MM-DD'
+  codigo?: string | null; // a linha digitável do boleto lido
+  moeda?: string | null; // cobrada em outra moeda ('USD'...); o valor muda com a cotação
+  valorOrig?: number | null; // o valor na moeda de lá
+  iof?: boolean; // soma o IOF do cartão
+  transp?: { sub: SubTransp; veiculoId: string | null } | null; // só nas contas de transporte
 };
 
 export type Caixinha = { id: string; nome: string; emoji: string; guardado: number; meta: number | null; doBanco: boolean };
 
 export type ItemAgenda = { hora: string; nome: string; status: 'proxima' | 'feita' | 'faltou' | 'cancelada' | 'outra'; valor: number | null };
+
+/* ---------- Transporte (novo) ---------- */
+
+export type Combustivel = 'flex' | 'gasolina' | 'etanol' | 'diesel' | 'gnv' | 'eletrico'; // COMBUSTIVEIS
+export type MesTransp = { chave: string; total: number; porSub: Partial<Record<SubTransp, { total: number; n: number }>> };
+// A próxima troca de óleo ou o próximo rodízio dos pneus (pelo km ou pela data, o que vier antes)
+export type LembreteVeiculo = {
+  ate: string; proxKm: number | null; faltamKm: number | null; faltamDias: number; urgente: boolean;
+  ultima: { data: string; km: number | null };
+};
+export type DocVeiculo = { k: 'ipva' | 'licenc' | 'seguro'; nome: string; data: string; valor: number; dias: number };
+
+export type Veiculo = {
+  id: string;
+  nome: string; // o nome dado, o modelo da FIPE, "Seu veículo" ou "Apps e transporte público"
+  tipo: 'carro' | 'moto' | 'bike' | 'nenhum';
+  combustivel: Combustivel | null;
+  desenho: string | null; // o desenho do veículo: public/ilustras/<desenho>.webp no site ('carro-hatch', 'moto'...); null = bike
+  fotoK: string | null; // a foto própria: muda quando a foto muda (a imagem vem por pedirSite('foto'))
+  km: number | null;
+  consumo: number | null; consumoReal: boolean; precoPago: number | null; custoKm: number | null;
+  ultimoAbast: { data: string; litros: number; precoLitro: number | null; combustivel: CombAbast | null; km: number | null; desc: string } | null;
+  fipe: { valor: string; mes: string | null; modelo: string } | null; // o valor vem como texto: "R$ 52.300,00"
+  oleo: LembreteVeiculo | null;
+  rodizio: LembreteVeiculo | null;
+  oleoKm: number; oleoMeses: number;
+  docs: DocVeiculo[];
+  custo: { // quanto o veículo custa de verdade (só carro e moto)
+    total: number; porMes: number; porDia: number; nMeses: number; porKm: number | null; rodados: number;
+    porSub: Partial<Record<SubTransp, number>>; perdeu: { valor: number; desde: string } | null;
+  } | null;
+  appRef: { valor: number; km: number } | null; // a corrida de referência do "Carro ou app?"
+  postos: { nome: string; n: number; gasto: number; litros: number; preco: number | null; ultimo: string }[];
+  meses?: MesTransp[]; // só com 2 ou mais veículos: os últimos 12 meses deste veículo
+};
+
+// Os preços da semana (ANP): da cidade, senão do estado, senão do Brasil
+export type PrecosANP = {
+  p: Partial<Record<'gasolina' | 'aditivada' | 'etanol' | 'diesel' | 'gnv', number>>;
+  onde: 'cidade' | 'estado' | 'brasil'; nome: string | null;
+  ini: string | null; fim: string | null; em: number; velho?: boolean;
+};
+
+export type Transporte = {
+  veiculos: Veiculo[]; // na ordem do site
+  meses: MesTransp[]; // os últimos 12 meses, do mais antigo ao mais novo (já com as contas fixas pagas de transporte)
+  precos: PrecosANP | null; // null = ainda não buscou
+  cidade: string | null; // a cidade do perfil (sem ela, não há preço da cidade)
+};
+
+/* ---------- Nossa casa (novo) ---------- */
+
+export type EstadoCasa = 'carregando' | 'ok' | 'sem' | 'erro' | 'indisponivel';
+export type MembroCasa = {
+  id: string; nome: string; papel: 'dono' | 'membro';
+  foto: string | null; // só o avatar pronto (SVG pequeno)
+  fotoK: string | null; // a foto de verdade: chave da versão (a imagem vem por pedirSite('foto'))
+};
+export type GastoCasa = {
+  id: string; valor: number; desc: string; cat: string; data: string; criado: number | null;
+  pagou: string; autor: string | null;
+  participantes: string[]; // quem divide (todos, quando o gasto não diz)
+  partes: Record<string, number>; // quanto cabe a cada um, em reais (já com os pesos)
+  proporcional: boolean;
+  contaId: string | null; // veio do "Paguei" de uma conta da casa
+  origem: string | null; // id do lançamento pessoal de onde veio
+  nota: { loja: string; itens: number; fonte: string | null; temFoto: boolean; temLink: boolean } | null; // os itens vêm por casaNota
+};
+export type AcertoCasa = { id: string; de: string; para: string; valor: number; data: string; criado: number | null };
+export type ContaCasa = {
+  id: string; nome: string; valor: number; dia: number; cat: string;
+  paga: { por: string; data: string; gastoId: string } | null; // no mês de agora
+};
+export type ItemCompra = {
+  id: string; texto: string; qtd: number; obs: string | null;
+  secao: string; // o corredor do mercado (nota.js: secaoDe / nomeSecao)
+  feito: boolean; por: string | null; autor: string | null; criado: number | null;
+  preco: { unit: number; total: number; loja: string; data: string } | null; // o último preço pago (só nos que faltam)
+};
+export type DadosCasa = {
+  id: string; nome: string; dono: string; eu: string; souDono: boolean; max: number;
+  membros: MembroCasa[];
+  divisao: { modo: 'igual' | 'proporcional'; pcts: Record<string, number> | null };
+  saldo: Record<string, number>; // de todo o histórico
+  dividas: { de: string; para: string; valor: number }[];
+  gastos: GastoCasa[]; // o mês de agora e os 2 anteriores, do mais novo ao mais velho
+  meses: { chave: string; total: number }[]; // 6 meses
+  acertos: AcertoCasa[]; // os 10 mais recentes
+  contas: ContaCasa[]; // por dia
+  compras: ItemCompra[];
+  listaLimite: number | null;
+  modelos: { id: string; nome: string; itens: { texto: string; qtd: number; obs?: string }[] }[]; // as listas prontas
+  mercado: {
+    mes: number; notas: number;
+    mudou: { nome: string; de: { unit: number; loja: string; data: string }; para: { unit: number; loja: string; data: string }; pct: number }[];
+  } | null;
+  pix: string | null; // a chave Pix (vai na mensagem de "Lembrar no WhatsApp")
+};
+export type CasaRetrato = { estado: EstadoCasa; nuvem: boolean; casa: DadosCasa | null }; // nuvem false = a casa de demonstração
+
+// O que este site já atende das telas nativas novas (Estado.recursos). Sem o recurso (uma cópia antiga do site),
+// o app abre a área no site, como antes.
+export type Recurso = 'contas2' | 'transporte' | 'casa';
 
 export type Estado = {
   v: 1;
@@ -76,6 +207,9 @@ export type Estado = {
     faltasMes: number;
     pacientesAtivos: number;
   } | null;
+  transporte?: Transporte | null; // novo; null = Pessoal desligado
+  casa?: CasaRetrato | null; // novo; null = Pessoal desligado
+  recursos?: string[]; // novo: as telas nativas que este site atende (Recurso); sem a lista, nenhuma
 };
 
 /* ---------- Respostas do site para pedidos conhecidos ---------- */
@@ -94,11 +228,63 @@ export type RespostaBolinha =
   | { tipo: 'gastos'; texto: string; itens: Omit<Lanc, 'id'>[] } // proposta: o app mostra e a pessoa confirma
   | { tipo: 'erro'; texto: string };
 
+// Um pedido que não deu certo: erro é o código ('limite', 'moeda', 'sem-casa'...) e texto, a frase pronta para
+// mostrar (neutra: nada de preço nem de assinar)
+export type Falha = { ok: false; erro: string; texto: string };
+
 // Ações que o site atende (src/app-nativo.js + src/App.jsx). Os nomes e formatos são o contrato da ponte.
+// Regras dos pedidos novos: o que cria algo aceita o id mandado pelo app (repetir não duplica); o que liga ou desliga
+// recebe o valor final (feito: true), não "inverter". O site não vibra nem avisa: quem vibra e mostra o
+// "Desfazer" é a tela nativa.
 export type PedidosSite = {
   estado: { dados: null; volta: Estado };
   abrir: { dados: { area?: Modo | 'casa' | 'transporte'; tela?: string; acao?: string; id?: string }; volta: null };
-  lancar: { dados: { itens: (Omit<Lanc, 'id'> & { id?: string })[] }; volta: { ok: true; ids: string[] } | { ok: false; erro: string; texto: string } };
+  lancar: { dados: { itens: (Omit<Lanc, 'id'> & { id?: string })[] }; volta: { ok: true; ids: string[] } | Falha };
+
+  // Contas fixas (recurso 'contas2'). mes: 'AAAA-MM' (padrão: o de agora); data: 'AAAA-MM-DD' (padrão: hoje)
+  contaPagar: { dados: { id: string; mes?: string; data?: string }; volta: { ok: true; mes: string; data: string } | Falha };
+  contaDesfazer: { dados: { id: string; mes?: string }; volta: { ok: boolean } };
+  // sem id: conta nova. Numa conta em outra moeda, mudar o valor responde erro 'moeda' (o app abre a edição no site)
+  contaSalvar: { dados: { id?: string; nome: string; valor: number; dia: number; cat?: string | null; assinatura?: boolean; marca?: string | null }; volta: { ok: true; id: string } | Falha };
+  contaApagar: { dados: { id: string }; volta: { ok: boolean } };
+
+  // Transporte (recurso 'transporte'). Gasto novo passa pelo limite do plano grátis (erro 'limite')
+  transporteGasto: {
+    dados: { id?: string; veiculoId?: string | null; sub: SubTransp; valor: number; data?: string; desc?: string; litros?: number; precoLitro?: number; combustivel?: CombAbast; km?: number; manut?: IdManut };
+    volta: { ok: true; id: string } | Falha;
+  };
+  // o "Paguei" do IPVA, licenciamento ou seguro: anota o gasto e passa a data para o ano seguinte. lancId (do app): o
+  // pedido repetido não paga duas vezes. Sem valor no documento nem no pedido: erro 'valor'
+  veiculoDocPagar: { dados: { veiculoId: string; k: 'ipva' | 'licenc' | 'seguro'; valor?: number; lancId?: string }; volta: { ok: true; lancId: string; proxima: string | null } | Falha };
+  // só km, consumo e o "Carro ou app?" mudam por aqui (o resto do veículo é no site: abrir { acao: 'veiculo' })
+  veiculoAtualizar: { dados: { id: string; km?: number | null; consumo?: number | null; appRef?: { valor: number; km: number } | null }; volta: { ok: boolean } };
+  veiculoFoto: { dados: { id: string }; volta: string | null }; // a foto própria do veículo (data URL)
+  transportePrecos: { dados: { forcar?: boolean }; volta: PrecosANP | { erro: 'sem-cidade' | 'sem-servidor' | 'sem-internet' } };
+
+  // Nossa casa (recurso 'casa'). Sem casa, todos respondem erro 'sem-casa'
+  casaGasto: { dados: { id?: string; valor: number; desc?: string; cat?: string; data?: string; pagou?: string; participantes?: string[] }; volta: { ok: true; id: string } | Falha };
+  casaGastoApagar: { dados: { id: string }; volta: { ok: boolean } };
+  casaAcertar: { dados: { id?: string; de: string; para: string; valor: number }; volta: { ok: true; id: string } | Falha };
+  casaAcertoApagar: { dados: { id: string }; volta: { ok: boolean } };
+  casaContaPagar: { dados: { id: string; gastoId?: string }; volta: { ok: true; gastoId: string } | Falha };
+  casaConta: { dados: { id?: string; nome: string; valor: number; dia: number; cat?: string }; volta: { ok: true; id: string } | Falha };
+  casaContaApagar: { dados: { id: string }; volta: { ok: boolean } };
+  // texto: "2 leite, pão; café"; itens: uma lista pronta (somar: false)
+  casaListaAdicionar: { dados: { texto?: string; itens?: { texto: string; qtd?: number; obs?: string }[]; somar?: boolean }; volta: { novos: number; ja: { id: string; texto: string; qtd: number }[] } };
+  casaLista: { dados: { id: string; feito?: boolean; texto?: string; qtd?: number; obs?: string | null }; volta: { ok: boolean } };
+  casaListaTirar: { dados: { ids: string[] }; volta: { ok: boolean; itens: unknown[] } }; // itens: como estavam, para o Desfazer
+  casaListaRestaurar: { dados: { itens: unknown[] }; volta: { ok: boolean } };
+  casaListaLimite: { dados: { limite: number | null }; volta: { ok: boolean } };
+  casaAvisarMercado: { dados: null; volta: { ok: true; enviados: number; recente: boolean } | Falha };
+  casaTrazer: { dados: { ids: string[]; dividir: boolean }; volta: { ok: true; n: number } | Falha };
+  casaNota: {
+    dados: { id: string };
+    volta: { loja: string; data: string; total: number; fonte: string | null; url: string | null; temFoto: boolean; itens: { nome: string; qtd: number; un: string | null; unit: number; valor: number }[] } | null;
+  };
+
+  // A foto de um veículo ou de alguém da casa (data URL), fora do retrato; o app guarda por id + fotoK
+  foto: { dados: { de: 'veiculo' | 'membro'; id: string }; volta: string | null };
+
   apagarLanc: { dados: { id: string }; volta: { ok: boolean } };
   bolinha: { dados: { texto: string; historico: { quem: 'eu' | 'ela'; texto: string }[] }; volta: RespostaBolinha };
   banco: { dados: { rota: 'resumo' | 'estado'; forcar?: boolean }; volta: ResumoBanco };
@@ -137,10 +323,15 @@ let gravarDepois: ReturnType<typeof setTimeout> | undefined;
 export function receberEstado(e: Estado) {
   estado.mudar(e);
   clearTimeout(gravarDepois);
-  gravarDepois = setTimeout(() => gravarLocal(K_ESTADO, e.logado ? e : { ...e, pessoal: null, consultorio: null }), 600);
+  // sem login, nada dos dados da pessoa fica guardado no aparelho
+  gravarDepois = setTimeout(() => gravarLocal(K_ESTADO, e.logado ? e : { ...e, pessoal: null, consultorio: null, transporte: null, casa: null }), 600);
 }
 export const lerEstado = () => estado.ler();
 export const useEstado = () => useSyncExternalStore(estado.ouvir, estado.ler);
+
+// O site já atende a tela nativa deste recurso? (sem ele, uma cópia antiga do site: o app abre a área no site)
+export const temRecurso = (e: Estado | null | undefined, r: Recurso) => !!e?.recursos?.includes(r);
+export const useRecurso = (r: Recurso) => useSyncExternalStore(estado.ouvir, () => temRecurso(estado.ler(), r));
 export const useTemaEscolhido = (): TemaEscolhido => useSyncExternalStore(estado.ouvir, () => estado.ler()?.tema ?? 'auto');
 export const useSiteVivo = () => useSyncExternalStore(siteVivo.ouvir, siteVivo.ler);
 // true/false pelo último retrato; null quando o site ainda não mandou nenhum (primeira abertura)
@@ -148,12 +339,14 @@ export const useLogado = (): boolean | null => useSyncExternalStore(estado.ouvir
 
 // Esconder os valores (o "olho" do topo): vale para todas as telas e fica guardado
 export const useOculto = () => useSyncExternalStore(oculto.ouvir, oculto.ler);
+export const lerOculto = () => oculto.ler(); // fora de componente (o texto de um recado)
 export const alternarOculto = () => { const n = !oculto.ler(); oculto.mudar(n); gravarLocal(K_OCULTO, n); };
 
 /* ---------- A camada do site ---------- */
 
 export const useWeb = () => useSyncExternalStore(web.ouvir, web.ler);
 export const lerWeb = () => web.ler(); // fora de componente (a camada do site, ao receber o retrato)
+export const ouvirWeb = (f: () => void) => web.ouvir(f); // fora de componente (voltar à tela nativa quando o site sai da frente)
 // motivo: o que levou o site para a frente ('login', 'area', 'banco', 'ajustes'...)
 export const mostrarWeb = (motivo = 'area') => web.mudar({ visivel: true, motivo });
 export const esconderWeb = () => { if (web.ler().visivel) web.mudar({ visivel: false, motivo: null }); };

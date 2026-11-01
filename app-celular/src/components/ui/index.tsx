@@ -10,6 +10,7 @@ export { Dinheiro, useContagem, useDizerValor, type DinheiroProps } from '@/comp
 export { Linha, Secao, Separador, type LinhaProps } from '@/components/ui/lista';
 export { corDoBanco, IconeCategoria, Logo, LogoBanco, useCategoria, type LogoProps } from '@/components/ui/logo';
 export { Mascote, type EstadoMascote, type MascoteProps } from '@/components/ui/mascote';
+export { esconderRecado, mostrarRecado, Recado, type DadosRecado } from '@/components/ui/recado';
 export { ESTILO_TEXTO, Texto, type TextoProps, type VarianteTexto } from '@/components/ui/texto';
 export { Esqueleto, EsqueletoLista, Vazio, type VazioProps } from '@/components/ui/vazio';
 export { BotaoRedondo, CamadaVidro, entradaCascata, temVidro, useSemTransparencia, useVidroAtivo, Vidro, type BotaoRedondoProps, type VidroProps } from '@/components/ui/vidro';

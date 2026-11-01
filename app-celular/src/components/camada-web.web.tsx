@@ -2,7 +2,8 @@
 // site (components/camada-web.tsx), um site de mentira.
 // - Manda o retrato da conta de exemplo (lib/exemplo.web.ts) e responde aos pedidos das telas (pedirSite em
 //   lib/motor.ts) com os mesmos formatos do site (registrarNativo em ../src/App.jsx): estado, banco, bolinha,
-//   lancar, apagarLanc, tema, conectarBanco, desligarBanco, sincronizar, sair e abrir.
+//   lancar, apagarLanc, tema, conectarBanco, desligarBanco, sincronizar, sair e abrir; os de Contas fixas,
+//   Transporte e Nossa casa ficam em lib/exemplo-areas.web.ts.
 // - Quando uma tela traz o site para a frente (mostrarWeb, abrirNoSite, sem login), aparece um painel que diz o que
 //   o site abriria ali, com o botão de voltar. No celular, ali fica o Avina do site de verdade.
 // - Parâmetros da URL: ?tema=dark|light|auto · ?vazio=1 · ?logado=0 (veja lib/exemplo.web.ts).
@@ -13,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Botao, Mascote, Texto } from '@/components/ui';
 import { Espaco, Fontes, useCores } from '@/constants/theme';
+import { ACOES_AREAS, atenderAreas } from '@/lib/exemplo-areas.web';
 import {
   bancosExemplo, CAT_ENTRADA, CATEGORIAS, logoDe, PREVIA, responderBolinhaExemplo, resumoExemplo, retratoExemplo, retratoSemLogin,
 } from '@/lib/exemplo.web';
@@ -59,7 +61,7 @@ const AREAS: Record<string, string> = { consultorio: 'Consultório', pessoal: 'P
 const ACOES: Record<string, string> = {
   ajustes: 'os Ajustes', perfil: 'o Perfil', avisos: 'os Avisos', 'excluir-conta': 'Excluir conta', 'importar-banco': 'Importar do banco',
   importar: 'Importar extrato', 'editar-lanc': 'a edição do lançamento', caixinha: 'a caixinha', contas: 'as contas fixas', 'nova-conta': 'Nova conta fixa',
-  teto: 'o teto da categoria', 'novo-lanc': 'Anotar gasto',
+  teto: 'o teto da categoria', 'novo-lanc': 'Anotar gasto', ...ACOES_AREAS,
 };
 function descrever(d: PedidosSite['abrir']['dados']) {
   const partes = [d.area ? `a área ${AREAS[d.area] ?? d.area}` : null, d.tela && d.area ? `na aba "${d.tela}"` : null, d.acao || (!d.area && d.tela) ? ACOES[d.acao || d.tela || ''] ?? `"${d.acao || d.tela}"` : null];
@@ -126,7 +128,14 @@ async function atender(acao: keyof PedidosSite | string, d: any): Promise<unknow
       return null;
     case 'sincronizar': await esperar(900); return null;
     case 'sair': publicar(retratoSemLogin(retrato.tema)); return null;
-    default: throw new Error('acao-desconhecida');
+    default: {
+      // Contas fixas, Transporte e Nossa casa: o site responde num instante e manda o retrato novo
+      await esperar(300);
+      const r = atenderAreas(acao, d, retrato);
+      if (!r) throw new Error('acao-desconhecida');
+      if (r.novo) publicar(r.novo);
+      return r.volta;
+    }
   }
 }
 

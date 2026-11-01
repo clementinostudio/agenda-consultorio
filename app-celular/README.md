@@ -16,7 +16,9 @@ recursos do celular.
   então login, nuvem e servidor funcionam igual ao site. Ela fica sempre montada, atrás das telas nativas, e vem para
   a frente no login e nas áreas que ainda não têm tela nativa (consultório, loja). Links de fora abrem fora.
 - **As telas nativas** (`src/app/`): Início com cartões que a pessoa escolhe (`/widgets`), Atividades, detalhe e
-  anotar lançamento, chat da Bolinha, Bancos (Open Finance), Perfil, gastos por categoria e posto mais barato.
+  anotar lançamento, chat da Bolinha, Bancos (Open Finance), Perfil, gastos por categoria, posto mais barato e Contas
+  fixas (`/contas`, com o detalhe `/conta/[id]` e a edição `/conta/editar`). Contas fixas, Transporte e Nossa casa só
+  abrem nativas quando o site diz que atende (`Estado.recursos`); senão, os atalhos abrem no site.
   Elas leem o retrato dos dados que o site manda e pedem as ações ao site (`src/lib/motor.ts`: `useEstado`,
   `pedirSite`, `abrirNoSite`). Peças de tela em `src/components/ui`, gráficos em `src/components/graficos`.
 - **Prévia no navegador:** os arquivos `*.web.ts(x)` trocam a WebView por dados de exemplo

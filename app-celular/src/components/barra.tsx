@@ -73,7 +73,8 @@ export function Barra({ aba, aoTrocar, aoAbrirAreas, areasAberta, pilula }: Barr
   );
 
   return (
-    <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end' }]}>
+    // zIndex: a barra fica sempre por cima das abas da casca (que usam zIndex para a aba ativa)
+    <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end', zIndex: 10 }]}>
       {/* o fim da tela vai sumindo atrás da barra (no Android e sem o vidro, a barra fica legível sobre os cartões) */}
       <LinearGradient
         pointerEvents="none"
@@ -146,7 +147,7 @@ export function FolhaAreas({ aberta, aoFechar }: { aberta: boolean; aoFechar: ()
   const areas = areasDe(e);
   if (!aberta) return null;
   return (
-    <View style={StyleSheet.absoluteFill}>
+    <View style={[StyleSheet.absoluteFill, { zIndex: 20 }]}>
       <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(180)} style={[StyleSheet.absoluteFill, { backgroundColor: c.escuro ? 'rgba(0,0,0,0.62)' : 'rgba(17,17,30,0.32)' }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={aoFechar} accessibilityRole="button" accessibilityLabel="Fechar as áreas" />
       </Animated.View>

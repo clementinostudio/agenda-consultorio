@@ -98,7 +98,7 @@ export default function Postos() {
           <Cartao padding={0} vidro={false} style={estilos.lista}>
             {p.lista.slice(1, 30).map((x, i) => (
               <Animated.View key={x.id} layout={LinearTransition} entering={FadeIn.delay(Math.min(i, 12) * 35)}>
-                {i > 0 ? <Separador style={{ marginHorizontal: Espaco.cinco }} /> : null}
+                {i > 0 ? <Separador recuo={Espaco.cinco} style={{ marginRight: Espaco.cinco }} /> : null}
                 <Pressable onPress={() => abrirMapa(x)} accessibilityRole="button" accessibilityLabel={`${x.nome}, ${preco(x.preco)}, ${km(x.dist)}. Abre no mapa`}
                   style={({ pressed }) => [estilos.linha, pressed && { backgroundColor: c.cartao2 }]}>
                   <View style={{ flex: 1, gap: 2 }}>

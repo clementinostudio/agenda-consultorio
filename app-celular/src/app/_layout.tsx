@@ -13,15 +13,18 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Abertura } from '@/components/abertura';
 import { CamadaWeb } from '@/components/camada-web';
 import { Trava } from '@/components/trava';
-import { Raio, useCores } from '@/constants/theme';
+import { useCores } from '@/constants/theme';
 
 // A abertura estática (splash do sistema) fica até a abertura animada assumir (components/abertura.tsx).
 // Garantia: some em 8 s, aconteça o que acontecer.
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ fade: true, duration: 250 });
 
-// Folhas que sobem de baixo (lançamento, anotar, widgets): alça no topo e os cantos do Avina
-const FOLHA = { presentation: 'formSheet', sheetGrabberVisible: true, sheetCornerRadius: Raio.cartao } as const;
+// Folhas que sobem de baixo (lançamento, anotar, widgets, detalhe e edição da conta fixa): alça no topo e os cantos do Avina
+// As folhas abrem como o modal padrão do iPhone (cartão que sobe e fecha puxando para baixo), igual ao posto mais
+// barato. O formSheet com alturas fracionadas deixava o conteúdo que rola sem altura num iPhone de verdade (a folha
+// do lançamento abria preta, só com os botões de baixo); na prévia web isso não aparece.
+const FOLHA = { presentation: 'modal' } as const;
 
 export default function Raiz() {
   const c = useCores();
@@ -45,9 +48,14 @@ export default function Raiz() {
               <Stack.Screen name="bancos" />
               <Stack.Screen name="perfil" />
               <Stack.Screen name="categorias" />
-              <Stack.Screen name="lancamento/[id]" options={{ ...folha, sheetAllowedDetents: [0.6, 1] }} />
-              <Stack.Screen name="novo" options={{ ...folha, sheetAllowedDetents: [0.75, 1] }} />
-              <Stack.Screen name="widgets" options={{ ...folha, sheetAllowedDetents: [0.6, 1] }} />
+              <Stack.Screen name="contas" />
+              <Stack.Screen name="transporte" />
+              <Stack.Screen name="casa" />
+              <Stack.Screen name="lancamento/[id]" options={folha} />
+              <Stack.Screen name="conta/[id]" options={folha} />
+              <Stack.Screen name="conta/editar" options={folha} />
+              <Stack.Screen name="novo" options={folha} />
+              <Stack.Screen name="widgets" options={folha} />
               <Stack.Screen name="postos" options={{ presentation: 'modal' }} />
             </Stack>
           </View>

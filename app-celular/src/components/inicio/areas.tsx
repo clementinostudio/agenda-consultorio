@@ -1,12 +1,19 @@
-// As áreas do Avina que abrem no site (Consultório, Pessoal completo, Loja, Casa, Transporte), conforme o que a
-// pessoa usa (Estado.modos). A mesma grade aparece na folha do botão "Avina" da barra e no cartão "Áreas do Avina".
+// As áreas do Avina (Consultório, Pessoal completo, Loja, Contas fixas, Casa, Transporte), conforme o que a pessoa usa
+// (Estado.modos). A mesma grade aparece na folha do botão "Avina" da barra e no cartão "Áreas do Avina".
+// Contas fixas, Nossa casa e Transporte abrem a tela nativa quando o site atende (Estado.recursos); com uma cópia
+// antiga do site, abrem no site, como antes (Contas fixas nem aparece: lá elas ficam dentro do Pessoal).
+import { router, type Href } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { comAlfa, Icone, Texto, Tocavel, type NomeIcone } from '@/components/ui';
 import { Espaco, Fontes, Raio, useCores, type Paleta } from '@/constants/theme';
-import { abrirNoSite, type Estado, type PedidosSite } from '@/lib/motor';
+import { abrirNoSite, temRecurso, type Estado, type PedidosSite } from '@/lib/motor';
 
-export type Area = { id: string; nome: string; descricao: string; icone: NomeIcone; cor: (c: Paleta) => string; abrir: PedidosSite['abrir']['dados'] };
+export type Area = {
+  id: string; nome: string; descricao: string; icone: NomeIcone; cor: (c: Paleta) => string;
+  abrir: PedidosSite['abrir']['dados']; // no site
+  rota?: Href; // a tela nativa, quando há
+};
 
 export function areasDe(e: Estado | null): Area[] {
   const modos = e?.modos ?? [];
@@ -15,11 +22,15 @@ export function areasDe(e: Estado | null): Area[] {
   if (modos.includes('pessoal')) lista.push({ id: 'pessoal', nome: 'Pessoal completo', descricao: 'Gastos, contas e caixinhas', icone: 'carteira', cor: (c) => c.menta, abrir: { area: 'pessoal' } });
   if (modos.includes('loja')) lista.push({ id: 'loja', nome: 'Loja', descricao: 'Caixa, gastos e o que falta', icone: 'loja', cor: (c) => c.loja, abrir: { area: 'loja' } });
   if (modos.includes('pessoal')) {
-    lista.push({ id: 'casa', nome: 'Nossa casa', descricao: 'Dinheiro a dois ou em família', icone: 'casa', cor: (c) => c.roxo, abrir: { area: 'casa' } });
-    lista.push({ id: 'transporte', nome: 'Transporte', descricao: 'Combustível e gastos do carro', icone: 'carro', cor: (c) => c.ciano, abrir: { area: 'transporte' } });
+    if (temRecurso(e, 'contas2')) lista.push({ id: 'contas', nome: 'Contas fixas', descricao: 'O que vence no mês e o que já foi pago', icone: 'calendario', cor: (c) => c.ambar, abrir: { area: 'pessoal', tela: 'contas' }, rota: '/contas' });
+    lista.push({ id: 'casa', nome: 'Nossa casa', descricao: 'Dinheiro a dois ou em família', icone: 'casa', cor: (c) => c.roxo, abrir: { area: 'casa' }, rota: temRecurso(e, 'casa') ? '/casa' : undefined });
+    lista.push({ id: 'transporte', nome: 'Transporte', descricao: 'Combustível e gastos do carro', icone: 'carro', cor: (c) => c.ciano, abrir: { area: 'transporte' }, rota: temRecurso(e, 'transporte') ? '/transporte' : undefined });
   }
   return lista;
 }
+
+// Abre a tela nativa da área (quando há) ou a área no site
+export const abrirArea = (a: Area) => (a.rota ? router.push(a.rota) : abrirNoSite(a.abrir));
 
 // A grade: duas colunas; com um número ímpar, a última ocupa a linha toda.
 // fundo: a cor dos quadradinhos (na folha, os cartões; dentro de um cartão, o tom de dentro)
@@ -32,7 +43,7 @@ export function GradeAreas({ areas, fundo, antesDeAbrir }: { areas: Area[]; fund
         return (
           <Tocavel
             key={a.id}
-            onPress={() => { antesDeAbrir?.(); abrirNoSite(a.abrir); }}
+            onPress={() => { antesDeAbrir?.(); abrirArea(a); }}
             accessibilityLabel={`${a.nome}. ${a.descricao}`}
             accessibilityHint="Abre esta área do Avina"
             style={[estilos.area, { backgroundColor: fundo ?? c.cartao, borderColor: c.linha }]}>

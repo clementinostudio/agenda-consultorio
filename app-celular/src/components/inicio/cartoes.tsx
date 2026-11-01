@@ -12,7 +12,7 @@ import {
 import { Espaco, Fontes, useCores } from '@/constants/theme';
 import { totaisBanco, useBanco } from '@/hooks/use-banco';
 import { dataRelativa, diasAte, dinheiro, haQuanto, mesAnterior, mesNome, porcento } from '@/lib/formato';
-import { abrirNoSite, useEstado, type Categoria, type Estado } from '@/lib/motor';
+import { abrirNoSite, useEstado, useRecurso, type Categoria, type Estado } from '@/lib/motor';
 
 // os cartões de meia largura têm um pouco menos de borda: sobra espaço para o valor num iPhone pequeno
 const MEIA = Espaco.quatro + 2;
@@ -256,8 +256,10 @@ export function CartaoContas({ r }: { r: ResumoMes }) {
   const dizer = useDizerValor();
   const c = useCores();
   const curto = useCurto();
+  const nativa = useRecurso('contas2');
   const [proxima, ...outras] = r.contasAbertas;
-  const abrir = () => abrirNoSite({ area: 'pessoal', tela: 'contas' });
+  // a tela nativa de Contas fixas, quando o site atende; senão, as contas no site
+  const abrir = () => (nativa ? router.push('/contas') : abrirNoSite({ area: 'pessoal', tela: 'contas' }));
   if (!proxima) {
     return (
       <Cartao onPress={abrir} rotulo="Contas a pagar: tudo pago este mês. Abre as contas" padding={MEIA} style={estilos.meia}>

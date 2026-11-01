@@ -20,7 +20,9 @@ export type NomeIcone =
   // categorias do site (ic: cart, food, heart, bag, money, bill, users, gear, receipt, more)
   | 'carrinho' | 'comida' | 'coracao' | 'sacola' | 'dinheiro' | 'conta' | 'pessoas' | 'recibo' | 'engrenagem' | 'pontos' | 'presente'
   // extras do chat e dos ajustes
-  | 'parar' | 'faisca' | 'local' | 'escudo' | 'info' | 'ordenar' | 'arrastar';
+  | 'parar' | 'faisca' | 'local' | 'escudo' | 'info' | 'ordenar' | 'arrastar'
+  // contas fixas
+  | 'codigoBarras';
 
 /* ---------- iPhone: SF Symbols [normal, cheio] ---------- */
 
@@ -103,6 +105,7 @@ const SF: Record<NomeIcone, [SFSymbol, SFSymbol?]> = {
   info: ['info.circle', 'info.circle.fill'],
   ordenar: ['arrow.up.arrow.down'],
   arrastar: ['line.3.horizontal'],
+  codigoBarras: ['barcode.viewfinder'],
 };
 
 /* ---------- Android: desenhos próprios (grade 24×24) ---------- */
@@ -198,6 +201,7 @@ const DESENHOS: Record<NomeIcone, Desenho> = {
   info: { t: [{ d: bola(12, 12, 8.8), c: true }, 'M12 11v5.5', { d: bola(12, 7.6, 1.05), p: true }] },
   ordenar: { t: ['M8 4v16', 'M4.5 7.5 8 4l3.5 3.5', 'M16 20V4', 'M12.5 16.5 16 20l3.5-3.5'] },
   arrastar: { t: ['M4 7h16', 'M4 12h16', 'M4 17h16'] },
+  codigoBarras: { t: ['M3.5 8V6A2.5 2.5 0 0 1 6 3.5h2', 'M16 3.5h2A2.5 2.5 0 0 1 20.5 6v2', 'M20.5 16v2a2.5 2.5 0 0 1-2.5 2.5h-2', 'M8 20.5H6A2.5 2.5 0 0 1 3.5 18v-2', 'M7.5 8.5v7', 'M10.5 8.5v7', 'M13 8.5v7', 'M16.5 8.5v7'] },
 };
 
 /* ---------- O componente ---------- */

@@ -1,6 +1,6 @@
 // Peças comuns das telas empurradas (Bancos, Perfil, Categorias): o topo com o voltar, as perguntas do sistema e o
 // caminho para abrir uma parte do site a partir delas.
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ActionSheetIOS, Alert, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BotaoRedondo, Cartao, Texto } from '@/components/ui';
 import { Espaco, Fontes, useCores } from '@/constants/theme';
-import { abrirNoSite, type PedidosSite } from '@/lib/motor';
+import { abrirNoSite, lerWeb, ouvirWeb, type PedidosSite } from '@/lib/motor';
 
 export const MARGEM = Espaco.quatro; // o espaço dos lados, o mesmo do Início
 export const ALTURA_TOPO = 56; // a barra do topo (o conteúdo começa abaixo dela)
@@ -54,6 +54,21 @@ export function voltarAoInicio() {
 export function abrirNoSiteDaqui(dados: PedidosSite['abrir']['dados'], motivo = 'area') {
   voltarAoInicio();
   return abrirNoSite(dados, motivo);
+}
+
+// O mesmo, e quando a pessoa sai do site (o voltar, ou o site fecha a janela que abriu: "nativo:voltar"), a tela de
+// onde ela veio aparece de novo (ex.: "Editar no site" nas Contas fixas volta para as Contas, não para o Início).
+// motivo: um nome só desta tela ('contas', 'transporte', 'casa'); se o site sair da frente por outro motivo, fica.
+export function abrirNoSiteEVoltar(dados: PedidosSite['abrir']['dados'], rota: Href, motivo: string) {
+  let viu = false;
+  const parar = ouvirWeb(() => {
+    const w = lerWeb();
+    if (w.visivel) { if (w.motivo === motivo) viu = true; else parar(); return; }
+    parar();
+    if (viu) router.push(rota);
+  });
+  setTimeout(parar, 30 * 60_000); // esquecida no site por meia hora: não volta mais sozinha
+  return abrirNoSiteDaqui(dados, motivo);
 }
 
 /* ---------- Perguntas do sistema ---------- */

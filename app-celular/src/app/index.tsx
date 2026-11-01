@@ -66,7 +66,9 @@ export default function Casca() {
   if (logado !== true) return <View style={{ flex: 1, backgroundColor: c.fundo }} />;
   return (
     <View style={{ flex: 1, backgroundColor: c.fundo }}>
-      <View style={{ flex: 1 }}>
+      {/* collapsable={false}: no celular, sem isso o React Native achata esta caixa vazia, os painéis (zIndex 1) viram
+          irmãos da barra e passam por cima dela; no navegador da prévia isso não acontece */}
+      <View style={{ flex: 1 }} collapsable={false}>
         <Painel visivel={aba === 'inicio'}>
           <Inicio pilula={pilula} rolagem={rolagemInicio} aoVerAtividades={() => trocar('atividades')} />
         </Painel>
