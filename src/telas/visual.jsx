@@ -74,7 +74,8 @@ export function Topo({ rotulo, valor, apoio, nav, tom, children }) {
 // Frase de comparação com o mês passado ("↑ R$ 177,60 a mais que setembro até o dia 29"); para gasto, subir é ruim
 export function Comparacao({ agora, antes, nomeAnt, ateDia }) {
   if (!(antes > 0)) return agora > 0 ? <span>Primeiro mês com gastos anotados</span> : <span>Nada anotado ainda</span>;
-  const d = agora - antes, quando = ateDia ? ` até o dia ${ateDia}` : "";
+  // "até o dia 21" não se separa: no celular, o "21" ficava sozinho na linha de baixo (e .vz-topo-apoio equilibra as linhas)
+  const d = agora - antes, quando = ateDia ? ` até\u00a0o\u00a0dia\u00a0${ateDia}` : "";
   if (Math.abs(d) < 1) return <span>Igual a {nomeAnt}{quando}</span>;
   return <span className={d > 0 ? "sobe" : "desce"}><i aria-hidden="true">{d > 0 ? "↑" : "↓"}</i>{brl(Math.abs(d))} {d > 0 ? "a mais" : "a menos"} que {nomeAnt}{quando}</span>;
 }

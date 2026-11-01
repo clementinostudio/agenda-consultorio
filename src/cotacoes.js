@@ -135,15 +135,19 @@ export const emReais = (valor, moeda, iof = false, cot = null) => {
   const taxa = cot || cotacaoDe(moeda);
   return Math.round(valor * taxa * (iof ? 1 + IOF_CARTAO / 100 : 1) * 100) / 100;
 };
+// formatadores guardados (montar um Intl.NumberFormat a cada valor é lento, e a lista de gastos chama para cada linha)
+const FORMATOS = new Map();
+const formato = (chave, opcoes) => { let f = FORMATOS.get(chave); if (!f) { f = new Intl.NumberFormat("pt-BR", opcoes); FORMATOS.set(chave, f); } return f; };
+const casasFixas = casas => formato(`n${casas}`, { minimumFractionDigits: casas, maximumFractionDigits: casas });
 export const fmtMoeda = (v, moeda) => {
-  try { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda, maximumFractionDigits: moeda === "JPY" || moeda === "CLP" ? 0 : 2 }).format(v || 0); }
+  try { return formato(`m${moeda}`, { style: "currency", currency: moeda, maximumFractionDigits: moeda === "JPY" || moeda === "CLP" ? 0 : 2 }).format(v || 0); }
   catch (e) { return `${moeda} ${(v || 0).toFixed(2)}`; }
 };
 export const fmtTaxa = v => {
   const casas = v < 0.1 ? 4 : v < 1 ? 3 : 2;
-  return v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  return casasFixas(casas).format(v);
 };
-export const fmtPct = (v, casas = 2) => `${(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas })}%`;
+export const fmtPct = (v, casas = 2) => `${casasFixas(casas).format(v || 0)}%`;
 export const quandoTxt = ts => {
   if (!ts) return "valor de referência";
   const d = new Date(ts), hoje = new Date();

@@ -137,7 +137,7 @@ export function BancosPainel({ caixinhas, act }) {
           return (
             <div key={c.id} className="ps-bk-linha">
               {/* o anel em volta da logo é o limite usado do cartão */}
-              {usado != null ? <Anel p={usado} tam={48} esp={3} cor={usado > .8 ? "var(--rose)" : "var(--mode)"} className="ps-bk-anel logo">{logo(c)}</Anel> : logo(c)}
+              {usado != null ? <Anel p={usado} tam={48} esp={3} cor={usado > .8 ? "var(--rose)" : "var(--mode)"} className="ps-bk-anel ps-bk-anel-logo">{logo(c)}</Anel> : logo(c)}
               <span className="ps-bk-mid">
                 <span className="ps-bk-nm">{nomeBanco(c.banco) ? `${nomeBanco(c.banco)} ${c.nome !== nomeBanco(c.banco) ? c.nome : ""}`.trim() : c.nome}{c.final ? <small> ·{c.final}</small> : null}</span>
                 <span className="ps-bk-sb">

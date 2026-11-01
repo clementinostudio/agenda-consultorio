@@ -148,7 +148,9 @@ button.ps-at:active { transform: scale(.985); }
 .big-amt.ps-valor { align-items: baseline; gap: 6px; }
 /* a cópia escondida do número dá a largura; o campo fica por cima, do mesmo tamanho (posição absoluta: não estica a caixa) */
 .big-amt.ps-valor .ps-valor-campo { position: relative; display: inline-block; max-width: calc(100% - 44px); font-size: 50px; color: inherit; }
-.big-amt.ps-valor .ps-valor-medida, .big-amt.ps-valor input { font-family: var(--f-display); font-size: 50px; font-weight: 700; letter-spacing: -.035em; line-height: 1.2; }
+/* número comprido em celular estreito: a letra diminui para caber (--n = quantos caracteres; ~.68em cada), senão o
+   começo saía cortado ("I5000,00" em 320 px) */
+.big-amt.ps-valor .ps-valor-medida, .big-amt.ps-valor input { font-family: var(--f-display); font-size: min(50px, calc((100vw - 96px) / (var(--n, 4) * .68))); font-weight: 700; letter-spacing: -.035em; line-height: 1.2; }
 .big-amt.ps-valor .ps-valor-medida { display: block; visibility: hidden; white-space: pre; padding: 0 .06em; overflow: hidden; }
 .big-amt.ps-valor input { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; min-width: 0; }
 .ps-lanc-banco { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 18px; background: var(--surface-2); }
@@ -189,8 +191,9 @@ button.ps-at:active { transform: scale(.985); }
 .ps-bk-sb { color: var(--muted); font-size: 12.5px; font-weight: 600; }
 .ps-bk-sb.perto, .ps-bk-sb em.perto { color: var(--rose); font-weight: 800; }
 /* cartão: a logo dentro do anel do limite usado */
-.ps-bk-anel.logo { flex: none; }
-.ps-bk-anel.logo .txn-av { width: 38px; height: 38px; }
+/* (nome próprio: a classe global .logo punha um quadrado branco em volta do anel) */
+.ps-bk-anel-logo { flex: none; }
+.ps-bk-anel-logo .txn-av { width: 38px; height: 38px; }
 .ps-bk-linha { flex-wrap: wrap; }
 .ps-bk-ligar { flex: 0 0 100%; padding-left: 56px; margin-top: -4px; }
 .ps-bk-ligar .bk-ligar { margin: 0; }

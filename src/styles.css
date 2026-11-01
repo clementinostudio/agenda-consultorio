@@ -16,7 +16,8 @@ img { max-width: 100%; }
   --surface:#161618; --surface-2:#1E1E21; --surface-3:#29292D; --card:#161618;
   --card-shadow:inset 0 1px 0 rgba(255,255,255,.045);
   --brilho-cartao:linear-gradient(to bottom,rgba(255,255,255,.028),rgba(255,255,255,0) 40%);
-  --line:rgba(255,255,255,.075); --line-forte:rgba(255,255,255,.12); --fg:#F4F4F5; --muted:#9B9BA3; --faint:#606068;
+  /* --faint também é texto (rótulos dos gráficos, rodapés, e-mail): ~4,5:1 sobre o cartão (#606068 dava 2,9:1) */
+  --line:rgba(255,255,255,.075); --line-forte:rgba(255,255,255,.12); --fg:#F4F4F5; --muted:#9B9BA3; --faint:#7E7E87;
   --accent:#2B46FF; --accent-hi:#4A62FF; --accent-soft:#171C3E; --accent-ink:#8FA4FF; --avatar-ink:#AFC0FF;
   --mint:#46E0A4; --mint-soft:#0F2A20; --mint-btn:#46E0A4; --loja:#FFA25E; --loja-soft:#33200F;
   --amber:#FFB648; --amber-soft:#33250F; --amber-solid:#FFB648;
@@ -34,7 +35,7 @@ img { max-width: 100%; }
   :root:not([data-theme="dark"]):not([data-app-theme="dark"]){
     --bg:#F2F2F5; --bg-glow:#FFFFFF; --dot:rgba(17,17,20,.07); --g-mercado:#059F6B; --g-casa:#3948E4; --g-transporte:#118FAA; --g-comida:#DD7B28; --g-saude:#D04480; --g-lazer:#6B46D7; --g-compras:#D8473D; --g-outros:#D4A30D;
     --surface:#FFFFFF; --surface-2:#F3F3F6; --surface-3:#E5E5EB; --card:#FFFFFF; --card-shadow:0 1px 2px rgba(17,17,26,.04),0 6px 18px rgba(17,17,26,.06); --brilho-cartao:none;
-    --line:rgba(17,17,20,.08); --line-forte:rgba(17,17,20,.13); --fg:#111114; --muted:#6B6B74; --faint:#A6A6AF;
+    --line:rgba(17,17,20,.08); --line-forte:rgba(17,17,20,.13); --fg:#111114; --muted:#6B6B74; --faint:#7A7A83;
     --accent-soft:#E6EAFF; --accent-ink:#2338C9; --avatar-ink:#2B46FF;
     --mint:#0E9466; --mint-soft:#DDF5EA; --mint-btn:#2BD08F; --loja:#B4530F; --loja-soft:#FFEBDC;
     --amber:#9A6200; --amber-soft:#FFF0D2;
@@ -49,7 +50,7 @@ img { max-width: 100%; }
 :root[data-theme="light"]:not([data-app-theme="dark"]),:root[data-app-theme="light"]{
   --bg:#F2F2F5; --bg-glow:#FFFFFF; --dot:rgba(17,17,20,.07); --g-mercado:#059F6B; --g-casa:#3948E4; --g-transporte:#118FAA; --g-comida:#DD7B28; --g-saude:#D04480; --g-lazer:#6B46D7; --g-compras:#D8473D; --g-outros:#D4A30D;
   --surface:#FFFFFF; --surface-2:#F3F3F6; --surface-3:#E5E5EB; --card:#FFFFFF; --card-shadow:0 1px 2px rgba(17,17,26,.04),0 6px 18px rgba(17,17,26,.06); --brilho-cartao:none;
-  --line:rgba(17,17,20,.08); --line-forte:rgba(17,17,20,.13); --fg:#111114; --muted:#6B6B74; --faint:#A6A6AF;
+  --line:rgba(17,17,20,.08); --line-forte:rgba(17,17,20,.13); --fg:#111114; --muted:#6B6B74; --faint:#7A7A83;
   --accent-soft:#E6EAFF; --accent-ink:#2338C9; --avatar-ink:#2B46FF;
   --mint:#0E9466; --mint-soft:#DDF5EA; --mint-btn:#2BD08F; --loja:#B4530F; --loja-soft:#FFEBDC;
   --amber:#9A6200; --amber-soft:#FFF0D2;
@@ -214,6 +215,14 @@ button:disabled{cursor:default}
 .bt b{font-family:var(--f-display);font-weight:600;font-size:16.5px;margin-top:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bt b .mny .cur{font-size:.62em;vertical-align:.5em;opacity:.65}
 .bt b .mny .cents{opacity:.6}
+/* celular: três valores lado a lado não cabem inteiros ("R$ 3.470,00" saía "R$ 3.47…" até 414 px). Ficam dois em cima
+   e o terceiro embaixo, de ponta a ponta, com o valor à direita: dinheiro não sai cortado */
+@media (max-width:429px){
+  .bal-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bal-tiles .bt:nth-child(3){grid-column:1/-1;flex-direction:row;align-items:baseline;justify-content:space-between;gap:10px}
+  .bal-tiles .bt:nth-child(3) b{margin-top:0}
+}
+@media (max-width:340px){.bt b{font-size:15px}}
 
 /* Quadros com ícone (estilo carteira) */
 .tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -1410,6 +1419,7 @@ button.catrow:active { background: var(--surface-2); }
 .tl-empty.com-ilustra { text-align: center; }
 .empty.com-ilustra .ghost-chip, .tl-empty.com-ilustra .ghost-chip { margin-left: auto; margin-right: auto; }
 .empty.com-ilustra .ghost-chip { margin-top: 12px; }
+.empty.com-ilustra .empty-tx { display: block; } /* o botão desce para a linha de baixo, no meio (ficava colado no fim da frase) */
 .goal-trofeu { position: absolute; right: -6px; top: -14px; width: 74px; height: 74px; object-fit: contain; animation: ilu-flutua 4s ease-in-out infinite; }
 .fim-cafe { width: 110px; height: 110px; object-fit: contain; margin: 0 auto 4px; animation: ilu-flutua 4s ease-in-out infinite; }
 .sheet-ilustra, .perfil-ilustra { width: 132px; height: 132px; object-fit: contain; margin: 0 auto; }

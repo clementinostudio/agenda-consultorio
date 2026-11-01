@@ -124,10 +124,11 @@ function GraficoLinha({ series, n, cor = "var(--mode)", altura = 132, eixo, lege
   const [toque, setToque] = useState(null);
   const ultimo = useRef(-1);
   const clip = useRef("pg" + Math.random().toString(36).slice(2, 8)).current;
-  useLayoutEffect(() => {
+  // a largura chega pelo ResizeObserver, logo depois do layout: ler clientWidth no useLayoutEffect forçava o layout da
+  // página inteira no meio do desenho, e um segundo desenho antes da primeira pintura (a área já tem a altura certa)
+  useEffect(() => {
     const el = caixa.current; if (!el) return;
-    setW(el.clientWidth);
-    if (typeof ResizeObserver === "undefined") return;
+    if (typeof ResizeObserver === "undefined") { setW(el.clientWidth); return; }
     const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)));
     ro.observe(el); return () => ro.disconnect();
   }, []);
@@ -250,7 +251,20 @@ function buscavel(l) {
 // Previsão do mês: simula dia a dia até o fim do mês, a partir do saldo de hoje.
 // Entra: o salário (se ainda não caiu) e as sessões marcadas (se o consultório conta como entrada).
 // Sai: as contas fixas que faltam, no dia do vencimento, e o gasto do dia a dia no ritmo de agora.
-function previsaoMes(db) {
+// Contas pesadas guardadas por versão dos dados: o db é trocado inteiro a cada mudança (nunca alterado no lugar), então
+// a conta feita para um db vale até a próxima mudança, no mesmo dia e com o mesmo perfil. (O Início chamava a previsão
+// quatro vezes e as assinaturas três a cada desenho, e o relógio redesenha a cada 30 s.)
+const GUARDADAS = new WeakMap();
+function guardado(db, nome, fazer) {
+  const dia = todayISO();
+  let g = GUARDADAS.get(db);
+  if (!g || g.dia !== dia || g.perfil !== PERFIL) { g = { dia, perfil: PERFIL, v: {} }; GUARDADAS.set(db, g); }
+  if (!(nome in g.v)) g.v[nome] = fazer();
+  return g.v[nome];
+}
+
+function previsaoMes(db) { return guardado(db, "previsao", () => previsaoAgora(db)); }
+function previsaoAgora(db) {
   const P = db.pessoal, hoje = todayISO(), ch = hoje.slice(0, 7), diaHoje = Number(hoje.slice(8, 10));
   const ultimo = new Date(Number(ch.slice(0, 4)), Number(ch.slice(5)), 0).getDate();
   const r = resumoPessoal(db, ch);
@@ -366,7 +380,8 @@ function CartaoHoje({ db, act }) {
 
 // Assinaturas esquecidas: o mesmo gasto, com o mesmo valor, em meses diferentes (geralmente vindo do extrato)
 const MARCAS_ASSINATURA = new Set(["netflix", "spotify", "deezer", "youtube", "primevideo", "disney", "max", "globoplay", "paramount", "crunchyroll", "appletv", "applemusic", "amazonmusic", "tidal", "telecine", "premiere", "mubi", "kindle", "audible", "skeelo", "skymais", "claro tv"]);
-function assinaturasAchadas(db, { usadas = false } = {}) {
+function assinaturasAchadas(db, { usadas = false } = {}) { return guardado(db, usadas ? "assin-usadas" : "assin", () => assinaturasAgora(db, usadas)); }
+function assinaturasAgora(db, usadas) {
   const P = db.pessoal, hoje = fromISO(todayISO());
   const meses = [0, 1, 2, 3].map(i => { const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; });
   const vistas = P.assinVistas || {};
@@ -532,6 +547,7 @@ function SaldoMes({ db, act }) {
   const pm = new Date(d.getFullYear(), d.getMonth() - 1, 1), chAnt = `${pm.getFullYear()}-${pad(pm.getMonth() + 1)}`;
   const nAnt = new Date(d.getFullYear(), d.getMonth(), 0).getDate(), nMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
   const anterior = useMemo(() => (rng === "mes" ? serieSaldo(db, `${chAnt}-01`, `${chAnt}-${pad(nAnt)}`) : []), [db, rng, chAnt, nAnt]);
+  // (no gráfico, o mês passado vai só até o último dia deste: a dica não mostra "1 de dez")
   const temAnt = anterior.some(x => x !== 0);
   const rotulo = rng === "mes" ? `Sobra de ${MES_LONGO[d.getMonth()]}` : `Saldo dos últimos ${rng} dias`;
   const mesAb = MES_ABREV[d.getMonth()];
@@ -541,8 +557,8 @@ function SaldoMes({ db, act }) {
       <div className="c3-saldo-v"><Money v={ESCONDER ? saldo : v} /></div>
       <div className="c3-saldo-sub"><span className="mais">+{brl(r.entrou)}</span><span className="menos">−{brl(r.saiu)}</span><span>no mês</span></div>
       {serie.length > 1 && <div className="c3-saldo-g ps-saldo-g" key={rng}>
-        <GraficoLinha n={rng === "mes" ? Math.max(nMes, nAnt) : serie.length} altura={124} cor={saldo < 0 ? "var(--rose)" : "var(--mode)"}
-          series={[...(temAnt ? [{ v: anterior, tipo: "fantasma" }] : []), { v: serie, tipo: "cheia" }]}
+        <GraficoLinha n={rng === "mes" ? nMes : serie.length} altura={124} cor={saldo < 0 ? "var(--rose)" : "var(--mode)"}
+          series={[...(temAnt ? [{ v: anterior.slice(0, nMes), tipo: "fantasma" }] : []), { v: serie, tipo: "cheia" }]}
           eixo={rng === "mes" ? eixoDoMes(nMes, serie.length - 1, mesAb) : [{ i: 0, t: diaMes(ini, t) }, { i: serie.length - 1, t: "hoje" }]}
           legenda={rng === "mes" && temAnt ? [{ t: MES_LONGO[d.getMonth()] }, { t: MES_LONGO[pm.getMonth()], tipo: "fantasma" }] : null}
           dica={i => { const dia = addDays(ini, i), ant = rng === "mes" && temAnt ? anterior[i] : null; return <><small>{i === serie.length - 1 ? "Hoje" : diaMes(dia, t)}</small>{i < serie.length ? brl(serie[i]) : "—"}{ant != null && <em>{MES_LONGO[pm.getMonth()].slice(0, 3)}: {brl(ant)}</em>}</>; }}
@@ -729,6 +745,7 @@ function GastosTab({ db, act, tema }) {
   const totalCat = soma(cats, c => c[1]) || 1;
   // o ritmo do mês: no mês atual, compara com o anterior até o mesmo dia
   const atual = off === 0, hojeD = Number(hoje.slice(8, 10));
+  // o gráfico tem os dias do mês mostrado; o mês passado entra até o mesmo dia (o dia 31 de outubro não vira "31 de nov")
   const nM = diasDoMes(m), nA = diasDoMes(pm);
   const serieA = useMemo(() => acumuladoMes(db, chave, nM).slice(0, atual ? hojeD : nM), [lancs, P.contas, chave, atual, hojeD]);
   const serieB = useMemo(() => acumuladoMes(db, chAnt, nA), [lancs, P.contas, chAnt]);
@@ -791,8 +808,8 @@ function GastosTab({ db, act, tema }) {
         <div className="col">
           <Topo rotulo={<>Saiu em <b>{nomeMes}</b>{ano}</>} valor={r.saiu} nav={{ ant: () => mudarMes(off - 1), prox: () => mudarMes(off + 1), podeProx: true }}
             apoio={<Comparacao agora={atual ? agoraAte : r.saiu} antes={atual ? antAte : serieB[nA - 1] || 0} nomeAnt={MES_LONGO[pm.getMonth()]} ateDia={atual ? hojeD : null} />}>
-            {temGraf ? <div className="ps-topo-g"><GraficoLinha key={chave} n={Math.max(nM, nA)} altura={128}
-              series={[...(serieB[nA - 1] > 0 ? [{ v: serieB, tipo: "fantasma" }] : []), ...(serieA.length > 1 ? [{ v: serieA, tipo: "cheia" }] : [])]}
+            {temGraf ? <div className="ps-topo-g"><GraficoLinha key={chave} n={nM} altura={128}
+              series={[...(serieB[nA - 1] > 0 ? [{ v: serieB.slice(0, nM), tipo: "fantasma" }] : []), ...(serieA.length > 1 ? [{ v: serieA, tipo: "cheia" }] : [])]}
               eixo={eixoDoMes(nM, atual ? hojeD - 1 : null, mesAb)}
               legenda={[{ t: nomeMes }, ...(serieB[nA - 1] > 0 ? [{ t: MES_LONGO[pm.getMonth()], tipo: "fantasma" }] : [])]}
               dica={i => <><small>{i + 1} de {mesAb}</small>{i < serieA.length ? brl(serieA[i]) : "—"}{serieB[i] != null && serieB[nA - 1] > 0 && <em>{antAb}: {brl(serieB[i])}</em>}</>}
@@ -833,7 +850,7 @@ function GastosTab({ db, act, tema }) {
               </div>
             ) : (
               <div className="g4-lanc-topo ps-ativ-topo">
-                <h3>{termo ? "Busca" : cat ? ct.nome : <>{nomeMes} <span>{m.getFullYear()}</span></>}</h3>
+                <h3>{termo ? "Busca" : cat ? ct.nome : <>{nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)} <span>{m.getFullYear()}</span></>}</h3>
                 <span className="panel-acts">
                   {lista.length > 0 && <button className="link" onClick={() => setSel(new Set())}><I.check /> Selecionar</button>}
                   <button className="link" onClick={act.importar}><I.upload /> Importar</button>
@@ -851,7 +868,7 @@ function GastosTab({ db, act, tema }) {
               {[["saida", "Saídas"], ["entrada", "Entradas"]].map(([v, l]) => <button key={v} type="button" className={"ps-chip" + (!cat && filtro === v ? " on" : "")} aria-pressed={!cat && filtro === v}
                 onClick={() => { setCat(null); setFiltro(!cat && filtro === v ? "tudo" : v); vibrar("toque"); }}>{l}</button>)}
               {bancos.map(b => <button key={b} type="button" className={"ps-chip" + (banco === b ? " on" : "")} aria-pressed={banco === b} onClick={() => { setBanco(banco === b ? null : b); vibrar("toque"); }}><SeloBanco banco={b} />{b}</button>)}
-              {catsChip.map(id => { const c = catDe(id); return <button key={id} type="button" className={"ps-chip cat" + (cat === id ? " on" : "")} style={catVars(c)} aria-pressed={cat === id} onClick={() => { setCat(cat === id ? null : id); setFiltro("tudo"); vibrar("toque"); }}><span className="ps-chip-cor" aria-hidden="true" />{c.nome}</button>; })}
+              {catsChip.map(id => { const c = catDe(id); return <button key={id} type="button" className={"ps-chip" + (cat === id ? " on" : "")} style={catVars(c)} aria-pressed={cat === id} onClick={() => { setCat(cat === id ? null : id); setFiltro("tudo"); vibrar("toque"); }}><span className="ps-chip-cor" aria-hidden="true" />{c.nome}</button>; })}
             </div>
             {termo && <div className="ps-ativ-info">{lista.length ? `${lista.length} ${lista.length === 1 ? "lançamento" : "lançamentos"} em todos os meses` : `Nada com “${busca.trim()}”${algumFiltro ? " nesses filtros" : ""}.`}</div>}
             {comConsult && (
@@ -861,7 +878,7 @@ function GastosTab({ db, act, tema }) {
                 <span className="ps-at-v entra">+{brl(r.consult)}</span>
               </div>
             )}
-            {grupos.length === 0 && !comConsult && !termo && <div className="empty com-ilustra"><Ilustra n="arquivo" /><b>{algumFiltro ? "Nada nesses filtros" : "Nada por aqui neste mês"}</b>{algumFiltro ? <button className="ghost-chip" onClick={limpar}><I.x /> Tirar os filtros</button> : <>Anote falando ou traga tudo do banco de uma vez.<button className="ghost-chip" onClick={act.importar}><I.upload /> Importar extrato</button></>}</div>}
+            {grupos.length === 0 && !comConsult && !termo && <div className="empty com-ilustra"><Ilustra n="arquivo" /><b>{algumFiltro ? "Nada nesses filtros" : "Nada por aqui neste mês"}</b>{algumFiltro ? <button className="ghost-chip" onClick={limpar}><I.x /> Tirar os filtros</button> : <><span className="empty-tx">Anote falando ou traga tudo do banco de uma vez.</span><button className="ghost-chip" onClick={act.importar}><I.upload /> Importar extrato</button></>}</div>}
             {visiveis.map(g => (
               <section key={g.d} className="ps-grupo" aria-label={tituloDia(g.d, hoje)} style={{ containIntrinsicSize: `auto ${alturaGrupo(g)}px` }}>
                 <div className="ps-dia"><h4>{tituloDia(g.d, hoje)}</h4>{g.saiu > 0 && g.itens.length > 1 && <small>−{brl(g.saiu)}</small>}</div>
@@ -1073,7 +1090,7 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onVoz, onFoto, onS
       <Seg big value={tipo} onChange={x => { setTipo(x); setCat(null); }} options={[{ v: "saida", l: "Gasto" }, { v: "entrada", l: "Entrada" }]} />
       {/* o campo tem a largura do número (medida por uma cópia escondida): o "R$" fica colado nele, e os dois juntos no centro */}
       <label className={"big-amt ps-valor" + (tipo === "entrada" ? " in" : "")} htmlFor="l-valor"><span>{simb}</span>
-        <span className="ps-valor-campo"><span className="ps-valor-medida" aria-hidden="true">{valor || "0,00"}</span>
+        <span className="ps-valor-campo" style={{ "--n": Math.max(4, (valor || "0,00").length) }}><span className="ps-valor-medida" aria-hidden="true">{valor || "0,00"}</span>
           <input id="l-valor" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" autoFocus={!inicial} placeholder="0,00" value={valor} onChange={e => setValor(soNumero(e.target.value))} aria-label="Valor" /></span>
       </label>
       {inicial && nomeBanco(inicial.banco) && <div className="ps-lanc-banco"><span className="ps-at-av"><MarcaLogo marca={(acharMarca(nomeBanco(inicial.banco)) || {}).id} nome={nomeBanco(inicial.banco)} className="txn-av" /></span><span><b>{nomeBanco(inicial.banco)}</b><small>Veio do banco pelo Open Finance. Mudar aqui não muda lá.</small></span></div>}

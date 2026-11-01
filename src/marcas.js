@@ -463,6 +463,7 @@ const LISTA = [
 
 export const MARCAS = LISTA.map(([id, nome, site, cat, ...apelidos], ordem) => ({
   id, nome, site, cat, ordem,
+  nomeN: normalizar(nome), // o nome já normalizado: as buscas comparam com ele centenas de vezes
   apelidos: apelidos.filter(a => typeof a === "string").map(normalizar),
   re: apelidos.map(p => (p instanceof RegExp ? p : new RegExp(`\\b${normalizar(p).replace(/[.$]/g, m => "\\" + m)}\\b`))),
 }));
@@ -536,8 +537,7 @@ const COMUNS = new Set("mercado mercados supermercado supermercados super atacad
 
 // Pontua o quanto o texto digitado combina com uma marca (0 a 100)
 function pontuar(q, m) {
-  const nome = normalizar(m.nome);
-  const alvos = [nome, ...m.apelidos];
+  const alvos = [m.nomeN, ...m.apelidos];
   let melhor = 0;
   const palavrasQ = q.split(" ").filter(w => w.length >= 3 && !COMUNS.has(w));
   for (const a of alvos) {
@@ -568,20 +568,37 @@ function pontuar(q, m) {
   return melhor;
 }
 
-// Sugestões enquanto digita: as marcas mais parecidas, da mais provável para a menos
+// Sugestões enquanto digita: as marcas mais parecidas, da mais provável para a menos.
+// Guarda a lista de cada texto: a mesma tecla pede a busca várias vezes (a logo, as sugestões, a categoria)
+const BUSCAS = new Map();
 export function buscarMarcas(texto, limite = 6) {
   const q = normalizar(texto);
   if (q.length < 2) return [];
-  const res = [];
-  for (const m of MARCAS) { const p = pontuar(q, m); if (p >= 55) res.push({ m, p }); }
-  res.sort((a, b) => b.p - a.p || a.m.ordem - b.m.ordem);
-  const vistos = new Set(); const out = [];
-  for (const r of res) { if (vistos.has(r.m.id)) continue; vistos.add(r.m.id); out.push(r); if (out.length >= limite) break; }
-  return out;
+  let lista = BUSCAS.get(q);
+  if (!lista) {
+    const res = [];
+    for (const m of MARCAS) { const p = pontuar(q, m); if (p >= 55) res.push({ m, p }); }
+    res.sort((a, b) => b.p - a.p || a.m.ordem - b.m.ordem);
+    const vistos = new Set(); lista = [];
+    for (const r of res) { if (vistos.has(r.m.id)) continue; vistos.add(r.m.id); lista.push(r); if (lista.length >= 12) break; }
+    if (BUSCAS.size > 300) BUSCAS.clear();
+    BUSCAS.set(q, lista);
+  }
+  return lista.slice(0, limite);
 }
 
-// Acha a marca citada numa frase ("gastei 30 no carrefuor"): primeiro pelo nome exato, depois tolerando erro de digitação
+// Acha a marca citada numa frase ("gastei 30 no carrefuor"): primeiro pelo nome exato, depois tolerando erro de digitação.
+// Guarda o que achou para cada frase: as telas perguntam pelos mesmos nomes a cada desenho (e a parte tolerante é lenta)
+const ACHADAS = new Map();
 export function acharMarca(frase) {
+  const k = String(frase ?? "");
+  if (ACHADAS.has(k)) return ACHADAS.get(k);
+  const m = acharMarcaAgora(k);
+  if (ACHADAS.size > 3000) ACHADAS.clear();
+  ACHADAS.set(k, m);
+  return m;
+}
+function acharMarcaAgora(frase) {
   const t = " " + normalizar(frase) + " ";
   let melhor = null, pos = 1e9;
   for (const m of MARCAS) for (const re of m.re) {
@@ -595,7 +612,7 @@ export function acharMarca(frase) {
   palavras.forEach((w, i) => { if (w.length >= 5 && !COMUNS.has(w)) pedacos.push(w); if (i < palavras.length - 1 && !COMUNS.has(w) && !COMUNS.has(palavras[i + 1])) pedacos.push(w + " " + palavras[i + 1]); });
   let achou = null, nota = 0;
   for (const p of pedacos) for (const m of MARCAS) {
-    for (const a of [normalizar(m.nome), ...m.apelidos]) {
+    for (const a of [m.nomeN, ...m.apelidos]) {
       if (a.length < 5 || COMUNS.has(a) || Math.abs(a.length - p.length) > 2) continue;
       // erro de digitação quase nunca troca a primeira letra ("venda" não é "Tenda"),
       // e o começo de um nome não é o nome ("cinema" não é "Cinemark")

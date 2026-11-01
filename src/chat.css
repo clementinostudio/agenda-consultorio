@@ -175,6 +175,17 @@
   .chat-msg.eu p { font-size: 15.5px; }
 }
 @keyframes chat-lado { from { opacity: 0; transform: translateX(36px); } }
+@media (min-width: 900px) {
+  /* uma folha aberta com a conversa do lado ("Anotar gasto" na lateral) fica na frente do painel, inteira (o X e o valor à vista) */
+  html.com-camada .chat-ia { z-index: 39; }
+}
+/* com espaço, a tela fica ao lado do painel em vez de atrás dele (dá para ver o que acabou de ser anotado) */
+@media (min-width: 1200px) {
+  html.com-chat .app { padding-right: calc(min(440px, 100vw - 28px) + 42px); }
+}
+@media (min-width: 1200px) and (max-width: 1599px) {
+  html.com-chat .cols { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---------- o botão da Bolinha no computador ----------
    No canto de baixo, num círculo de vidro (antes ficava sobre um quadrado: o fundo da barra do celular vazava aqui) */

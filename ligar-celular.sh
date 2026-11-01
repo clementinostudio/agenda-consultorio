@@ -11,5 +11,11 @@ echo "Montando o Avina para dentro do app..."
 npm run --silent build:celular || exit 1
 cd app-celular || exit 1
 if [ ! -d node_modules ]; then echo "Instalando o app (só na primeira vez, demora uns minutos)..."; npm install --no-audit --no-fund || exit 1; fi
-if [ "$1" = "--tunnel" ] && [ ! -d node_modules/@expo/ngrok ]; then npm install --no-save @expo/ngrok@^4.1.0 --no-audit --no-fund; fi
-npx expo start --clear "$@"
+if [ "$1" = "--tunnel" ]; then
+  # o túnel do próprio Expo pede login numa conta Expo (SDK 58); o do ngrok funciona sem conta
+  if [ ! -d node_modules/@expo/ngrok ]; then npm install --no-save @expo/ngrok@^4.1.0 --no-audit --no-fund; fi
+  shift
+  npx expo start --clear --tunnel ngrok "$@"
+else
+  npx expo start --clear "$@"
+fi

@@ -13,8 +13,6 @@ import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monogr
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
 import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro, registrarAcesso } from "./nuvem.js";
 import { lerBoleto, acharBoleto } from "./boleto.js";
-import { buscarCnpj, cnpjValido } from "./cnpj.js";
-import { ehLinkNfce } from "./nota.js";
 import { lerInflacao, atualizarInflacao, useInflacao, acumulado, valorSugerido, nomeMesCurto } from "./inflacao.js";
 import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
 import { AVATARES, ehAvatarPronto, avatarAtualizado } from "./avatares.js";
@@ -182,7 +180,9 @@ const modoDaAba = t => t.startsWith("p-") ? "pessoal" : t.startsWith("l-") ? "lo
 const NOME_MODO = { consultorio: "Consultório", pessoal: "Pessoal", loja: "Loja" };
 // por onde o app abre depois do cadastro: quem tem loja começa nela
 const modoInicial = p => (p && p.loja ? "loja" : modosDo(p)[0]);
-const brlReal = v => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+// formatador guardado: toLocaleString com opções monta um novo a cada chamada (~50x mais lento, e são centenas por tela)
+const FMT_BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const brlReal = v => FMT_BRL.format(Number(v) || 0);
 const brl = v => ESCONDER ? "R$ •••" : brlReal(v);
 const num = v => { let s = String(v).trim(); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
 const fmtNum = v => (Number(v) || 0).toFixed(2).replace(".", ",");
@@ -221,7 +221,17 @@ const contaDinheiro = s => s.status === "done" || !!s.cobrada;
 const sessoesAbertas = (db, pid) =>
   db.sessions.filter(s => s.patientId === pid && contaDinheiro(s) && !s.chargeId).sort((a, b) => a.date.localeCompare(b.date));
 
+// Guardado por versão dos dados: o db é trocado inteiro a cada mudança (nunca alterado no lugar), e a agenda, o Início
+// e a previsão pedem os mesmos dias muitas vezes a cada desenho (o relógio redesenha a cada 30 s)
+const DIAS_GUARDADOS = new WeakMap();
 function itensDoDia(db, iso) {
+  let porDia = DIAS_GUARDADOS.get(db);
+  if (!porDia) { porDia = new Map(); DIAS_GUARDADOS.set(db, porDia); }
+  let itens = porDia.get(iso);
+  if (!itens) { itens = itensDoDiaAgora(db, iso); porDia.set(iso, itens); }
+  return itens;
+}
+function itensDoDiaAgora(db, iso) {
   const itens = db.sessions.filter(s => s.date === iso).map(s => ({
     kind: "log", session: s, patient: db.patients.find(p => p.id === s.patientId), date: iso, time: s.time,
   })).filter(i => i.patient);
@@ -1086,6 +1096,10 @@ function duvidoso(r, t) {
 const tituloCurto = s => { const t = String(s || "").trim().slice(0, 40); return t ? t.charAt(0).toUpperCase() + t.slice(1) : ""; };
 // "quanto gastei de uber?", "quem está devendo?" (só vale quando a frase não virou anotação)
 const ehPergunta = t => /\?\s*$/.test(String(t || "")) || /^(quanto|quantos|quantas|qual|quais|quem|quando|onde|como|o que|oque|por que|porque|sera que|me (diz|fala|mostra|conta|lembra)|tenho|tem algum|tem alguma|ja paguei|estou|devo|posso|consigo|preciso)\b/.test(semAcento(String(t || "")).trim());
+// Pergunta sem dúvida (termina com "?" ou começa com quanto, quais, quem…): vale antes de tentar anotar, senão o número
+// da pergunta vira gasto ("quanto gastei nos últimos 3 meses?" virava R$ 3,00). "Tenho", "devo", "preciso"… começam
+// anotações também, então continuam valendo só quando a frase não virou anotação (ehPergunta).
+const perguntaClara = t => /\?\s*$/.test(String(t || "")) || /^(quanto|quantos|quantas|qual|quais|quem|quando|onde|como|o que|oque|por que|porque|sera que|me (diz|fala|mostra|conta|lembra))\b/.test(semAcento(String(t || "")).trim());
 
 // Pede à IA para transformar a frase em anotação; confere tudo aqui antes de usar
 async function entenderIA(texto, db) {
@@ -1194,8 +1208,10 @@ async function lerComprovante(file) {
   if (marca && tipo === "saida" && CATEGORIAS.some(c => c.id === marca.cat)) cat = marca.cat;
   const data = /^\d{4}-\d{2}-\d{2}$/.test(d.data || "") && d.data <= todayISO() && d.data >= addDays(todayISO(), -400) ? d.data : todayISO();
   let desc = marca ? marca.nome : tituloCurto(desc0), catLoja = null;
-  // sem marca conhecida, o CNPJ do comprovante (quando aparece) diz o nome da loja e o ramo dela (BrasilAPI)
-  if (cnpjValido(d.cnpj)) {
+  // sem marca conhecida, o CNPJ do comprovante (quando aparece) diz o nome da loja e o ramo dela (BrasilAPI).
+  // (cnpj.js e nota.js vêm só aqui, quando precisam: não pesam na abertura do app)
+  const { cnpjValido, buscarCnpj } = d.cnpj ? await import("./cnpj.js").catch(() => ({})) : {};
+  if (cnpjValido && cnpjValido(d.cnpj)) {
     const q = await buscarCnpj(d.cnpj, 4000).catch(() => null);
     if (q) { catLoja = q.catLoja; if (!marca) { desc = q.nome; if (tipo === "saida" && q.cat) cat = q.cat; } }
   }
@@ -1664,13 +1680,18 @@ const CAMADAS = [];
 let ignorarVolta = 0, guarda = false, tVolta = 0;
 const vivas = () => CAMADAS.filter(c => !c.voltou).length;
 const porGuarda = () => { if (guarda) return; try { history.pushState({ alvenaGuarda: 1 }, ""); guarda = true; } catch (e) {} };
-function corDaBarra() {
+// a cor da névoa, lida uma vez por tema: ler o estilo a cada painel que abre forçava recalcular a página inteira
+let NEVOA = null;
+function corDaBarra(temaMudou) {
   try {
     // a barra de status fica sempre escura, na cor da névoa do topo (combina com ela nos dois temas)
-    const v = getComputedStyle(document.documentElement).getPropertyValue("--topo-nevoa").trim();
-    const m = /^#([\da-f]{6})$/i.test(v) ? [0, 2, 4].map(i => parseInt(v.slice(1 + i, 3 + i), 16)) : (v.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
-    if (m.length < 3) return;
-    const k = CAMADAS.some(c => c.escurece) ? .42 : 1;
+    if (!NEVOA || temaMudou === true) {
+      const v = getComputedStyle(document.documentElement).getPropertyValue("--topo-nevoa").trim();
+      const m = /^#([\da-f]{6})$/i.test(v) ? [0, 2, 4].map(i => parseInt(v.slice(1 + i, 3 + i), 16)) : (v.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+      if (m.length < 3) return;
+      NEVOA = m;
+    }
+    const m = NEVOA, k = CAMADAS.some(c => c.escurece) ? .42 : 1;
     const hex = "#" + m.map(x => Math.round(x * k).toString(16).padStart(2, "0")).join("");
     document.querySelectorAll('meta[name="theme-color"]').forEach(el => { el.setAttribute("content", hex); el.removeAttribute("media"); });
   } catch (e) {}
@@ -1695,15 +1716,17 @@ window.addEventListener("popstate", () => {
   if (c.fechar() === false) c.voltou = false;
   setTimeout(() => { if (vivas()) porGuarda(); }, 0);
 });
-function useCamada(fechar, { recua = false, escurece = true } = {}) {
+function useCamada(fechar, { recua = false, escurece = true, nome = "" } = {}) {
   const ref = useRef(fechar); ref.current = fechar;
   useEffect(() => {
-    const c = { fechar: () => ref.current(), voltou: false, recua, escurece };
+    const c = { fechar: () => ref.current(), voltou: false, recua, escurece, nome };
     CAMADAS.push(c); mudouCamadas();
     return () => { const i = CAMADAS.indexOf(c); if (i >= 0) CAMADAS.splice(i, 1); mudouCamadas(); };
   }, []);
 }
-function Camada({ onFechar, recua, escurece }) { useCamada(onFechar, { recua, escurece }); return null; }
+function Camada({ onFechar, recua, escurece, nome }) { useCamada(onFechar, { recua, escurece, nome }); return null; }
+// a camada de cima é esta? (o Esc de quem fica por baixo não deve fechar junto a folha que abriu por cima)
+const camadaNoTopo = nome => { const c = [...CAMADAS].reverse().find(x => !x.voltou); return !c || c.nome === nome; };
 
 function Sheet({ title, sub, onClose, children }) {
   // Arrastar para baixo pela alça (ou pelo título) fecha, igual aos apps do celular.
@@ -1845,13 +1868,18 @@ function VoltarAoApp({ className = "icon-btn" }) {
   if (!nativoV2) return null;
   return <button className={className} onClick={() => chamarApp("nativo:voltar").catch(() => {})} aria-label="Voltar ao início do app"><I.setaL /></button>;
 }
+// App de celular (ponte 2): a aba que o próprio app abriu (pedido "abrir"). Enquanto a pessoa não troca de aba no site,
+// o voltar dessa tela leva de volta ao app, e não a outra tela do site. O Painel limpa quando a aba muda.
+let ABA_DO_APP = null;
+const voltarDaTela = voltar => { if (nativoV2 && ABA_DO_APP) chamarApp("nativo:voltar").catch(() => voltar()); else voltar(); };
 
 function TopBar({ eyebrow, title, act, tema, extra, voltar }) {
   return (
     <header className={"top" + (voltar || nativoV2 ? " com-voltar" : "")}>
-      {nativoV2
-        ? <span className="top-voltar" style={{ display: "flex", gap: 8 }}><VoltarAoApp />{voltar && <button className="icon-btn" onClick={voltar} aria-label="Voltar"><I.chevL /></button>}</span>
-        : voltar && <button className="icon-btn top-voltar" onClick={voltar} aria-label="Voltar"><I.chevL /></button>}
+      {/* no app, a tela com voltar próprio fica só com ele (dois botões de voltar lado a lado confundem) */}
+      {voltar
+        ? <button className="icon-btn top-voltar" onClick={() => voltarDaTela(voltar)} aria-label="Voltar"><I.chevL /></button>
+        : nativoV2 && <span className="top-voltar" style={{ display: "flex", gap: 8 }}><VoltarAoApp /></span>}
       <div style={{ minWidth: 0 }}><div className="eyebrow">{eyebrow}</div><h1>{title}</h1></div>
       <div className="top-actions">
         {extra}
@@ -2736,7 +2764,8 @@ function reajusteDe(p, inf = lerInflacao()) {
   const ac = acumulado(inf.ipca, desde);
   return { meses: Math.floor(diffDias(desde, t) / 30), ac, sug: ac && ac.pct > 0 ? valorSugerido(p.price, ac.pct) : null };
 }
-const pctTxt = v => `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+const FMT_PCT1 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const pctTxt = v => `${FMT_PCT1.format(v)}%`;
 // Recado para o paciente, pronto para mandar (tom de combinado, não de cobrança)
 function recadoReajuste(p, novo, ac) {
   const prox = new Date(); prox.setMonth(prox.getMonth() + 1, 1);
@@ -3087,7 +3116,8 @@ function useContagem(alvo) {
   return v;
 }
 const quandoTxt = off => off === 2 ? "Anteontem" : off === 1 ? "Ontem" : "Hoje";
-const reais = v => (Math.round(v * 100) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const FMT_REAIS = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const reais = v => FMT_REAIS.format(Math.round(v * 100) / 100);
 
 /* ---------- Bolinha, o mascote do microfone ----------
    Minimalista: uma bola com dois olhinhos em pílula. Toda a expressão está nos olhos.
@@ -3290,12 +3320,18 @@ async function responderBolinha(db, usaPessoal, texto, historico) {
     return { tipo: "resposta", texto: respostaGastar(db, t) };
   }
   const r = entenderFrase(t, db);
+  // "quanto gastei nos últimos 3 meses?" é pergunta, mesmo com número
+  if (perguntaClara(t)) return perguntar();
   const ok = r.tipo === "consult" ? r.c.ok : r.itens.length > 0 && r.itens.every(i => i.valor > 0) && usaPessoal;
   if (ok) {
     if (r.tipo === "consult") return naAgenda(r.c);
     // entendeu, mas com cara de chute (sem saber onde foi, ou sobrou valor na frase): confere com a IA
     if (duvidoso(r, t) && iaDisponivel() && (await permitirIA())) {
-      try { const r2 = await entenderIA(t, db); if (r2 && r2.tipo === "gastos") return proposta(r2.itens); } catch (e) {}
+      try {
+        const r2 = await entenderIA(t, db);
+        if (r2 && r2.tipo === "pergunta") return perguntar();
+        if (r2 && r2.tipo === "gastos") return proposta(r2.itens);
+      } catch (e) {}
     }
     return proposta(r.itens);
   }
@@ -3434,7 +3470,10 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
   const [notas, setNotas] = useState({}); // gostei/não gostei de cada resposta desta conversa
   const [copia, setCopia] = useState(null); // { id, ok }: a resposta que acabou de ser copiada
   const [falandoId, setFalandoId] = useState(null); // a resposta que está sendo lida em voz alta
-  const addFala = (quem, texto) => setConversa(c => [...c, { id: uid(), quem, texto }].slice(-12));
+  // aviso: true marca um aviso ou erro dela ("Faltou o valor…"): fica na conversa, mas sem as ações e fora do histórico da IA
+  const addFala = (quem, texto, aviso) => setConversa(c => [...c, { id: uid(), quem, texto, ...(aviso ? { aviso: true } : {}) }].slice(-12));
+  // no chat, o aviso entra na conversa (e não some na próxima mensagem); na barra de voz, fica embaixo da Bolinha
+  const avisar = msg => { if (chatAberto.current) { addFala("ela", msg, true); setAviso(""); } else setAviso(msg); setFase("faltando"); vibrar("aviso"); };
   const calar = () => { pararFala.current(); pararFala.current = () => {}; setFalandoResp(false); setFalandoId(null); };
   const responderFalando = (texto, depois) => {
     if (!comSom || !falaLigada()) { if (depois) depois(); return; }
@@ -3444,7 +3483,7 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
   };
   const pronto = () => { setConta(3); setFase("contando"); vibrar("ok"); if (tecRef.current) tecRef.current.blur(); };
   const perguntar = async (t, minha, deVoz, jaMostrou) => {
-    let antes = conversaRef.current; const ult = antes[antes.length - 1];
+    let antes = conversaRef.current.filter(m => !m.aviso); const ult = antes[antes.length - 1];
     if (ult && ult.quem === "eu" && ult.texto === t) antes = antes.slice(0, -1); // a pergunta de agora vai à parte
     const hist = antes.slice(-8).map(m => ({ quem: m.quem, texto: m.texto }));
     setChat(true); if (!jaMostrou) addFala("eu", t); setTexto(""); setRes(null);
@@ -3457,7 +3496,7 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
       if (tecRef.current) tecRef.current.blur();
       // perguntou falando: depois da resposta, o microfone reabre para a próxima pergunta, como numa conversa
       responderFalando(resp, () => { if (deVoz && vez.current === minha && ativoRef.current) comecar(false, null, true); });
-    } catch (e) { if (vez.current !== minha) return; setAviso(msgIA(e)); setFase("faltando"); vibrar("aviso"); }
+    } catch (e) { if (vez.current !== minha) return; avisar(msgIA(e)); }
   };
   const concluir = async (t0, alts, deVoz) => {
     const minha = ++vez.current;
@@ -3466,6 +3505,8 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
     if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la)\b/.test(semAcento(t))) { fechar(); return; }
     // no chat, tudo o que você diz ou escreve vira o seu balão
     const noChat = chatAberto.current;
+    // um gasto ainda na contagem do "Salvar (3)": fica anotado antes da frase nova (antes, a nova tomava o lugar dele)
+    if (fase === "contando" && res) anotarPendente(res);
     if (noChat) { addFala("eu", t); setTexto(""); }
     // "obrigado", "tchau": encerra a conversa com educação
     if (conversaRef.current.length && FIM_CONVERSA.test(semAcento(t))) {
@@ -3487,19 +3528,24 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
       return;
     }
     const r = entender(t);
-    if (okDe(r)) {
+    // "quanto gastei nos últimos 3 meses?" é pergunta, mesmo com número: não vira anotação
+    const pergunta = perguntaClara(t);
+    if (!pergunta && okDe(r)) {
       // entendeu, mas ficou com cara de chute (sem saber onde foi, ou sobrou valor na frase): confere com a IA
       if (!(duvidoso(r, t) && iaDisponivel())) return pronto();
       setFase("pensando");
-      try { const r2 = await entenderIA(t, db); if (vez.current !== minha) return; if (r2 && r2.tipo === "gastos") setRes(r2); }
-      catch (e) { if (vez.current !== minha) return; }
+      try {
+        const r2 = await entenderIA(t, db); if (vez.current !== minha) return;
+        if (r2 && r2.tipo === "pergunta") return perguntar(t, minha, deVoz, noChat);
+        if (r2 && r2.tipo === "gastos") setRes(r2);
+      } catch (e) { if (vez.current !== minha) return; }
       return pronto();
     }
     // pergunta ("quanto gastei de uber?"), ou qualquer coisa no meio de uma conversa ("e em setembro?"):
     // quem responde é a IA, com os seus números
-    if (ehPergunta(t) || (conversaRef.current.length && t.trim().split(/\s+/).length >= 2)) {
+    if (pergunta || ehPergunta(t) || (conversaRef.current.length && t.trim().split(/\s+/).length >= 2)) {
       if (iaDisponivel()) return perguntar(t, minha, deVoz, noChat);
-      setAviso("Para responder perguntas eu preciso de internet."); setFase("faltando"); vibrar("aviso"); return;
+      avisar("Para responder perguntas eu preciso de internet."); return;
     }
     // o app não entendeu sozinho: pede ajuda à IA antes de desistir ("torrei 45 conto no boteco")
     if (iaDisponivel() && t.trim().split(/\s+/).length >= 2) {
@@ -3515,7 +3561,7 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
     if (r.tipo === "consult") msg = `Entendi ${primeiro(r.c.p.name)}, mas não o que aconteceu. Diga "veio", "faltou", "pagou" ou "remarca pra quinta às 15h".`;
     else if (r.itens.length && r.itens.every(i => i.valor > 0) && !usaPessoal) msg = "Para anotar gastos, ligue o modo Pessoal em Perfil.";
     else msg = r.itens.some(i => i.valor > 0) ? "Faltou o valor de alguma coisa." : "Não peguei o valor. Ex.: “gastei 30 no uber”.";
-    setAviso(msg); setFase("faltando"); vibrar("aviso");
+    avisar(msg);
     // falou e faltou um pedaço: o microfone reabre sozinho uma vez para você completar ("…30")
     if (deVoz && pelaRede.current && !autoCont.current && usaPessoal !== false && micVivo()) {
       autoCont.current = true;
@@ -3523,7 +3569,7 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
     }
   };
   // "ouvir" numa resposta da Bolinha: ouve de novo (tocar de novo enquanto ela fala essa: para)
-  const ultimaEla = conversa.reduce((u, m) => m.quem === "ela" ? m : u, null);
+  const ultimaEla = conversa.reduce((u, m) => m.quem === "ela" && !m.aviso ? m : u, null);
   const falandoEsta = m => falandoResp && (falandoId ? falandoId === m.id : !!ultimaEla && ultimaEla.id === m.id);
   const ouvirEsta = m => {
     const era = falandoEsta(m); calar(); if (era) return;
@@ -3551,7 +3597,7 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
     onParcial: t => aplicar(comBase(t)),
     onFinal: (t, alts) => concluir(t, alts || [], true),
     onFalhou: irTeclado,
-    completo: t => okDe(entender(comBase(t))),
+    completo: t => !perguntaClara(comBase(t)) && okDe(entender(comBase(t))), // pergunta espera a frase inteira
     onSilencio: silencio,
   });
   // dica para o Whisper: como as frases costumam ser, os nomes dos pacientes (só o primeiro nome)
@@ -3584,13 +3630,18 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
     if (!(rede ? srv : nat).iniciar()) abrirTeclado();
   };
   const fechar = () => { pararTudo(); fecharMic(); clearTimeout(ocioso.current); base.current = ""; autoCont.current = false; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); setResposta(""); setConversa([]); setChat(false); setRascunho(""); setMenu(""); setNotas({}); setCopia(null); };
+  // anota sem fechar nada; no chat, ela confirma o que anotou
+  const anotarPendente = r => {
+    if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens);
+    if (!chatAberto.current) return;
+    const its = r.tipo === "gastos" ? r.itens.filter(i => i.valor > 0) : [];
+    addFala("ela", r.tipo === "consult" ? `Pronto: ${primeiro(r.c.p.name)}, ${textoAcao(r.c, TERMO).toLowerCase()}.` : `Anotei ${its.length > 1 ? `${its.length} lançamentos, ${brlReal(soma(its, i => i.valor))} no total` : `${its[0].desc || catDe(its[0].cat).nome}: ${brlReal(its[0].valor)}`}.`);
+  };
   const salvar = () => {
     const r = res; if (!r) return fechar();
     // dentro da conversa: anota e continua conversando
     if (chatAberto.current) {
-      if (r.tipo === "consult") onComando(r.c); else onSalvar(r.itens);
-      const its = r.tipo === "gastos" ? r.itens.filter(i => i.valor > 0) : [];
-      addFala("ela", r.tipo === "consult" ? `Pronto: ${primeiro(r.c.p.name)}, ${textoAcao(r.c, TERMO).toLowerCase()}.` : `Anotei ${its.length > 1 ? `${its.length} lançamentos, ${brlReal(soma(its, i => i.valor))} no total` : `${its[0].desc || catDe(its[0].cat).nome}: ${brlReal(its[0].valor)}`}.`);
+      anotarPendente(r);
       setRes(null); setTexto(""); setFase("resposta");
       return;
     }
@@ -3601,6 +3652,8 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
   const tocarMic = () => {
     if (falandoResp) { calar(); return comecar(); }
     if (fase === "pensando" || fala.estado === "processando") return;
+    // falar de novo com o "Salvar (3)" contando: o que estava esperando fica anotado
+    if (fase === "contando" && res) { anotarPendente(res); setRes(null); }
     if (fase === "ouvindo" && (fala.estado === "ouvindo" || fala.estado === "falando")) return fala.parar();
     comecar(fase === "faltando");
   };
@@ -3623,6 +3676,9 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
   ativoRef.current = ativo;
   // a conversa sempre rola para a última fala
   useEffect(() => { const el = chatRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: semMovimento() ? "auto" : "smooth" }); }, [conversa.length, fase, texto]);
+  // conversa aberta: no computador largo, a tela abre espaço para o painel (src/chat.css)
+  const comChat = ativo && (chat || conversa.length > 0);
+  useEffect(() => { const raiz = document.documentElement; raiz.classList.toggle("com-chat", comChat); return () => raiz.classList.remove("com-chat"); }, [comChat]);
   // conta para a barra (e para o mascote) o que está acontecendo
   const est0 = fala.estado;
   useEffect(() => { onAtivo(!ativo ? "" : fase === "ouvindo" ? (est0 === "falando" ? "falando" : est0 === "erro" ? "erro" : "ouvindo") : fase); }, [ativo, fase, est0]);
@@ -3635,8 +3691,9 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
     const t = setTimeout(() => setConta(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [fase, conta]);
-  // Esc fecha o menu aberto (o + ou o …) e, sem menu, a conversa
-  useEffect(() => { if (!ativo) return; const k = e => { if (e.key !== "Escape") return; if (menuRef.current) setMenu(""); else fechar(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [ativo]);
+  // Esc fecha o menu aberto (o + ou o …) e, sem menu, a conversa; com uma folha aberta por cima (no computador,
+  // "Anotar gasto" na lateral), o Esc é só dela
+  useEffect(() => { if (!ativo) return; const k = e => { if (e.key !== "Escape" || !camadaNoTopo("bolinha")) return; if (menuRef.current) setMenu(""); else fechar(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [ativo]);
   // tocar fora de um menu aberto fecha o menu
   useEffect(() => {
     if (!menu) return;
@@ -3655,7 +3712,8 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
     const t = e.target.value; aplicar(t);
     clearTimeout(ocioso.current);
     const r = entender(t);
-    if ((r.tipo === "consult" && r.c.ok) || (r.tipo === "gastos" && r.itens.some(i => i.valor > 0))) ocioso.current = setTimeout(() => concluir(t), 2600);
+    // anotação vai sozinha depois de uma pausa; pergunta só vai com o Enter (o número dela não é valor)
+    if (!perguntaClara(t) && ((r.tipo === "consult" && r.c.ok) || (r.tipo === "gastos" && r.itens.some(i => i.valor > 0)))) ocioso.current = setTimeout(() => concluir(t), 2600);
   };
 
   const itens = res && res.tipo === "gastos" ? res.itens.filter(i => i.valor > 0) : [];
@@ -3723,7 +3781,7 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
       <input ref={tecRef} className={"voz-tec" + (ativo && fase === "teclado" ? " on" : "")} tabIndex={ativo && fase === "teclado" ? 0 : -1} type="text" enterKeyHint="done" autoComplete="off" autoCorrect="on"
         placeholder={dica.replace("Ex.: ", "").replace(/[“”]/g, "")} aria-label="Fale ou escreva" onChange={digitou}
         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(ocioso.current); if (e.target.value.trim()) concluir(e.target.value); } }} />
-      {ativo && <Camada onFechar={fechar} escurece={false} />}
+      {ativo && <Camada onFechar={fechar} escurece={false} nome="bolinha" />}
       {ativo && emConversa && (
         <div className={"chat-ia" + (falandoResp ? " falando" : "") + (ouvindoAgora ? " ouvindo" : "") + (vazio ? " vazio" : "")} role="dialog" aria-modal={!largo} aria-label="Conversa com a Bolinha" style={{ "--n": fala.nivel.toFixed(3) }}>
           <header className="chat-topo">
@@ -3747,7 +3805,8 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
                 <p>{ouvindoAgora ? "Pode falar, estou ouvindo." : "Como posso te ajudar?"}</p>
               </div>
             ) : (<>
-              {conversa.map(m => m.quem === "ela"
+              {conversa.map(m => m.aviso ? <div key={m.id} className="chat-msg ela aviso"><p className="chat-texto">{m.texto}</p></div>
+                : m.quem === "ela"
                 ? <MsgBolinha key={m.id} m={m} falando={falandoEsta(m)} temVoz={"speechSynthesis" in window} nota={notas[m.id]} copia={copia && copia.id === m.id ? copia : null}
                     onOuvir={() => ouvirEsta(m)} onCopiar={() => copiar(m)} onNota={n => darNota(m, n)} onAndou={rolarFim} />
                 : <div key={m.id} className="chat-msg eu"><p>{m.texto}</p></div>)}
@@ -3764,7 +3823,7 @@ function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, on
                     <div className={"chat-cartao-acoes" + (um ? "" : " dois")}>
                       <button type="button" className="chat-cartao-btn forte" onClick={salvar}><I.check /> Salvar <span className="num">({conta})</span></button>
                       {um && <button type="button" className="chat-cartao-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
-                      <button type="button" className="chat-cartao-btn" onClick={() => { setRes(null); setFase("resposta"); }}>Descartar</button>
+                      <button type="button" className="chat-cartao-btn" onClick={() => { setRes(null); setFase("resposta"); addFala("ela", "Tudo bem, não anotei."); }}>Descartar</button>
                     </div>
                   </div>
                 </div>
@@ -4138,11 +4197,11 @@ function useTema() {
     if (modo === "auto") root.removeAttribute("data-app-theme"); else root.setAttribute("data-app-theme", modo);
     try { localStorage.setItem(K.tema, modo); } catch (e) {}
     // a barra de status do celular acompanha o tema escolhido no app (e não só o do aparelho)
-    requestAnimationFrame(() => requestAnimationFrame(corDaBarra));
+    requestAnimationFrame(() => requestAnimationFrame(() => corDaBarra(true)));
   }, [modo]);
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: light)");
-    const f = () => force(x => x + 1);
+    const f = () => { NEVOA = null; force(x => x + 1); }; // o tema do aparelho mudou: a névoa é lida de novo
     mq.addEventListener ? mq.addEventListener("change", f) : mq.addListener(f);
     const mo = new MutationObserver(f); mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => { mq.removeEventListener ? mq.removeEventListener("change", f) : mq.removeListener(f); mo.disconnect(); };
@@ -4384,7 +4443,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   }, [perfil.cidade]);
   useEffect(() => { const y = new Date().getFullYear(); Promise.all([buscarFeriadosAPI(y), buscarFeriadosAPI(y + 1)]).then(() => setFerVer(v => v + 1)).catch(() => {}); }, []);
   ESCONDER = oculto;
-  useEffect(() => gravar(K.db(conta.email), db), [db]);
+  // ao abrir, o que acabou de ser lido não precisa ser regravado (com milhares de lançamentos, eram ~50 ms na abertura)
+  const jaAbriu = useRef(false);
+  useEffect(() => { if (!jaAbriu.current) { jaAbriu.current = true; return; } gravar(K.db(conta.email), db); }, [db]);
   useEffect(() => gravar(K.oculto, oculto), [oculto]);
   useEffect(() => { const i = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(i); }, []);
   useEffect(() => { if (pronto) notify(`Tudo pronto, ${conta.nome}! Vamos começar.`); else if (novo) notify(`Boas-vindas, ${conta.nome}!`); }, []);
@@ -4736,7 +4797,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       setP(P => { const { veiculo, ...resto } = P; return { ...resto, veiculos: veiculosDe({ pessoal: P }).filter(x => x.id !== id) }; });
       setVeicAtual(null); close(); notify("Veículo removido. Os gastos dele continuam em Gastos.");
     },
-    abrirChat: () => { if (sheet) close(); vozApi.current.chat && vozApi.current.chat(); },
+    // dentro do app de celular (ponte 2), "Perguntar à Bolinha" abre o chat nativo; se o app não souber abrir, vai a conversa do site
+    abrirChat: () => {
+      if (sheet) close();
+      const doSite = () => vozApi.current.chat && vozApi.current.chat();
+      if (nativoV2) chamarApp("abrir", { tela: "chat" }).catch(doSite); else doSite();
+    },
     recarregarClima: () => carregarClima(true),
     setTab: t => { if (t === tab) return rolarTopo(); comTransicao(() => { setTab(t); rolarTopo(); }, ORDEM_ABAS.indexOf(t) < ORDEM_ABAS.indexOf(tab) ? "tras" : "frente"); },
     setModo: m => comTransicao(() => { trocarModoSt(m); rolarTopo(); }, "modo"),
@@ -4902,7 +4968,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       vibrar("ok"); close();
       notify(novoL ? `${l.tipo === "entrada" ? "Entrada" : "Gasto"} de ${l.moeda ? `${fmtMoeda(l.valorOrig, l.moeda)} (${brlReal(l.valor)})` : brlReal(l.valor)} anotado` : "Lançamento atualizado", novoL ? () => setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== l.id) })) : undefined);
     },
-    apagarLanc: id => { setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== id) })); close(); notify("Lançamento apagado"); },
+    // apagar um só também tem o Desfazer (como apagar vários)
+    apagarLanc: id => {
+      const tirado = db.pessoal.lanc.find(x => x.id === id);
+      setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== id) })); close();
+      notify("Lançamento apagado", tirado ? () => setP(P => ({ ...P, lanc: [...P.lanc.filter(x => x.id !== id), tirado] })) : undefined);
+    },
     // vários de uma vez (seleção em Gastos), com desfazer
     apagarLancs: ids => {
       const s = new Set(ids), tirados = db.pessoal.lanc.filter(x => s.has(x.id));
@@ -5040,7 +5111,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
           const f = new File([b], "comprovante", { type: b.type || "image/jpeg" });
           // na loja, foto de nota com QR code: lê a nota inteira (itens e preços), como pelo botão "Ler nota do fornecedor"
           if (modoEf === "loja" && loja) {
-            const { lerQRs } = await import("./telas/ferramentas.jsx");
+            const [{ lerQRs }, { ehLinkNfce }] = await Promise.all([import("./telas/ferramentas.jsx"), import("./nota.js")]); // (só agora: nota.js não pesa na abertura)
             const temNota = await lerQRs(f).then(ts => ts.some(ehLinkNfce)).catch(() => false);
             if (temNota) return act.abrirLoja("nota", { arquivo: f });
           }
@@ -5118,6 +5189,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       n.trocarModoSt(m);
       if (aba) n.setTab(aba);
       rolarTopo();
+      return aba || inicioDo(m);
     };
     return registrarNativo({
       estado: () => N().retrato(),
@@ -5126,9 +5198,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         const n = N(), a = n.act;
         const acao = d.acao || (!d.area ? d.tela : null);
         if (d.area) {
-          if (d.area === "casa" && n.usaPessoal) a.abrirCasa(); // (fecham o painel aberto sozinhas)
-          else if (d.area === "transporte" && n.usaPessoal) a.abrirTransporte();
-          else { if (n.sheet) n.close(); irPara(d.area === "casa" || d.area === "transporte" ? "pessoal" : d.area, d.tela); }
+          if (d.area === "casa" && n.usaPessoal) { a.abrirCasa(); ABA_DO_APP = "p-casa"; } // (fecham o painel aberto sozinhas)
+          else if (d.area === "transporte" && n.usaPessoal) { a.abrirTransporte(); ABA_DO_APP = "p-transp"; }
+          else { if (n.sheet) n.close(); ABA_DO_APP = irPara(d.area === "casa" || d.area === "transporte" ? "pessoal" : d.area, d.tela); }
         }
         if (!acao) return null;
         if (acao === "ajustes" || acao === "perfil") a.openSettings();
@@ -5221,6 +5293,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const pendentes = db.charges.filter(c => !c.paid).length;
   const contasUrg = db.pessoal.contas.filter(c => { const s = situacaoConta(c, ch).st; return s === "atrasada" || s === "hoje"; }).length;
   const tabEf = modoDaAba(tab) === modoEf ? tab : inicioDo(modoEf);
+  // trocou de aba no site: o voltar da tela nova já não leva de volta ao app (ABA_DO_APP)
+  useEffect(() => { if (ABA_DO_APP && ABA_DO_APP !== tabEf) ABA_DO_APP = null; }, [tabEf]);
   const abas = modoEf === "loja"
     ? [{ id: "l-caixa", l: "Caixa", ic: <I.wallet />, on: <I.walletOn />, n: 0 }, { id: "l-gastos", l: "Gastos", ic: <I.bill />, on: <I.billOn />, n: 0 }, { id: "l-lista", l: "Falta", ic: <I.cart />, on: <I.cart />, n: loja.faltas.filter(x => !x.feito).length }, { id: "l-resumo", l: "Resumo", ic: <I.chart />, on: <I.chartOn />, n: 0 }]
     : modoEf === "pessoal"
@@ -5447,6 +5521,6 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar };
+export { Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar, voltarDaTela };
 
 export default App;

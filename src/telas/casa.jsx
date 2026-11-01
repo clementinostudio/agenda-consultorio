@@ -1,7 +1,7 @@
 // Parte do app carregada sob demanda: dinheiro a dois (ou em família)
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, ConfirmButton, iniciais, CATEGORIAS, catDe, catVars, CatIcon, TopBar, useCamada, servidorAvisos } from "../App.jsx";
+import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, ConfirmButton, iniciais, CATEGORIAS, catDe, catVars, CatIcon, TopBar, useCamada, servidorAvisos, voltarDaTela } from "../App.jsx";
 import { cliente } from "../nuvem.js";
 import { saldos, partes, pesosDe, MAX_PESSOAS } from "../casa.js";
 import { historico, ultimoPreco, combina, lerItem, secaoDe, nomeSecao, SECOES, ehLinkNfce, lerTextoNota, ufDaChave, lerPaginaNfce, arrumarNotaIA, reduzirFoto, nomeLoja, cnpjDaChave } from "../nota.js";
@@ -36,8 +36,9 @@ const diasNoMes = ch => { const [a, m] = ch.split("-").map(Number); return new D
 const Bloco = ({ o, children, className = "" }) => <div className={"c2-bloco " + className} style={{ order: o, "--i": Math.min(o, 9) }}>{children}</div>;
 
 export function CasaPagina({ casa: C, conta, pix, act, tema }) {
-  useCamada(() => act.setTab("p-home"), { escurece: false }); // voltar do Android volta ao Início
   const voltar = () => act.setTab("p-home");
+  // voltar do Android volta ao Início (no app de celular, se foi o app que abriu a casa, volta para ele)
+  useCamada(() => voltarDaTela(voltar), { escurece: false });
   const [nomeCasa, setNomeCasa] = useState("Nossa casa");
   const [link, setLink] = useState("");
   const [off, setOff] = useState(0);

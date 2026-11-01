@@ -10,12 +10,18 @@ const base = process.env.BASE_PATH || "/";
 export default defineConfig({
   base,
   build: {
+    // fontes dos alfabetos que o português não usa (cirílico, grego, vietnamita) nunca entram no CSS como texto: as
+    // pequenas iam embutidas e eram ~15 KB no CSS que segura a primeira pintura. Viram arquivos à parte, baixados só se
+    // aparecer uma letra dessas (o build do celular tem a regra dele, em vite.celular.config.js)
+    assetsInlineLimit: arquivo => (/-(cyrillic|greek|vietnamese)/i.test(arquivo) ? false : undefined),
     rollupOptions: {
       // admin/: o painel do dono (app.avina.com.br/admin/), uma página à parte que o app não carrega
       input: { index: resolve(import.meta.dirname, "index.html"), admin: resolve(import.meta.dirname, "admin/index.html") },
       // O React fica num arquivo separado: quase nunca muda, então o celular não precisa baixar de novo a cada atualização
       // O leitor de PDF (pdf.js) também fica separado: só baixa quando alguém compartilha um PDF com o app
-      output: { manualChunks: id => (/node_modules\/(react|react-dom|scheduler)\//.test(id) ? "react" : /node_modules\/pdfjs-dist\//.test(id) ? "leitor-pdf" : undefined) },
+      // pdf-extra: o que o jsPDF só carrega para doc.html() e SVG (html2canvas, canvg, DOMPurify). O recibo não usa: fica
+      // fora do que o service worker guarda na instalação (~360 KB a menos baixando junto com a primeira abertura)
+      output: { manualChunks: id => (/node_modules\/(react|react-dom|scheduler)\//.test(id) ? "react" : /node_modules\/pdfjs-dist\//.test(id) ? "leitor-pdf" : /node_modules\/(html2canvas|canvg|dompurify)\//.test(id) ? "pdf-extra" : undefined) },
     },
   },
   plugins: [
@@ -66,7 +72,7 @@ export default defineConfig({
       workbox: {
         // Guarda o app para abrir offline (só as fontes .woff2 dos alfabetos latinos, para ficar leve)
         globPatterns: ["**/*.{js,css,html,svg,png,jpg,webp,woff2}"],
-        globIgnores: ["**/leitor-pdf-*", "**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**", "**/admin/**", "**/admin-*", "**/celular/**"],
+        globIgnores: ["**/leitor-pdf-*", "**/pdf-extra-*", "**/*-cyrillic*", "**/*-greek*", "**/*-vietnamese*", "**/abertura/**", "**/screenshots/**", "**/landing/**", "**/admin/**", "**/admin-*", "**/celular/**"],
         navigateFallback: "index.html",
         // termos, privacidade, cookies e excluir conta são páginas próprias (public/), e o painel (admin/) também: o app
         // instalado não pode trocá-las pela tela do app. celular/ é a cópia do Avina que o app de celular baixa.

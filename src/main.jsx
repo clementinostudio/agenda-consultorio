@@ -80,8 +80,10 @@ if (!noApp && !logado && !instalado && !vemDaApresentacao && !vemDoEmail) {
 } else {
   // Service worker do PWA: deixa o app abrir offline. Quando sai uma versão nova, mostra o aviso "Atualizar"
   // (em vez de trocar sozinho no meio do uso). Procura novidades ao abrir, ao voltar para o app e a cada 30 min.
+  // (registra depois do "load": na primeira visita, o download do app inteiro para guardar não disputa a internet
+  // com a primeira tela)
   const atualizar = noApp ? null : registerSW({
-    immediate: true,
+    immediate: false,
     onNeedRefresh() { avisarNovaVersao(atualizar); },
     onRegisteredSW(url, reg) {
       if (!reg) return;

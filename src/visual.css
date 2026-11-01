@@ -76,6 +76,7 @@
 .vz-topo-v .mny .cur { font-size: .36em; vertical-align: 1.15em; margin-right: .18em; }
 .vz-topo-v .mny .cents { font-size: .55em; opacity: .4; }
 .vz-topo-apoio { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 12px; margin-top: 10px; padding: 0 18px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.vz-topo-apoio > span { text-wrap: balance; } /* frase que não cabe numa linha quebra em duas do mesmo tamanho */
 .vz-topo-apoio i { font-style: normal; font-weight: 800; margin-right: 5px; }
 .vz-topo-apoio .sobe i { color: var(--amber); } .vz-topo-apoio .desce i { color: var(--mint); }
 .vz-topo-apoio .mais { color: var(--mint); font-weight: 700; } .vz-topo-apoio .menos { color: var(--rose); font-weight: 700; }
@@ -118,7 +119,7 @@
 .g4-foco .mid b { font-size: 15px; } .g4-foco .mid small { color: var(--muted); font-size: 13px; line-height: 1.35; }
 .g4-foco-acts { display: flex; align-items: center; gap: 6px; flex: none; }
 .g4-lanc-topo { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; padding: 14px 0 6px; }
-.g4-lanc-topo h3 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 24px; letter-spacing: -.02em; text-transform: capitalize; }
+.g4-lanc-topo h3 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 24px; letter-spacing: -.02em; } /* (a maiúscula do mês vem do JS: capitalize virava "Comida Fora") */
 .g4-lanc-topo h3 span { color: var(--muted); font-weight: 500; }
 .g4-dia { display: flex; align-items: center; justify-content: space-between; }
 .g4-dia small { letter-spacing: 0; font-size: 12px; }
