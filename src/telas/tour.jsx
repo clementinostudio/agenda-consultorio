@@ -12,7 +12,7 @@ const PASSOS = {
     fotoEModos(doisModos),
   ],
   pessoal: ({ doisModos }) => [
-    { sel: [".c3-saldo"], t: "Seu mês num olhar", d: "Quanto entrou, quanto saiu e quanto ainda sobra até o fim do mês." },
+    { sel: [".ini-car .ini-g", ".c3-saldo"], t: "Seu mês num olhar", d: "Quanto entrou, quanto saiu e quanto ainda sobra até o fim do mês." },
     { sel: [".nav-mic"], t: "Anote um gasto falando", d: "Toque na Bolinha e diga “gastei 32 no mercado”. Eu coloco na categoria certa." },
     { sel: [".lt-lista", ".nav-in"], t: "Gastos, contas e carro", d: "Ficam aqui. Eu aviso um dia antes de cada conta vencer." },
     fotoEModos(doisModos),
@@ -27,8 +27,8 @@ const PASSOS = {
 function fotoEModos(doisModos) {
   return doisModos
     ? [{ sel: [".lt-pe"], t: "Sua conta e seus modos", d: "Aqui ficam o perfil, os avisos e o plano. Em “Trocar”, você muda de modo." },
-       { sel: [".hello-l:has(.mode-pill)"], t: "Sua foto e seus modos", d: "Na foto ficam o perfil, os avisos e o plano. Ao lado, você troca de modo." }]
-    : { sel: [".lt-conta", ".hello-l .me"], t: "Sua conta", d: "Toque aqui para ver o perfil, os avisos e o seu plano." };
+       { sel: [".ini-topo-l:has(.mode-pill)", ".hello-l:has(.mode-pill)"], t: "Sua foto e seus modos", d: "Na foto ficam o perfil, os avisos e o plano. Ao lado, você troca de modo." }]
+    : { sel: [".lt-conta", ".ini-topo-l .me", ".hello-l .me"], t: "Sua conta", d: "Toque aqui para ver o perfil, os avisos e o seu plano." };
 }
 
 const visivel = el => { if (!el) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };

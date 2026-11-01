@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { I, Sheet, Field, Seg, Toggle, ConfirmButton, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, soma, MES_LONGO, diffDias, ESCONDER, Money, relativo, Ilustra } from "../App.jsx";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, fmtPct, quandoTxt, IOF_CARTAO } from "../cotacoes.js";
 import { useInflacao, acumulado, INDICES, nomeMesCurto } from "../inflacao.js";
-import { BancosPainel } from "./bancos.jsx";
+import { Anel } from "./visual.jsx";
 
 /* ---------- contas financeiras ---------- */
 const mensal = anual => Math.pow(1 + anual / 100, 1 / 12) - 1;
@@ -51,46 +51,55 @@ const Ic = {
 };
 const EMOJIS = ["🛟", "✈️", "🏠", "🚗", "🎓", "🎁", "💍", "🐶", "💻", "🏖️", "👶", "🩺"];
 
-/* ---------- bloco "Seu dinheiro" na tela inicial do Pessoal ---------- */
-export function DinheiroHome({ db, act }) {
+/* ---------- cartão "Caixinhas" no Início (src/telas/inicio-cartoes.jsx) ---------- */
+// O total guardado, cada caixinha com o anel da meta (o emoji no meio) e, embaixo, as contas rápidas do dinheiro:
+// à vista ou parcelado, modo viagem, nova caixinha e reajuste do aluguel
+const TONS = ["var(--mint)", "#4A62FF", "#8B6CFF", "#3CC4E6"];
+export function CartaoCaixinhas({ db, act }) {
   const cot = useCotacoes();
   const P = db.pessoal; const caixinhas = P.caixinhas || [];
+  const contas = caixinhas.map(cx => [cx, contaCaixinha(cx, cot)]);
+  const total = soma(contas, ([, r]) => r.total), rende = soma(contas, ([, r]) => r.rendeMes);
   return (
-    <>
-      {P.viagem && <ViagemBanner viagem={P.viagem} lanc={P.lanc} cot={cot} act={act} />}
-      <BancosPainel caixinhas={caixinhas} act={act} />
-      <div className="panel dinheiro">
-        <div className="panel-head"><h3>Seu dinheiro</h3>{caixinhas.length > 0 && <button className="link" onClick={() => act.abrirCaixinha()}>+ Caixinha</button>}</div>
-        <div className="din-acts">
-          <button className="din-act" onClick={() => act.abrirParcelado()}><i><Ic.balanca /></i><span>À vista ou<br />parcelado?</span></button>
-          <button className="din-act" onClick={() => act.abrirViagem()}><i><Ic.aviao /></i><span>{P.viagem ? "Viagem" : "Modo"}<br />{P.viagem ? MOEDAS[P.viagem.moeda].curto.toLowerCase() : "viagem"}</span></button>
-          <button className="din-act" onClick={() => act.abrirCaixinha()}><i><I.piggy /></i><span>Nova<br />caixinha</span></button>
-          <button className="din-act" onClick={() => act.abrirAluguel()}><i><I.home /></i><span>Reajuste do<br />aluguel</span></button>
-        </div>
-        {caixinhas.length === 0 ? (
-          <button className="cx-vazia com-ilustra" onClick={() => act.abrirCaixinha()}>
-            <Ilustra n="dinheiro" className="cx-vazia-img" />
-            <b>Guarde para um objetivo</b>
-            <span>Crie uma caixinha (viagem, reserva, carro…). Eu mostro quanto guardar por mês e quanto o dinheiro rende a 100% do CDI.</span>
-          </button>
-        ) : caixinhas.map(cx => {
-          const r = contaCaixinha(cx, cot);
-          return (
-            <button key={cx.id} className="cx-row" onClick={() => act.abrirCaixinha(cx.id)}>
-              <span className="cx-emoji" aria-hidden="true">{cx.emoji || "🛟"}</span>
-              <span className="cx-mid">
-                <span className="cx-nm">{cx.nome}</span>
-                <span className="cx-bar"><i style={{ width: `${r.meta ? r.pct : 100}%` }} /></span>
-                <span className="cx-sb">{r.meta ? <>{brl(r.total)} de {brl(r.meta)}{r.porMes > 0 ? ` · ${brl(r.porMes)}/mês` : r.porMes === 0 ? " · já chega lá rendendo" : ""}</> : <>{brl(r.total)} guardados{r.rendeMes >= 1 ? ` · rende ${brl(r.rendeMes)}/mês` : ""}</>}</span>
+    <section className="ini-cartao ini-cx" aria-label="Caixinhas">
+      <div className="ini-cab"><span className="ini-cab-t">Caixinhas</span>{caixinhas.length > 0 && <button className="link" onClick={() => act.abrirCaixinha()}>+ Caixinha</button>}</div>
+      {caixinhas.length === 0 ? (
+        <button className="cx-vazia com-ilustra" onClick={() => act.abrirCaixinha()}>
+          <Ilustra n="dinheiro" className="cx-vazia-img" />
+          <b>Guarde para um objetivo</b>
+          <span>Crie uma caixinha (viagem, reserva, carro…). Eu mostro quanto guardar por mês e quanto o dinheiro rende a 100% do CDI.</span>
+        </button>
+      ) : <>
+        <b className="ini-valor"><Money v={total} /></b>
+        <span className="ini-apoio">guardados em {caixinhas.length === 1 ? "1 caixinha" : `${caixinhas.length} caixinhas`}{rende >= 1 ? ` · rendem ${brl(rende)} por mês` : ""}</span>
+        <div className="ini-cx-lista">
+          {contas.map(([cx, r], k) => (
+            <button key={cx.id} className="ini-cx-linha" onClick={() => act.abrirCaixinha(cx.id)} style={{ "--cxc": TONS[k % TONS.length] }}>
+              <Anel p={r.meta ? r.pct / 100 : 0} cor="var(--cxc)" tam={52} esp={5} className="ini-cx-anel"><span aria-hidden="true">{cx.emoji || "🛟"}</span></Anel>
+              <span className="ini-cx-mid">
+                <b>{cx.nome}</b>
+                <small>{r.meta ? <>{brl(r.total)} de {brl(r.meta)}{r.porMes > 0 ? ` · ${brl(r.porMes)}/mês` : r.porMes === 0 ? " · já chega lá rendendo" : ""}</> : <>{brl(r.total)} guardados{r.rendeMes >= 1 ? ` · rende ${brl(r.rendeMes)}/mês` : ""}</>}</small>
               </span>
-              <span className="cx-pct">{r.meta ? `${Math.floor(r.pct)}%` : ""}</span>
+              {r.meta > 0 && <em className="ini-cx-pct">{Math.floor(r.pct)}%</em>}
+              <I.chev />
             </button>
-          );
-        })}
-        <p className="din-rodape">CDI {fmtPct(cot.cdi)} ao ano · inflação {fmtPct(cot.ipca)} em 12 meses · {cot.quandoIndices ? `Banco Central, ${quandoTxt(cot.quandoIndices)}` : "valores de referência"}</p>
+          ))}
+        </div>
+      </>}
+      <div className="din-acts">
+        <button className="din-act" onClick={() => act.abrirParcelado()}><i><Ic.balanca /></i><span>À vista ou<br />parcelado?</span></button>
+        <button className="din-act" onClick={() => act.abrirViagem()}><i><Ic.aviao /></i><span>{P.viagem ? "Viagem" : "Modo"}<br />{P.viagem ? MOEDAS[P.viagem.moeda].curto.toLowerCase() : "viagem"}</span></button>
+        <button className="din-act" onClick={() => act.abrirCaixinha()}><i><I.piggy /></i><span>Nova<br />caixinha</span></button>
+        <button className="din-act" onClick={() => act.abrirAluguel()}><i><I.home /></i><span>Reajuste do<br />aluguel</span></button>
       </div>
-    </>
+      <p className="din-rodape">CDI {fmtPct(cot.cdi)} ao ano · inflação {fmtPct(cot.ipca)} em 12 meses · {cot.quandoIndices ? `Banco Central, ${quandoTxt(cot.quandoIndices)}` : "valores de referência"}</p>
+    </section>
   );
+}
+// Modo viagem ligado: a faixa com a cotação e o que já foi gasto (no topo do Início do Pessoal)
+export function ViagemAviso({ db, act }) {
+  const cot = useCotacoes(), P = db.pessoal;
+  return P.viagem ? <ViagemBanner viagem={P.viagem} lanc={P.lanc} cot={cot} act={act} /> : null;
 }
 
 /* ---------- modo viagem ---------- */

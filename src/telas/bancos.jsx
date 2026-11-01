@@ -1,7 +1,7 @@
 // Painel "No banco agora": saldos das contas, cartões (fatura e limite) e investimentos, pelo Open Finance (src/banco.js).
 // Só aparece para quem tem a opção liberada e algum banco conectado.
 // Também daqui: o selo do banco que vai no canto da logo de um lançamento que veio do Open Finance.
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { I, brl, dm, todayISO, diffDias, uid, MarcaLogo, Money } from "../App.jsx";
 import { acharMarca, monograma } from "../marcas.js";
 import { resumoBanco, resumoGuardado } from "../banco.js";
@@ -47,14 +47,52 @@ function haQuanto(iso) {
 const pct = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0);
 const fmtPct = p => `${p.toFixed(1).replace(".", ",").replace(",0", "")}%`;
 
-export function BancosPainel({ caixinhas, act }) {
-  const [r, setR] = useState(() => { const g = resumoGuardado(); return g && g.dados && g.dados.ligado ? g.dados : null; });
-  const [carregando, setCarregando] = useState(false);
-  const [aba, setAba] = useState(null);
-  const carregar = async forcar => { setCarregando(true); const d = await resumoBanco(forcar); setR(d); setCarregando(false); };
-  useEffect(() => { carregar(false); }, []);
-
-  // caixinhas ligadas a um investimento: o valor do banco substitui a estimativa
+// O resumo do banco, um só para a tela toda: o carrossel do Início e este painel leem o mesmo, e abrir os dois
+// juntos faz um pedido só. (resumoBanco já guarda 15 minutos no aparelho: pedir de novo ao abrir não vai à internet)
+let BANCO = { r: (g => (g && g.dados && g.dados.ligado ? g.dados : null))(resumoGuardado()), carregando: false };
+let EM_VOO = null, LIDO = 0;
+const OUVINTES_BANCO = new Set();
+const mudarBanco = n => {
+  // o mesmo resumo de antes (lido de novo do aparelho): nada redesenha
+  if (n.r !== undefined && n.r && BANCO.r && n.r.em === BANCO.r.em && !n.r.erro === !BANCO.r.erro && (n.carregando === undefined || n.carregando === BANCO.carregando)) return;
+  if (n.r === null && !BANCO.r && (n.carregando === undefined || n.carregando === BANCO.carregando)) return;
+  BANCO = { ...BANCO, ...n }; OUVINTES_BANCO.forEach(f => f());
+};
+// forcar: o "Atualizar" do painel (mostra "Atualizando…" e vai ao banco mesmo com o resumo guardado)
+export function carregarBanco(forcar) {
+  if (EM_VOO && !forcar) return EM_VOO;
+  LIDO = Date.now();
+  if (forcar) mudarBanco({ carregando: true });
+  return (EM_VOO = resumoBanco(forcar).then(d => mudarBanco({ r: d && d.ligado ? d : null, carregando: false }), () => mudarBanco({ carregando: false })).finally(() => { EM_VOO = null; }));
+}
+const ouvirBanco = f => { OUVINTES_BANCO.add(f); return () => OUVINTES_BANCO.delete(f); };
+// { r, carregando }: r só existe com a opção liberada para a conta (ligado); sem banco conectado, r.bancos vem vazio
+export function useResumoBanco() {
+  const v = useSyncExternalStore(ouvirBanco, () => BANCO);
+  // cada cartão que usa o resumo pede ao abrir; dentro de um minuto, vale o que já foi lido (a não ser que o resumo
+  // guardado tenha sido esquecido ou trocado: banco conectado ou desligado em Importar)
+  useEffect(() => {
+    const g = resumoGuardado(), r = BANCO.r;
+    if (Date.now() - LIDO > 6e4 || !g || (r && (!g.dados || g.dados.em !== r.em))) carregarBanco(false);
+  }, []);
+  return v;
+}
+// Totais do banco (os mesmos números no carrossel do Início e no painel)
+export function totaisBanco(r) {
+  const contas = r && r.contas ? r.contas.filter(c => c.tipo === "conta") : [], cartoes = r && r.contas ? r.contas.filter(c => c.tipo === "cartao") : [], inv = (r && r.investimentos) || [];
+  const limite = cartoes.reduce((s, c) => s + (c.limite > 0 ? c.limite : 0), 0);
+  const usado = cartoes.reduce((s, c) => s + (c.limite > 0 && c.livre != null ? Math.max(0, c.limite - c.livre) : 0), 0);
+  return {
+    contas, cartoes, inv, limite, usado,
+    emConta: contas.reduce((s, c) => s + c.saldo, 0), faturas: cartoes.reduce((s, c) => s + Math.max(0, c.saldo), 0),
+    investido: inv.reduce((s, i) => s + i.saldo, 0), rendeu: inv.reduce((s, i) => s + (i.rendeu || 0), 0),
+    vence: cartoes.map(c => c.vence).filter(Boolean).sort()[0] || null,
+  };
+}
+// Caixinhas ligadas a um investimento: o valor do banco substitui a estimativa. Roda no carrossel do Início do Pessoal
+// (que está sempre lá), e não só no painel: o cartão do banco pode estar desligado em "Personalizar início"
+export function useCaixinhasNoBanco(caixinhas, act) {
+  const { r } = useResumoBanco();
   useEffect(() => {
     if (!r || !r.investimentos || r.erro) return;
     const mud = {};
@@ -64,6 +102,16 @@ export function BancosPainel({ caixinhas, act }) {
     });
     if (Object.keys(mud).length) act.bancoNasCaixinhas(mud);
   }, [r]);
+}
+// O carrossel do Início abre o painel na aba certa (Faturas → Cartões, Investido → Investimentos)
+export const ABRIR_ABA_BANCO = "avina-banco-aba";
+
+export function BancosPainel({ caixinhas, act, id }) {
+  const { r, carregando } = useResumoBanco();
+  const [aba, setAba] = useState(null);
+  const carregar = forcar => carregarBanco(forcar);
+  useEffect(() => { const f = e => setAba(e.detail); window.addEventListener(ABRIR_ABA_BANCO, f); return () => window.removeEventListener(ABRIR_ABA_BANCO, f); }, []);
+
 
   // a parte de cada banco no total em conta (para a barra colorida)
   const contas = useMemo(() => (r && r.contas ? r.contas.filter(c => c.tipo === "conta") : []), [r]);
@@ -74,12 +122,8 @@ export function BancosPainel({ caixinhas, act }) {
   }, [contas]);
 
   if (!r || !r.ligado || !(r.bancos || []).length) return null;
-  const cartoes = r.contas.filter(c => c.tipo === "cartao"), inv = r.investimentos || [];
-  const emConta = contas.reduce((s, c) => s + c.saldo, 0), positivo = porBanco.reduce((s, x) => s + x[1], 0);
-  const faturas = cartoes.reduce((s, c) => s + Math.max(0, c.saldo), 0);
-  const limite = cartoes.reduce((s, c) => s + (c.limite > 0 ? c.limite : 0), 0);
-  const usadoTotal = cartoes.reduce((s, c) => s + (c.limite > 0 && c.livre != null ? Math.max(0, c.limite - c.livre) : 0), 0);
-  const investido = inv.reduce((s, i) => s + i.saldo, 0), rendeuTotal = inv.reduce((s, i) => s + (i.rendeu || 0), 0);
+  const { cartoes, inv, emConta, faturas, limite, usado: usadoTotal, investido, rendeu: rendeuTotal } = totaisBanco(r);
+  const positivo = porBanco.reduce((s, x) => s + x[1], 0);
   const hoje = todayISO();
   const atualizado = c => haQuanto(((r.bancos || []).find(b => b.id === c.itemId) || {}).atualizado || r.em);
   const ligada = id => (caixinhas || []).find(cx => cx.banco && cx.banco.inv === id);
@@ -94,7 +138,7 @@ export function BancosPainel({ caixinhas, act }) {
   const logo = c => <MarcaLogo marca={marcaDe(c.banco, c.nome)} nome={nomeBanco(c.banco) || c.nome} className="txn-av" />;
 
   return (
-    <section className="panel bancos ps-bk">
+    <section className="panel bancos ps-bk" id={id}>
       <div className="panel-head">
         <h3>No banco agora</h3>
         <button className="link ps-bk-at" onClick={() => carregar(true)} disabled={carregando}>{carregando ? "Atualizando…" : `Atualizado ${haQuanto(r.em) || "agora"}`}</button>

@@ -256,13 +256,14 @@ function situacao(item, now) {
 }
 
 // price/sublet: valores só desta sessão (opcional). padrao: passa a usar esses valores daqui pra frente.
-function registrar(db, pid, { status, nextDate, paidNow, price, sublet, padrao, cobrarFalta }) {
+// id/chargeId: os ids da sessão e da cobrança nova (o app de celular manda os dele: repetir o pedido não duplica)
+function registrar(db, pid, { status, nextDate, paidNow, price, sublet, padrao, cobrarFalta, id, chargeId }) {
   const p = db.patients.find(x => x.id === pid);
-  const s = { id: uid(), patientId: pid, date: p.nextDate, time: p.time, price: price ?? p.price, sublet: sublet ?? sublocacao(p), status, chargeId: null, registro: false, cobrada: status === "missed" && !!cobrarFalta };
+  const s = { id: id || uid(), patientId: pid, date: p.nextDate, time: p.time, price: price ?? p.price, sublet: sublet ?? sublocacao(p), status, chargeId: null, registro: false, cobrada: status === "missed" && !!cobrarFalta };
   const entra = status === "done" || s.cobrada;
   let sessions = [...db.sessions], charges = [...db.charges], nova = null;
   if (entra && p.billing === "session") {
-    nova = { id: uid(), patientId: pid, sessionIds: [s.id], amount: s.price, createdAt: todayISO(), paid: !!paidNow, paidAt: paidNow ? todayISO() : null };
+    nova = { id: chargeId || uid(), patientId: pid, sessionIds: [s.id], amount: s.price, createdAt: todayISO(), paid: !!paidNow, paidAt: paidNow ? todayISO() : null };
     s.chargeId = nova.id;
     sessions.push(s);
   } else {
@@ -270,7 +271,7 @@ function registrar(db, pid, { status, nextDate, paidNow, price, sublet, padrao, 
     if (entra) {
       const abertas = sessions.filter(x => x.patientId === pid && contaDinheiro(x) && !x.chargeId);
       if (abertas.length >= p.packageSize) {
-        nova = { id: uid(), patientId: pid, sessionIds: abertas.map(x => x.id), amount: soma(abertas, x => x.price), createdAt: todayISO(), paid: false, paidAt: null };
+        nova = { id: chargeId || uid(), patientId: pid, sessionIds: abertas.map(x => x.id), amount: soma(abertas, x => x.price), createdAt: todayISO(), paid: false, paidAt: null };
         sessions = sessions.map(x => nova.sessionIds.includes(x.id) ? { ...x, chargeId: nova.id } : x);
       }
     }
@@ -2361,70 +2362,85 @@ function PendingCard({ p, act }) {
   );
 }
 
+// O topo do Início (consultório e pessoal), no jeito do app de celular: a foto, o modo, o olho e o "+" (anotar), e
+// embaixo a data e a saudação grande ("Boa noite, Felipe")
+const DIA_SEMANA_LONGO = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+function TopoInicio({ conta, act, tema, modo, now }) {
+  const d = now || new Date();
+  const mais = modo === "pessoal" ? { l: "Anotar gasto ou entrada", fn: () => act.novoLanc("saida") } : modo === "consultorio" ? { l: `Novo ${TERMO.s}`, fn: act.novoPaciente } : null;
+  const varios = act.modos && act.modos.length > 1;
+  return (
+    <header className={"ini-topo" + (varios ? " com-modo" : "")}>
+      <div className="ini-topo-l">
+        <VoltarAoApp />
+        <Avatar conta={conta} onClick={act.openSettings} />
+        {varios && <ModeSwitch modo={modo} setModo={act.setModo} modos={act.modos} />}
+      </div>
+      <div className="ini-topo-t">
+        <p className="ini-data">{DIA_SEMANA_LONGO[d.getDay()]}, {d.getDate()} de {MES_LONGO[d.getMonth()]}</p>
+        <h1 className="ini-ola">{ehAniversario(conta.perfil) ? "Feliz aniversário" : saudacao(d)}, {primeiro(conta.nome)}</h1>
+      </div>
+      <div className="top-actions ini-topo-a">
+        <button className="icon-btn" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button>
+        <span className="nc"><button className="icon-btn" onClick={act.trocarTema} aria-label={tema.escuro ? "Usar modo claro" : "Usar modo escuro"}>{tema.escuro ? <I.sun /> : <I.moon />}</button></span>
+        {mais && <button className="icon-btn ini-mais" onClick={mais.fn} aria-label={mais.l}><I.plus /></button>}
+      </div>
+    </header>
+  );
+}
+
+// Os cartões do Início (o carrossel e os que a pessoa escolhe) vêm sob demanda: src/telas/inicio-cartoes.jsx
+const CarrosselInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.Carrossel })));
+const CartoesInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.CartoesInicio })));
+const PersonalizarInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.PersonalizarInicio })));
+
 function HomeTab({ db, conta, now, act, tema }) {
   const t = todayISO(), nm = agoraMin(now);
   const falas = conversa(db, now, act, conta.perfil);
   const atrasados = db.patients.filter(p => p.active && p.nextDate < t).sort((a, b) => a.nextDate.localeCompare(b.nextDate));
   const prox = itensDoDia(db, t).filter(i => i.kind === "next").find(i => mins(i.time) + DURACAO_SESSAO > nm);
-  const chave = t.slice(0, 7);
-  const recebido = soma(db.charges.filter(c => c.paid && !c.hidden && c.paidAt && c.paidAt.startsWith(chave)), c => c.amount);
-  const aReceber = soma(db.charges.filter(c => !c.paid), c => c.amount);
-  const noMes = db.sessions.filter(s => s.status === "done" && s.date.startsWith(chave)).length;
-  const d = new Date();
-
-  return (
-    <div className="page">
-      <HelloRow conta={conta} act={act} tema={tema} modo="consultorio" />
-      <h1 className="hello-t">{ehAniversario(conta.perfil) ? "Feliz aniversário" : saudacao(now)}, <b>{conta.nome}</b>.<br />Hoje é {DIA_LONGO[d.getDay()]}, {d.getDate()} de {MES_LONGO[d.getMonth()]}.</h1>
-      <WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} sessao={prox} />
-      <div className="cols">
-        <div className="col">
-          <Talk falas={falas} />
-          <ProximaConquista act={act} trilhas={["rotina", "consultorio", "metas", "app", "seguranca"]} />
-          <div className="small-acts">
-            {servidorAvisos() && <button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
-            <button className="chip-btn" onClick={act.agora}><I.target />Só o agora</button>
-            <button className="chip-btn" onClick={act.fecharDia}><I.moon />{(db.fechados || {})[t] ? "Dia fechado ✓" : "Fechar o dia"}</button>
-            <button className="chip-btn" onClick={act.revisao}><I.chart />Revisão da semana</button>
-          </div>
-          {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
-          {prox && (
-            <button className="next" onClick={() => act.openItem(prox)}>
-              <div className="next-top">
-                <span className="rc-chip"><span className="rc-ic blue"><I.clock /></span>{nm >= mins(prox.time) ? "Acontecendo agora" : "Próxima sessão"}</span>
-                {nm < mins(prox.time) && <span className="countdown">em {duracao(mins(prox.time) - nm)}</span>}
-              </div>
-              <div className="next-big">
-                <span className="next-time num">{prox.time}</span>
-                <span style={{ minWidth: 0 }}><span className="next-name" style={{ display: "block" }}>{prox.patient.name}</span><span className="next-sub">{freqNome(prox.patient.freq)} · até {hhmm(mins(prox.time) + DURACAO_SESSAO)}</span></span>
-              </div>
-              <hr className="dash" />
-              <div className="rc-row" style={{ minHeight: 0, padding: "4px 0" }}><span className="l">Você recebe</span><span className="v pos"><Money v={liquido(prox.patient)} /></span></div>
-            </button>
-          )}
-        </div>
-        <div className="col">
-          <MetaGauge db={db} meta={conta.perfil && conta.perfil.meta} act={act} />
-          <section className="bal">
-            <div className="bal-top"><span className="lab">Recebido em {MES_LONGO[d.getMonth()]}</span><button className="badge-btn" onClick={() => act.setTab("fin")}>Finanças <I.chev /></button></div>
-            <div className="bal-amt"><Money v={recebido} /></div>
-            <div className="bal-tiles" style={{ marginTop: 6 }}>
-              <button className="bt" onClick={() => act.setTab("fin")}><span>A receber</span><b><Money v={aReceber} /></b></button>
-              <div className="bt"><span>Sessões</span><b>{noMes} no mês</b></div>
-              <button className="bt" onClick={() => act.setTab("pac")}><span>{TERMO.P}</span><b>{db.patients.filter(p => p.active).length} ativos</b></button>
-            </div>
-          </section>
-          <div className="acts narrow-only">
-            <button className="act" onClick={act.novoPaciente}><i><I.plus /></i>{TERMO.S}</button>
-            <button className="act" onClick={() => act.setTab("agenda")}><i><I.cal /></i>Agenda</button>
-            <button className="act" onClick={() => act.setTab("fin")}><i><I.send /></i>Cobrar</button>
-          </div>
-          <div className="wide-only">
-            <div className="day-head" style={{ marginBottom: 12 }}><h2>Hoje</h2><span>{diaCurto(t)}</span></div>
-            <Timeline db={db} iso={t} now={now} act={act} />
-          </div>
-        </div>
+  // o que pede atenção agora: o resumo, os atalhos, as sessões sem marcar e a próxima sessão (fica antes dos cartões)
+  const agora = (
+    <div className="ini-agora">
+      <Talk falas={falas} />
+      <div className="small-acts">
+        {servidorAvisos() && <button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
+        <button className="chip-btn" onClick={act.agora}><I.target />Só o agora</button>
+        <button className="chip-btn" onClick={act.fecharDia}><I.moon />{(db.fechados || {})[t] ? "Dia fechado ✓" : "Fechar o dia"}</button>
+        <button className="chip-btn" onClick={act.revisao}><I.chart />Revisão da semana</button>
       </div>
+      {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
+      {prox && (
+        <button className="next" onClick={() => act.openItem(prox)}>
+          <div className="next-top">
+            <span className="rc-chip"><span className="rc-ic blue"><I.clock /></span>{nm >= mins(prox.time) ? "Acontecendo agora" : "Próxima sessão"}</span>
+            {nm < mins(prox.time) && <span className="countdown">em {duracao(mins(prox.time) - nm)}</span>}
+          </div>
+          <div className="next-big">
+            <span className="next-time num">{prox.time}</span>
+            <span style={{ minWidth: 0 }}><span className="next-name" style={{ display: "block" }}>{prox.patient.name}</span><span className="next-sub">{freqNome(prox.patient.freq)} · até {hhmm(mins(prox.time) + DURACAO_SESSAO)}</span></span>
+          </div>
+          <hr className="dash" />
+          <div className="rc-row" style={{ minHeight: 0, padding: "4px 0" }}><span className="l">Você recebe</span><span className="v pos"><Money v={liquido(prox.patient)} /></span></div>
+        </button>
+      )}
+      <div className="acts narrow-only">
+        <button className="act" onClick={act.novoPaciente}><i><I.plus /></i>{TERMO.S}</button>
+        <button className="act" onClick={() => act.setTab("agenda")}><i><I.cal /></i>Agenda</button>
+        <button className="act" onClick={() => act.setTab("fin")}><i><I.send /></i>Cobrar</button>
+      </div>
+    </div>
+  );
+  return (
+    <div className="page ini">
+      <TopoInicio conta={conta} act={act} tema={tema} modo="consultorio" now={now} />
+      <WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} sessao={prox} />
+      <Suspense fallback={<div className="ini-car-espera" />}><CarrosselInicio db={db} modo="consultorio" act={act} meta={conta.perfil && conta.perfil.meta} /></Suspense>
+      <Suspense fallback={agora}>
+        <CartoesInicio db={db} modo="consultorio" act={act} now={now}
+          antes={[{ id: "agora", el: agora, h: 380 + falas.length * 90 + atrasados.length * 190 + (prox ? 200 : 0) }]}
+          depois={[{ id: "conquista", el: <ProximaConquista act={act} trilhas={["rotina", "consultorio", "metas", "app", "seguranca"]} />, h: 110 }]} />
+      </Suspense>
     </div>
   );
 }
@@ -3911,52 +3927,6 @@ const AluguelSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ defa
 const ViagemSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ViagemSheet })));
 
 // Meta do mês em arco (inspirado no "Retirement")
-function arco(cx, cy, r, a0, a1) {
-  const p = a => [cx + r * Math.cos(a * Math.PI / 180), cy - r * Math.sin(a * Math.PI / 180)];
-  const [x0, y0] = p(a0), [x1, y1] = p(a1);
-  return `M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 ${Math.abs(a0 - a1) > 180 ? 1 : 0} 1 ${x1.toFixed(1)},${y1.toFixed(1)}`;
-}
-function MetaGauge({ db, meta, act }) {
-  const t = todayISO(), chave = t.slice(0, 7);
-  if (!meta) return (
-    <section className="goal">
-      <div className="goal-head"><div><b>Meta do mês</b><span>Ainda sem meta definida</span></div></div>
-      <p className="goal-sub" style={{ margin: "14px 0 0" }}>Com uma meta, eu mostro se o mês está no ritmo e quantas sessões faltam.</p>
-      <button className="goal-tip" onClick={() => act.openSettings("dinheiro")}>Definir meta</button>
-    </section>
-  );
-  const liq = liquidoMes(db, chave);
-  const dia = fromISO(t).getDate(), dim = diasNoMes(chave);
-  const esperado = meta * dia / dim;
-  const pct = Math.min(liq / meta, 1), pctE = Math.min(esperado / meta, 1);
-  let previsto = 0;
-  for (let d = t; d.startsWith(chave); d = addDays(d, 1)) itensDoDia(db, d).forEach(i => { if (i.kind !== "log") previsto += liquido(i.patient); });
-  const feitas = db.sessions.filter(s => s.status === "done").slice(-30);
-  const media = feitas.length ? soma(feitas, s => s.price - s.sublet) / feitas.length : 0;
-  const falta = Math.max(meta - liq, 0);
-  const batida = liq >= meta, noRitmo = liq >= esperado * 0.95;
-  const A0 = 200, SPAN = 220, ang = v => A0 - SPAN * v;
-  const cor = batida || noRitmo ? "var(--mint-btn)" : "var(--rose)";
-  const pe = ang(pctE), px = 150 + 118 * Math.cos(pe * Math.PI / 180), py = 150 - 118 * Math.sin(pe * Math.PI / 180);
-  return (
-    <section className="goal">
-      <div className="goal-head"><div><b>Meta do mês</b><span>{brl(meta)} líquidos</span></div><span>dia {dia} de {dim}</span></div>
-      <div className="goal-mid">
-        <svg viewBox="0 0 300 200" aria-hidden="true">
-          <path d={arco(150, 150, 118, A0, A0 - SPAN)} fill="none" style={{ stroke: "var(--surface-3)" }} strokeWidth="22" strokeLinecap="round" />
-          {pct > 0.005 && <path d={arco(150, 150, 118, A0, ang(pct))} fill="none" style={{ stroke: cor }} strokeWidth="22" strokeLinecap="round" />}
-          {!batida && <g><circle cx={px} cy={py} r="14" style={{ fill: "var(--surface)", stroke: "var(--fg)" }} strokeWidth="3" /><circle cx={px} cy={py} r="4" style={{ fill: "var(--fg)" }} /></g>}
-        </svg>
-        {batida && <Ilustra n="trofeu" className="goal-trofeu" />}
-        <div className="goal-val"><Money v={liq} /></div>
-        <div className={"goal-st " + (batida || noRitmo ? "ok" : "bad")}>{batida ? "Meta batida!" : noRitmo ? "No ritmo da meta" : `Abaixo do ritmo por ${brl(esperado - liq)}`}</div>
-        <div className="goal-sub">{batida ? `Passou ${brl(liq - meta)} da meta.` : `Com a agenda marcada, o mês fecha em ${brl(liq + previsto)}.`}</div>
-        {!batida && media > 0 && <span className="goal-tip">Faltam {brl(falta)} · cerca de {Math.ceil(falta / media)} sessões</span>}
-      </div>
-    </section>
-  );
-}
-
 // Saúde do consultório (inspirado no Ultrahuman)
 const Nivel = ({ n }) => <span className={"lvl " + n[0]}>{n[1]}</span>;
 function SaudeConsultorio({ db, chave, meta }) {
@@ -4123,14 +4093,18 @@ function EsperaSheet({ inicial, onSave, onDelete, onClose }) {
 const RegistrosSheet = lazy(() => import("./telas/paineis.jsx").then(m => ({ default: m.RegistrosSheet })));
 
 // Exportar o mês para o contador (planilha .csv)
-async function exportarMes(db, chave, act) {
+// a planilha do mês em texto (CSV com ";" e BOM, abre direto no Excel): o botão do site e o pedido do app de celular
+function csvDoMes(db, chave) {
   const pac = id => (db.patients.find(p => p.id === id) || { name: "Removido" }).name;
   const linhas = [["Data", "Nome", "Situação", "Valor", "Sublocação", "Líquido", "Pago em"]];
   db.sessions.filter(s => s.date.startsWith(chave) && (s.status === "done" || s.cobrada)).sort((a, b) => a.date.localeCompare(b.date)).forEach(s => {
     const c = s.chargeId && db.charges.find(x => x.id === s.chargeId && !x.hidden);
     linhas.push([dm(s.date) + "/" + chave.slice(0, 4), pac(s.patientId), s.status === "done" ? "Atendido" : "Falta cobrada", fmtNum(s.price), fmtNum(s.sublet), fmtNum(s.price - s.sublet), c && c.paid ? dm(c.paidAt) : "em aberto"]);
   });
-  const csv = "﻿" + linhas.map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
+  return "﻿" + linhas.map(l => l.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
+}
+async function exportarMes(db, chave, act) {
+  const csv = csvDoMes(db, chave);
   const nome = `consultorio-${chave}.csv`;
   try {
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -4263,13 +4237,21 @@ const limiteDoApp = (n, novos) => {
   return novos && n.libera && !n.libera.pessoal && n.db.pessoal.lanc.filter(l => l.data && l.data.startsWith(ch)).length + novos > LIMITE_GRATIS.lancMes
     ? { ok: false, erro: "limite", texto: `O plano grátis tem até ${LIMITE_GRATIS.lancMes} lançamentos por mês.` } : null;
 };
+// O mesmo para o Consultório: só os pacientes ativos contam (paciente novo e pedido de pessoa nova pelo link), com o
+// termo do perfil ("analisandos", "clientes"). n: { libera, db }
+const limitePacApp = (n, novos) =>
+  novos && n.libera && !n.libera.consultorio && n.db.patients.filter(p => p.active).length + novos > LIMITE_GRATIS.pacientes
+    ? { ok: false, erro: "limite", texto: `O plano grátis tem até ${LIMITE_GRATIS.pacientes} ${TERMO.p} ativos.` } : null;
 // Contas fixas, Transporte e Nossa casa no app (src/app-nativo-areas.js: o retrato dessas áreas e os pedidos delas).
 // Só carrega dentro do app de celular; aí o retrato passa a levar os extras das contas e dos gastos, transporte,
 // casa e recursos
 let AREAS = null;
+// Consultório e Loja no app (src/app-nativo-trabalho.js): carrega junto com o das áreas; aí o retrato leva o
+// consultório completo, a loja e os recursos deles
+let TRAB = null;
 let FOCO_N = 0; // cada pedido de uma parte da casa ganha um número novo (a página da casa faz cada um uma vez só)
 
-function retratoNativo({ conta, perfil, db, modos, modo, tema, plano, souPro, bancoLigado, casa }) {
+function retratoNativo({ conta, perfil, db, modos, modo, tema, plano, souPro, bancoLigado, casa, linkAg, libera, loja, lojaPro }) {
   const hoje = todayISO(), ch = hoje.slice(0, 7), desde = addDays(hoje, -400);
   const P = db.pessoal || pessoalVazio();
   const e = plano && plano.estado;
@@ -4309,6 +4291,9 @@ function retratoNativo({ conta, perfil, db, modos, modo, tema, plano, souPro, ba
     sessoesMes: ses.filter(s => s.status === "done").length,
     faltasMes: ses.filter(s => s.status === "missed").length,
     pacientesAtivos: db.patients.filter(p => p.active).length,
+    // pacientes, agenda de 5 semanas, cobranças, finanças, pedidos do link, lista de espera e regras (sem telefone,
+    // CPF nem anotações: veja src/app-nativo-trabalho.js)
+    ...(TRAB ? TRAB.retratoConsultorio(db, perfil, linkAg, libera, hoje) : {}),
   };
   return {
     v: 1, em: Date.now(), logado: true, tema: tema.modo,
@@ -4323,17 +4308,21 @@ function retratoNativo({ conta, perfil, db, modos, modo, tema, plano, souPro, ba
     ...(AREAS ? {
       transporte: pessoal ? AREAS.retratoTransporte(db, hoje, (perfil && perfil.cidade) || null) : null,
       casa: pessoal ? AREAS.retratoCasa(casa, db.settings && db.settings.pix, hoje) : null,
-      recursos: AREAS.RECURSOS,
     } : {}),
+    // a Loja (null = área desligada)
+    ...(TRAB ? { loja: modos.includes("loja") ? TRAB.retratoLoja(loja, lojaPro, hoje) : null } : {}),
+    ...(AREAS || TRAB ? { recursos: [...(AREAS ? AREAS.RECURSOS : []), ...(TRAB ? TRAB.RECURSOS : [])] } : {}),
   };
 }
 // Sem login (ou cadastro pela metade): o app deixa a tela do site na frente
 const retratoSemLogin = tema => ({
   v: 1, em: Date.now(), logado: false, tema: tema.modo, conta: null, modos: [], modo: null, termo: "Paciente", plano: null,
   servidor: servidorAvisos(), bancoLigado: false, categorias: [], catEntrada: [], pessoal: null, consultorio: null,
-  transporte: null, casa: null,
+  transporte: null, casa: null, loja: null,
 });
 const TEMAS_VALIDOS = ["auto", "dark", "light"];
+// seções do Perfil que o "abrir" ajustes { id } abre direto (telas/perfil.jsx)
+const SECOES_AJUSTES = ["link", "agenda", "dinheiro", "pix", "docs", "avisos"];
 // "abrir" das telas nativas: nomes amigáveis das abas de cada área
 const ABAS_NOMES = {
   consultorio: { inicio: "home", home: "home", agenda: "agenda", pacientes: "pac", pac: "pac", financas: "fin", fin: "fin" },
@@ -4839,6 +4828,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     recarregarClima: () => carregarClima(true),
     setTab: t => { if (t === tab) return rolarTopo(); comTransicao(() => { setTab(t); rolarTopo(); }, ORDEM_ABAS.indexOf(t) < ORDEM_ABAS.indexOf(tab) ? "tras" : "frente"); },
     setModo: m => comTransicao(() => { trocarModoSt(m); rolarTopo(); }, "modo"),
+    // abre uma aba de qualquer modo: o Início de um modo leva ao que é do outro (os gastos, as contas, a agenda)
+    abrirAba: t => {
+      const m = modoDaAba(t);
+      if (m === modoEf) return act.setTab(t);
+      if (sheet) close();
+      comTransicao(() => { setModoSt(m); gravar(K.modo(conta.email), m); setTab(t); rolarTopo(); }, "modo");
+    },
+    personalizarInicio: () => setSheet({ type: "cartoes", modo: modoEf }),
     modoSeguinte: modos[(modos.indexOf(modoEf) + 1) % modos.length],
     proximoModo: () => act.setModo(modos[(modos.indexOf(modoEf) + 1) % modos.length]),
     toggleOculto: () => setOculto(o => !o),
@@ -5203,14 +5200,15 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     import("./banco.js").then(b => b.estadoBanco()).then(e => { if (vivo && (e.ligado || navigator.onLine !== false)) guardarBanco(!!e.ligado); }).catch(() => {});
     return () => { vivo = false; };
   }, [conta.uid]);
-  const retrato = () => retratoNativo({ conta, perfil, db, modos, modo: modoEf, tema, plano, souPro, bancoLigado, casa });
+  const retrato = () => retratoNativo({ conta, perfil, db, modos, modo: modoEf, tema, plano, souPro, bancoLigado, casa, linkAg, libera, loja, lojaPro });
   const nat = useRef(null);
   // a folha que o app abriu (pedido "abrir" com acao): true até aparecer, depois { tab } (a aba do site por trás dela)
   const folhaDoApp = useRef(null);
-  nat.current = { retrato, act, db, usaPessoal, libera, hojePlano, tema, sheet, close, trocarModoSt, setTab, setP, modos, conta, perfil, folhaDoApp, setCasaFoco };
+  nat.current = { retrato, act, db, usaPessoal, libera, hojePlano, tema, sheet, close, trocarModoSt, setTab, setP, modos, conta, perfil, folhaDoApp, setCasaFoco, setDb, usaConsultorio, usaLoja, loja, lojaPro, linkAg, onAtualizar };
   // manda de novo quando algo muda (e a cada 5 minutos: a agenda de hoje muda de "próxima" para "faltou marcar").
-  // A casa vive fora do db (nuvem, tempo real): os itens, as pessoas e o estado dela também contam
-  useEffect(() => { if (nativoV2) enviarEstado(() => nat.current.retrato()); }, [db, conta, plano, tema.modo, modoEf, bancoLigado, perfil, Math.floor(now.getTime() / 3e5), casa.estado, casa.casa ? casa.itens : null, casa.casa ? casa.membros : null, casa.casa && casa.casa.nome]);
+  // A casa vive fora do db (nuvem, tempo real): os itens, as pessoas e o estado dela também contam. A loja também
+  // (as vendas de quem ajuda chegam pela nuvem e mudam a versão dos itens)
+  useEffect(() => { if (nativoV2) enviarEstado(() => nat.current.retrato()); }, [db, conta, plano, tema.modo, modoEf, bancoLigado, perfil, Math.floor(now.getTime() / 3e5), casa.estado, casa.casa ? casa.itens : null, casa.casa ? casa.membros : null, casa.casa && casa.casa.nome, loja.estado, loja.versao, loja.loja && loja.loja.nome, loja.loja && loja.loja.dono, loja.membros, lojaPro]);
   useEffect(() => {
     if (!nativoV2) return;
     const N = () => nat.current;
@@ -5229,10 +5227,16 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     };
     // Contas fixas, Transporte e Nossa casa (src/app-nativo-areas.js): uma camada a mais de pedidos, e o retrato
     // passa a levar essas áreas (e "recursos") assim que o arquivo carrega
-    let vivo = true, tirarAreas = null;
+    let vivo = true, tirarAreas = null, tirarTrab = null;
     import("./app-nativo-areas.js").then(m => {
       if (!vivo) return;
       AREAS = m; tirarAreas = registrarNativo(m.acoesDasAreas(N));
+      enviarEstado(() => N().retrato());
+    }).catch(() => {});
+    // Consultório e Loja (src/app-nativo-trabalho.js): o mesmo esquema, outra camada (nenhum pedido com nome repetido)
+    import("./app-nativo-trabalho.js").then(m => {
+      if (!vivo) return;
+      TRAB = m; tirarTrab = registrarNativo(m.acoesDoTrabalho(N));
       enviarEstado(() => N().retrato());
     }).catch(() => {});
     const tirar = registrarNativo({
@@ -5254,7 +5258,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         if (!acao) return null;
         const lanc = id => (id && n.db.pessoal.lanc.find(l => l.id === id)) || null;
         if (acao === "contas") { irPara("pessoal", "contas"); return null; }
-        if (acao === "ajustes" || acao === "perfil") a.openSettings();
+        // ajustes { id }: já aberto numa seção (link, agenda, dinheiro, pix, docs, avisos)
+        if (acao === "ajustes" || acao === "perfil") a.openSettings(acao === "ajustes" && SECOES_AJUSTES.includes(d.id) ? d.id : undefined);
         else if (acao === "avisos") a.openSettings("avisos");
         else if (acao === "excluir-conta") a.openSettings("excluir");
         else if (acao === "importar-banco") a.importarDoBanco();
@@ -5281,6 +5286,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         else if (acao === "casa-trazer") a.trazerParaCasa();
         else if (acao === "casa-gasto") a.abrirGastoCasa((d.id && C.lanc.find(x => x.id === d.id)) || undefined);
         else if (acao === "casa-conta") a.abrirContaCasa((d.id && C.contas.find(x => x.id === d.id)) || undefined);
+        // Consultório e Loja: a ficha completa, as anotações trancadas, o recibo, as rotinas, os ajustes da loja...
+        // (src/app-nativo-trabalho.js; sem a área, erro "tela")
+        else if (TRAB && TRAB.abrirTrabalho(n, acao, d)) { /* abriu a folha */ }
         else if (!d.area) throw new Error("tela");
         else return null;
         n.folhaDoApp.current = true; // abriu uma folha: ao fechar, volta para o app
@@ -5358,7 +5366,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       // sair: o mesmo do botão "Sair da conta" do Perfil
       sair: async () => { await N().act.sair(); return null; },
     });
-    return () => { vivo = false; tirar(); if (tirarAreas) tirarAreas(); };
+    return () => { vivo = false; tirar(); if (tirarAreas) tirarAreas(); if (tirarTrab) tirarTrab(); };
   }, []);
 
   const t = todayISO(), ch = t.slice(0, 7);
@@ -5424,6 +5432,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         notify("Você entrou na loja!"); setTimeout(() => act.setModo("loja"), 300);
       } } : sheet} loja={loja} conta={conta} servidor={servidorAvisos()} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "clima" && <ClimaSheet clima={clima} cidade={perfil.cidade} act={act} onClose={close} />}
+      {sheet && sheet.type === "cartoes" && <Suspense fallback={null}><PersonalizarInicio modo={sheet.modo} db={db} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "teto" && <Suspense fallback={null}><TetoSheet key={sheet.cat || "teto"} db={db} cat={sheet.cat} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "boleto" && <Suspense fallback={null}><BoletoSheet key={sheet.n || "boleto"} texto={sheet.texto} act={act} onClose={close} /></Suspense>}
       {sheet && sheet.type === "importar" && <Suspense fallback={null}><ImportarSheet key={sheet.n} db={db} act={act} onClose={close} arquivo={sheet.arquivo} doBanco={sheet.doBanco} /></Suspense>}
@@ -5603,6 +5612,8 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar, voltarDaTela, pagarContaP, despagarContaP, limiteDoApp };
+export { Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar, voltarDaTela, pagarContaP, despagarContaP, limiteDoApp, TopoInicio, situacao, liquido, useWide, TERMO,
+  // o app de celular (src/app-nativo-trabalho.js): as regras do consultório sem tela
+  registrar, desfazer, sublocacao, sessoesAbertas, cobrancasDoPix, freqNome, reajusteDe, periodoDe, mins, hhmm, INTERVALO_MIN, limitePacApp, csvDoMes };
 
 export default App;

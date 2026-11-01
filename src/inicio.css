@@ -1,0 +1,317 @@
+/* =========================================================
+   Início com os cartões do app de celular (src/telas/inicio-cartoes.jsx): o carrossel de destaques, os cartões que a
+   pessoa escolhe e o "Personalizar início". Só usa as cores do tema (--surface, --mode, --mint…): vale para o claro,
+   o escuro e o vidro. O topo (a saudação) fica em styles.css, porque abre antes deste arquivo.
+   ========================================================= */
+:root { --ini-brilho: 26%; }
+@media (prefers-color-scheme: light) { :root:not([data-app-theme="dark"]) { --ini-brilho: 15%; } }
+:root[data-app-theme="light"] { --ini-brilho: 15%; }
+@keyframes ini-cresce { from { transform: scaleX(0); } }
+@keyframes ini-anel { from { stroke-dashoffset: var(--c); } }
+
+/* ---------- o carrossel ---------- */
+.ini-car { --alt: 214px; position: relative; margin: 4px 0 16px; }
+/* no celular, o trilho vai de ponta a ponta da tela (o próximo cartão começa logo depois da borda) */
+.ini-car-trilho { display: flex; gap: 16px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain;
+  margin: 0 -16px; padding: 0 16px; scroll-padding: 0 16px; }
+.ini-car-trilho::-webkit-scrollbar { display: none; }
+.ini-car-item { flex: 0 0 100%; min-width: 0; display: flex; scroll-snap-align: start; }
+.ini-car-bolinhas { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); display: flex; }
+.ini-car-bolinhas button { width: 16px; height: 22px; padding: 0; display: grid; place-items: center; background: none; }
+.ini-car-bolinhas button::before { content: ""; width: 7px; height: 7px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 24%, transparent); transition: width .25s cubic-bezier(.2, .8, .2, 1), background .25s; }
+.ini-car-bolinhas button.on { width: 28px; }
+.ini-car-bolinhas button.on::before { width: 20px; background: var(--fg); }
+.ini-car-seta { position: absolute; top: calc(var(--alt) / 2); z-index: 2; width: 42px; height: 42px; margin-top: -21px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--line-forte); color: var(--fg); box-shadow: 0 8px 22px rgba(0, 0, 0, .22); transition: opacity .2s, transform .12s; }
+.ini-car-seta:active { transform: scale(.92); }
+.ini-car-seta.esq { left: -21px; } .ini-car-seta.dir { right: -21px; }
+.ini-car-seta:disabled { opacity: 0; pointer-events: none; }
+.ini-car-seta svg { width: 18px; height: 18px; }
+.ini-car-espera { height: 214px; margin: 4px 0 16px; border-radius: 28px; background: var(--surface); border: 1px solid var(--line); opacity: .6; }
+
+/* ---------- o cartão grande ---------- */
+.ini-g { position: relative; isolation: isolate; overflow: hidden; width: 100%; min-height: var(--alt); display: flex; flex-direction: column; align-items: stretch; gap: 3px;
+  padding: 18px 20px 20px; border-radius: 28px; background: var(--surface); background-image: var(--brilho-cartao); border: 1px solid var(--line); box-shadow: var(--card-shadow);
+  color: var(--fg); text-align: left; transition: transform .12s ease; }
+.ini-car.com-bolinhas .ini-g { padding-bottom: 34px; }
+/* um brilho da cor do cartão no canto de cima */
+.ini-g::before { content: ""; position: absolute; z-index: -1; right: -22%; top: -62%; width: 78%; aspect-ratio: 1; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--gc) var(--ini-brilho), transparent), transparent); }
+button.ini-g:active { transform: scale(.985); }
+@media (hover: hover) { button.ini-g:hover { border-color: var(--line-forte); } }
+.ini-g-topo { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--muted); font-size: 15px; font-weight: 600; }
+.ini-g-ic { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--gc); background: color-mix(in srgb, var(--gc) 18%, transparent); }
+.ini-g-ic svg { width: 15px; height: 15px; }
+.ini-g-rot { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-g-topo > svg { width: 15px; height: 15px; flex: none; color: var(--faint); }
+.ini-g-v { display: block; margin-top: 8px; font-family: var(--f-display); font-weight: 700; font-size: 38px; line-height: 1.1; letter-spacing: -.035em; white-space: nowrap; }
+.ini-g-v.neg { color: var(--rose); }
+/* números grandes: o "R$" pequeno em cima e os centavos menores e mais apagados */
+:is(.ini-g-v, .ini-valor) .mny .cur { font-size: .42em; vertical-align: .95em; margin-right: .28em; opacity: .5; }
+:is(.ini-g-v, .ini-valor) .mny .cents { font-size: .56em; opacity: .45; }
+.ini-g-apoio { color: var(--muted); font-size: 14px; font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ini-g-apoio.mais { color: var(--mint); } .ini-g-apoio.atencao { color: var(--amber); }
+.ini-g-apoio.grande { margin-top: 10px; color: var(--fg); font-size: 15.5px; line-height: 1.4; -webkit-line-clamp: 3; }
+.ini-g-pe { margin-top: auto; padding-top: 12px; display: grid; gap: 8px; }
+.ini-g-barra { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.ini-g-barra b { min-width: 74px; text-align: right; color: var(--fg); font-family: var(--f-display); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ini-g-entre { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.ini-g-entre b { color: var(--fg); font-weight: 700; white-space: nowrap; }
+.ini-g-trio { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ini-g-trio > span { display: grid; gap: 2px; min-width: 0; }
+.ini-g-trio small { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-g-trio b { font-family: var(--f-display); font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-g-trio b.atencao { color: var(--amber); }
+.ini-g-rodape { display: flex; align-items: center; gap: 10px; }
+.ini-g-txt { display: grid; gap: 1px; min-width: 0; }
+.ini-g-txt b { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-g-txt small { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-g-pergunta { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-g-pergunta svg { width: 14px; height: 14px; flex: none; }
+/* conta nova: a Bolinha chama para o primeiro gasto */
+.ini-g-oi { gap: 6px; }
+.ini-g-oi-b { display: block; width: 52px; height: 52px; }
+.ini-g-oi-b .bolinha { width: 52px; height: 52px; }
+.ini-g-oi > b { font-family: var(--f-display); font-weight: 700; font-size: 21px; letter-spacing: -.02em; }
+.ini-g-oi .ini-g-apoio { -webkit-line-clamp: 3; }
+.ini-g-oi .ini-botao { margin-top: auto; }
+
+/* as logos dos bancos, uma por cima da outra */
+.ini-logos { display: flex; flex: none; }
+.ini-logo { width: 30px; height: 30px; flex: none; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface); font-size: 10px; }
+.ini-logo.logo, .ini-logo.mono { border-radius: 50%; }
+.ini-logo.mono b { font-size: 10px; }
+.ini-logo + .ini-logo { margin-left: -9px; }
+
+/* barras (o trilho e o que encheu) */
+.ini-trilho { position: relative; display: block; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--bc, var(--mode)) 15%, transparent); }
+.ini-trilho.grosso { height: 9px; }
+.ini-trilho > i { display: block; height: 100%; min-width: 4px; border-radius: inherit; background: var(--bc, var(--mode)); transform-origin: left center;
+  animation: ini-cresce .8s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 90ms + .2s); }
+/* a meta: o risquinho é onde o mês deveria estar hoje */
+.ini-meta > em { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--fg); opacity: .8; }
+
+.ini-botao { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; height: 42px; padding: 0 18px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 800; font-size: 14px; white-space: nowrap; }
+.ini-botao svg { width: 16px; height: 16px; }
+.ini-botao.falso { justify-self: start; }
+
+/* ---------- a lista de cartões ---------- */
+.ini-cartoes { display: flex; flex-direction: column; gap: 14px; }
+.ini-agora { display: flex; flex-direction: column; gap: 14px; }
+.ini-agora:empty { display: none; }
+.ini-grade { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.ini-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ini-col > .conq-prox { margin-top: 0; }
+.ini-cartoes > .conq-prox { margin-top: 0; }
+
+.ini-cartao { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 2px; width: 100%; min-width: 0; padding: 18px; border-radius: 28px;
+  background: var(--surface); background-image: var(--brilho-cartao); border: 1px solid var(--line); box-shadow: var(--card-shadow); color: var(--fg); text-align: left; scroll-margin-top: 84px; }
+button.ini-cartao { transition: transform .12s ease; }
+button.ini-cartao:active { transform: scale(.985); }
+.ini-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 26px; color: var(--muted); font-size: 15px; font-weight: 600; }
+.ini-cab-t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-cab-b { display: inline-flex; align-items: center; gap: 6px; min-width: 0; min-height: 30px; padding: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.ini-cab-b > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-cab svg { width: 15px; height: 15px; flex: none; color: var(--faint); }
+.ini-cab .link { color: var(--mode-text); font-weight: 800; font-size: 13.5px; }
+@media (hover: hover) { .ini-cab-b:hover { color: var(--fg); } }
+.ini-valor { display: block; margin-top: 4px; font-family: var(--f-display); font-weight: 700; font-size: 32px; line-height: 1.12; letter-spacing: -.03em; white-space: nowrap; }
+.ini-sub { display: block; margin-top: 4px; font-family: var(--f-display); font-weight: 600; font-size: 19px; line-height: 1.25; letter-spacing: -.015em; }
+.ini-apoio { margin: 0; color: var(--muted); font-size: 13.5px; font-weight: 600; line-height: 1.4; }
+.ini-cartao > .ini-botao { margin-top: 12px; }
+
+/* gastos do mês: a frase de comparação com a setinha e o gráfico */
+.ini-comp { display: flex; align-items: center; gap: 7px; margin-top: 2px; color: var(--muted); font-size: 13.5px; font-weight: 700; line-height: 1.3; text-wrap: balance; }
+.ini-comp i { width: 20px; height: 20px; flex: none; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; }
+.ini-comp.sobe { color: var(--rose); } .ini-comp.sobe i { background: color-mix(in srgb, var(--rose) 16%, transparent); }
+.ini-comp.desce { color: var(--mint); } .ini-comp.desce i { background: color-mix(in srgb, var(--mint) 16%, transparent); }
+.ini-graf { margin: 16px -2px 0; }
+
+/* gastos por categoria: as quatro maiores, duas por linha */
+.ini-cats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; margin: 4px -6px 0; }
+.ini-cat { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 6px; border-radius: 16px; background: none; color: var(--fg); text-align: left; transition: background .15s, transform .12s; }
+.ini-cat:active { transform: scale(.97); }
+@media (hover: hover) { .ini-cat:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); } }
+.ini-cat > span:last-child { display: grid; gap: 1px; min-width: 0; }
+.ini-cat small { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-cat b { font-family: var(--f-display); font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ini-cat b em { margin-left: 6px; font-family: var(--f-body); font-style: normal; font-size: 12px; font-weight: 700; color: var(--muted); }
+.ini-pe { align-self: center; margin-top: 6px; font-weight: 800; font-size: 13.5px; color: var(--mode-text); }
+
+/* hoje no consultório: a linha do tempo */
+:is(.ini-ses, .ini-pilula).ok { --tc: var(--mint); }
+:is(.ini-ses, .ini-pilula).falta { --tc: var(--rose); }
+:is(.ini-ses, .ini-pilula):is(.prox, .prev) { --tc: var(--accent-ink); }
+:is(.ini-ses, .ini-pilula).marcar { --tc: var(--amber); }
+.ini-pilula.neutro { --tc: var(--muted); }
+.ini-dia { display: flex; flex-direction: column; margin: 10px -6px 0; }
+.ini-ses { display: grid; grid-template-columns: 42px 12px minmax(0, 1fr) auto 54px; align-items: center; gap: 9px; min-height: 46px; padding: 0 6px; border-radius: 14px;
+  background: none; color: var(--fg); text-align: left; transition: background .15s; }
+@media (hover: hover) { .ini-ses:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); } }
+.ini-ses-h { font-family: var(--f-display); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.ini-ses:is(.prox, .prev, .marcar) .ini-ses-h { color: var(--fg); }
+.ini-ses-trilho { position: relative; align-self: stretch; display: grid; place-items: center; }
+.ini-ses-trilho::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--line-forte); }
+.ini-ses.primeira .ini-ses-trilho::before { top: 50%; }
+.ini-ses.ultima .ini-ses-trilho::before { bottom: 50%; }
+.ini-ses-trilho > i { position: relative; width: 12px; height: 12px; border-radius: 50%; background: var(--tc); }
+.ini-ses:is(.prox, .prev, .marcar) .ini-ses-trilho > i { background: var(--surface); border: 2px solid var(--tc); }
+.ini-ses.agora .ini-ses-trilho > i { box-shadow: 0 0 0 4px color-mix(in srgb, var(--tc) 24%, transparent); }
+.ini-ses-nm { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-ses.falta .ini-ses-nm { color: var(--muted); }
+.ini-pilula { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px; color: var(--tc); background: color-mix(in srgb, var(--tc) 15%, transparent);
+  font-size: 12px; font-weight: 800; white-space: nowrap; justify-self: start; }
+.ini-ses-v { text-align: right; font-family: var(--f-display); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.ini-ses:is(.prox, .prev, .marcar) .ini-ses-v { color: var(--fg); }
+.ini-dia-mais { padding: 4px 0 0 67px; }
+.ini-livre { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 13px 14px; border-radius: 16px; background: var(--surface-2); color: var(--muted); font-size: 14px; font-weight: 600; }
+.ini-livre svg { width: 18px; height: 18px; flex: none; }
+.ini-numeros { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ini-numeros > span { display: grid; gap: 2px; min-width: 0; }
+.ini-numeros > span:last-child { text-align: right; }
+.ini-numeros small { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.ini-numeros b { font-family: var(--f-display); font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ini-numeros b.mais { color: var(--mint); } .ini-numeros b.atencao { color: var(--amber); }
+
+/* transações recentes */
+.ini-contagem { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.ini-contagem b { font-family: var(--f-display); font-weight: 700; font-size: 30px; letter-spacing: -.02em; color: var(--fg); }
+.ini-recentes { display: flex; flex-direction: column; margin-top: 6px; }
+
+/* os cartões de meia largura (fluxo de caixa e contas a pagar), lado a lado */
+.ini-par { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.ini-meia { min-height: 218px; padding: 16px; gap: 6px; }
+.ini-meia > .ini-cab { justify-content: flex-start; gap: 6px; }
+.ini-meia-v { display: grid; gap: 1px; margin-top: 2px; }
+.ini-meia-v small { color: var(--muted); font-size: 12px; font-weight: 600; }
+.ini-meia-v b, .ini-meia-num { font-family: var(--f-display); font-weight: 700; font-size: 21px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ini-meia-v b.mais { color: var(--mint); } .ini-meia-v b.menos { color: var(--rose); }
+.ini-meia-pe { margin-top: auto; display: grid; gap: 6px; padding-top: 6px; }
+.ini-conta { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 36px; margin-top: 4px; padding: 0; background: none; color: var(--fg); text-align: left; }
+.ini-conta > b { min-width: 0; font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-conta-logo.txn-av, .ini-conta-logo { width: 30px; height: 30px; flex: none; border-radius: 10px; font-size: 11px; }
+.ini-conta-logo svg { width: 16px; height: 16px; }
+.ini-conta-logo.mono b { font-size: 11px; }
+.ini-conta-st { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.ini-meia > .ini-pilula { align-self: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.ini-meia-num .mny .cur { font-size: .55em; vertical-align: .55em; margin-right: .2em; opacity: .55; }
+.ini-meia-num .mny .cents { font-size: .7em; opacity: .5; }
+.ini-paguei { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--line-forte); background: none; color: var(--muted); transition: color .15s, border-color .15s, transform .12s; }
+.ini-paguei svg { width: 16px; height: 16px; }
+.ini-paguei:active { transform: scale(.9); color: var(--mint); border-color: var(--mint); }
+@media (hover: hover) { .ini-paguei:hover { color: var(--mint); border-color: var(--mint); } }
+.ini-outra { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.ini-outra > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-outra > b { color: var(--fg); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ini-outra.fraco > b { color: var(--muted); }
+.ini-ok { width: 40px; height: 40px; margin-top: auto; border-radius: 50%; display: grid; place-items: center; color: var(--mint); background: color-mix(in srgb, var(--mint) 16%, transparent); }
+.ini-ok svg { width: 20px; height: 20px; }
+
+/* tetos do mês: os anéis, um dentro do outro */
+.ini-tetos { display: flex; align-items: center; gap: 18px; margin-top: 10px; }
+.ini-aneis { flex: none; overflow: visible; }
+.ini-aneis .trilho { fill: none; stroke: color-mix(in srgb, var(--ac) 17%, transparent); }
+.ini-aneis .cheio { fill: none; stroke: var(--ac); stroke-linecap: round; animation: ini-anel 1.1s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--k) * 100ms + .15s); }
+.ini-tetos-l { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ini-teto { display: grid; gap: 1px; margin: 0 -8px; padding: 6px 8px; border-radius: 12px; background: none; color: var(--fg); text-align: left; }
+@media (hover: hover) { .ini-teto:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); } }
+.ini-teto-t { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ini-teto-t > i { width: 8px; height: 8px; flex: none; border-radius: 50%; }
+.ini-teto-t > b { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-teto-t > em { font-style: normal; font-family: var(--f-display); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+.ini-teto small { padding-left: 16px; color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-tetos .menos { color: var(--rose); }
+
+/* caixinhas: cada uma com o anel da meta e o emoji no meio */
+.ini-cx-lista { display: flex; flex-direction: column; margin: 8px -8px 4px; }
+.ini-cx-linha { display: flex; align-items: center; gap: 12px; min-height: 66px; padding: 7px 8px; border-radius: 18px; background: none; color: var(--fg); text-align: left; transition: background .15s, transform .12s; }
+.ini-cx-linha:active { transform: scale(.985); }
+@media (hover: hover) { .ini-cx-linha:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); } }
+.ini-cx-anel .trilho { stroke: color-mix(in srgb, var(--cxc) 18%, transparent); }
+.ini-cx-anel .vz-anel-in > span { font-size: 21px; line-height: 1; }
+.ini-cx-mid { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ini-cx-mid b { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ini-cx-mid small { color: var(--muted); font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+.ini-cx-pct { font-style: normal; font-family: var(--f-display); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--cxc); }
+.ini-cx-linha > svg { width: 15px; height: 15px; flex: none; color: var(--faint); }
+.ini-cx .cx-vazia { margin-top: 10px; }
+.ini-cx .din-acts { margin: 10px 0 8px; }
+.ini-cx .din-rodape { margin: 2px 0 0; }
+
+/* combustível agora: uma linha só */
+.ini-linha { flex-direction: row; align-items: center; gap: 14px; padding: 16px 18px; }
+.ini-linha-ic { width: 48px; height: 48px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--gc); background: color-mix(in srgb, var(--gc) 16%, transparent); }
+.ini-linha-ic svg { width: 22px; height: 22px; }
+.ini-linha-t { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ini-linha-t b { font-size: 16px; font-weight: 700; }
+.ini-linha-t small { color: var(--muted); font-size: 13px; font-weight: 600; line-height: 1.35; }
+.ini-linha > svg { width: 15px; height: 15px; flex: none; color: var(--faint); }
+
+/* as áreas do Avina: duas por linha (com um número ímpar, a última ocupa a linha toda) */
+.ini-areas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.ini-area { display: flex; flex-direction: column; justify-content: space-between; gap: 14px; min-height: 116px; padding: 14px; border-radius: 20px; background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--fg); text-align: left; transition: transform .12s, border-color .15s; }
+.ini-area:last-child:nth-child(odd) { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center; justify-content: flex-start; }
+.ini-area:active { transform: scale(.97); }
+@media (hover: hover) { .ini-area:hover { border-color: var(--line-forte); } }
+.ini-area-ic { width: 40px; height: 40px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--gc); background: color-mix(in srgb, var(--gc) 18%, transparent); }
+.ini-area-ic svg { width: 20px; height: 20px; }
+.ini-area b { display: block; font-size: 15px; font-weight: 700; }
+.ini-area small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+
+/* o painel do banco (src/telas/bancos.jsx) no lugar do cartão "Saldo em contas": o mesmo jeito dos outros cartões */
+.panel.bancos#ini-bancos { margin: 0; padding: 6px 18px 12px; border-radius: 28px; scroll-margin-top: 84px; }
+#ini-bancos .panel-head h3 { font-family: var(--f-body); font-size: 15px; font-weight: 600; color: var(--muted); }
+/* a previsão do mês (src/telas/pessoal.jsx) também */
+.ini .panel.ps-prev { margin: 0; padding: 6px 18px 16px; border-radius: 28px; }
+.ini .ps-prev .panel-head h3 { font-family: var(--f-body); font-size: 15px; font-weight: 600; color: var(--muted); }
+
+/* o fim: personalizar o início */
+.ini-rodape { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.ini-rodape .chip-btn { height: 42px; padding: 0 16px; border-radius: 999px; }
+.ini-grade + .ini-rodape { margin-top: 20px; }
+
+/* ---------- Personalizar início ---------- */
+.pz-lista { display: flex; flex-direction: column; gap: 8px; }
+.pz-linha { position: relative; display: flex; align-items: center; gap: 8px; min-height: 66px; padding: 8px 6px 8px 2px; border-radius: 18px; background: var(--surface-2); border: 1px solid var(--line); }
+.pz-lista.arrastando .pz-linha:not(.pega) { transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
+.pz-linha.pega { z-index: 2; background: var(--surface-3); box-shadow: 0 16px 36px rgba(0, 0, 0, .28); }
+.pz-alca { width: 38px; height: 46px; flex: none; display: grid; place-items: center; border-radius: 12px; background: none; color: var(--faint); cursor: grab; touch-action: none; }
+.pz-linha.pega .pz-alca { cursor: grabbing; color: var(--fg); }
+.pz-alca svg { width: 20px; height: 20px; }
+.pz-ic { width: 38px; height: 38px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--surface); color: var(--fg); }
+.pz-ic svg { width: 19px; height: 19px; }
+.pz-t { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.pz-t b { font-size: 15px; font-weight: 700; }
+.pz-t small { color: var(--muted); font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+.pz-linha.fora :is(.pz-ic, .pz-t) { opacity: .55; }
+.pz-sw { flex: none; display: flex; align-items: center; padding: 10px 6px; background: none; }
+
+/* ---------- vidro (foto de fundo) e movimento reduzido ---------- */
+.shell.glass :is(.ini-g, .ini-cartao) {
+  background-color: var(--mat-fino); background-image: var(--ruido), var(--vidro-brilho);
+  -webkit-backdrop-filter: blur(14px) saturate(170%) brightness(1.04); backdrop-filter: blur(14px) saturate(170%) brightness(1.04);
+  border: 1px solid var(--vidro-borda); box-shadow: var(--vidro-sombra);
+}
+@media (prefers-reduced-motion: reduce) { .ini-trilho > i, .ini-aneis .cheio { animation: none; } .ini-car-bolinhas button::before { transition: none; } }
+
+/* ---------- computador: até três destaques lado a lado, com setas; os cartões em duas colunas ---------- */
+@media (min-width: 900px) {
+  .ini-car { --alt: 222px; margin: 4px 0 22px; }
+  .ini-car-trilho { margin: 0; padding: 0; scroll-padding: 0; }
+  .ini-car-item { flex-basis: calc((100% - (var(--por) - 1) * 16px) / var(--por)); }
+  .ini-car.com-bolinhas .ini-g { padding-bottom: 20px; }
+  .ini-car-bolinhas { position: static; transform: none; justify-content: center; margin-top: 10px; }
+  .ini-car-espera { height: 222px; margin-bottom: 22px; }
+  .ini-g-v { font-size: 36px; }
+}
+/* celular bem estreito (320 px): números e espaços um pouco menores */
+@media (max-width: 360px) {
+  .ini-g { padding: 16px 16px 18px; }
+  .ini-g-v { font-size: 33px; }
+  .ini-valor { font-size: 28px; }
+  .ini-meia { padding: 14px; }
+  .ini-meia-v b, .ini-meia-num { font-size: 18px; }
+  .ini-ses { grid-template-columns: 40px 12px minmax(0, 1fr) auto; }
+  .ini-ses-v { display: none; }
+}

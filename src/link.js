@@ -9,6 +9,16 @@ export const linkDo = pf => ({ ...LINK_PADRAO, ...((pf && pf.link) || {}) });
 export const enderecoLink = (endereco, pid) => endereco ? `${ENDERECO_APP}agendar/?${endereco}${pid ? `&p=${pid}` : ""}` : "";
 
 const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const DIA_LONGO = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+// O recado para quem pediu pelo link, depois de aceitar ("Confirmado: ...") ou recusar (com o link para escolher outro
+// horário). p: o pedido ({ nome, data, hora, pid }); perfil: o da pessoa (o endereço do link fica em perfil.link)
+export function recadoDoPedido(p, aceitou, perfil) {
+  const nome = String(p.nome || "").split(" ")[0], [y, m, d] = String(p.data).split("-").map(Number);
+  if (aceitou) return `Oi, ${nome}! Confirmado: ${DIA_LONGO[new Date(y, m - 1, d).getDay()]}, ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}, às ${p.hora}. Até lá!`;
+  const endereco = linkDo(perfil).endereco;
+  return `Oi, ${nome}! Esse horário não vai dar.${endereco ? ` Escolha outro por aqui: ${enderecoLink(endereco, p.pid)}` : " Me fala outro dia e horário que fica bom para você?"}`;
+}
 const lerLocal = (k, padrao) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : padrao; } catch (e) { return padrao; } };
 const gravarLocal = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 

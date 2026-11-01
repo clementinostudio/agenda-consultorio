@@ -1,7 +1,7 @@
 // Parte do app carregada sob demanda: o modo Loja (caixa do dia, gastos, o que falta, resumo e equipe)
 import React, { useEffect, useState } from "react";
 import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, vibrar, Ilustra, ConfirmButton, iniciais, catVars, CatIcon, TopBar, HelloRow, Toggle, CORES, diaCurto } from "../App.jsx";
-import { PAGAMENTOS, pagDe, CATS_LOJA, catLoja, CEDULAS, CORES_PRODUTO, MAX_AJUDANTES, totaisDia, gaveta, maisVendidos, totaisPeriodo, porDia, pixCopiaECola, somaV } from "../loja.js";
+import { PAGAMENTOS, pagDe, CATS_LOJA, catLoja, CEDULAS, CORES_PRODUTO, MAX_AJUDANTES, totaisDia, gaveta, maisVendidos, totaisPeriodo, porDia, pixCopiaECola, somaV, lojaTravada, PRODUTOS_SUGERIDOS } from "../loja.js";
 import { lerItem, nomeLoja } from "../nota.js";
 import { LIMITE_GRATIS } from "../plano.js";
 import { noApp } from "../app-nativo.js";
@@ -9,7 +9,7 @@ import { NotaSheet } from "./casa.jsx";
 import { usePrecosPerto, PrecoItem, PrecosPainel } from "./precos.jsx";
 const LIMITE_GRATIS_LOJA = LIMITE_GRATIS.lojaDias;
 // gerador de QR code (zxing, o mesmo do leitor): só carrega quando alguém pede o QR do Pix
-import wasmEscritor from "zxing-wasm/writer/zxing_writer.wasm?url";
+import { escritorQR } from "../qr.js";
 
 const ERROS = [[/ja tem loja/, "Você já está numa loja. Para entrar nesta, saia da outra primeiro."], [/loja cheia/, `Essa loja já tem ${MAX_AJUDANTES} ajudantes.`], [/convite invalido/, "Esse convite venceu ou não existe. Peça um link novo para quem criou a loja."], [/sem login/, "Entre na sua conta para continuar."], [/so a dona/, "Só quem criou a loja pode fazer isso."]];
 const erroDe = e => { const t = String((e && e.message) || e); const m = ERROS.find(([r]) => r.test(t)); return m ? m[1] : "Não consegui falar com a nuvem. Confira a internet e tente de novo."; };
@@ -69,7 +69,7 @@ function AvisoEquipe({ L, act }) {
     ? <div className="note amber"><I.alert /><span>{noApp ? "Na versão grátis, só você anota na loja. Os ajudantes continuam vendo o que já foi anotado." : <>Sua equipe faz parte do <b>Pro Loja</b>. Para os ajudantes continuarem anotando, renove a assinatura. <button className="link" onClick={() => act.pedirPro("loja-equipe")}>Ver planos</button></>}</span></div>
     : <div className="note amber"><I.alert /><span>{noApp ? <>Por enquanto, só <b>{nomeDe(L, L.loja.dono)}</b> anota na loja. Fale com quem cuida da loja.</> : <>A assinatura da loja acabou. Peça para <b>{nomeDe(L, L.loja.dono)}</b> renovar o Pro Loja para você continuar anotando.</>}</span></div>;
 }
-const travado = (L, act) => !act.lojaPro && !L.souDona && L.membros.length > 1;
+const travado = (L, act) => lojaTravada(L, act.lojaPro);
 
 /* =========================================================
    Caixa: vender, ver o dia, fechar o caixa
@@ -444,7 +444,7 @@ function ProdutoSheet({ L, inicial, onClose, act }) {
   const [preco, setPreco] = useState(inicial ? fmtNum(inicial.preco) : "");
   const [cor, setCor] = useState(inicial ? inicial.cor : CORES_PRODUTO[L.produtos.length % CORES_PRODUTO.length]);
   const ok = nome.trim() && num(preco) > 0;
-  const SUG = ["Brigadeiro", "Bolo (fatia)", "Sorvete 1 bola", "Açaí 300 ml", "Coxinha", "Pastel", "Refrigerante lata", "Água", "Café"];
+  const SUG = PRODUTOS_SUGERIDOS;
   const salvar = async () => {
     await L.salvar("produto", { ...(inicial || {}), nome: nome.trim(), preco: num(preco), cor, ativo: true, ordem: inicial ? inicial.ordem : L.produtos.length, criado: inicial ? inicial.criado : Date.now() });
     vibrar("ok"); act.toast(inicial ? "Produto atualizado" : `${nome.trim()} no caixa`); onClose();
@@ -491,8 +491,6 @@ function VendaSheet({ L, inicial, pre, onClose, act }) {
 }
 
 /* ---------- Pix com o valor da venda: QR code na tela para o cliente ---------- */
-let ESCRITOR = null;
-const escritorQR = () => ESCRITOR || (ESCRITOR = import("zxing-wasm/writer").then(m => { m.prepareZXingModule({ overrides: { locateFile: (p, prefix) => (p.endsWith(".wasm") ? wasmEscritor : prefix + p) } }); return m; }));
 function PixSheet({ L, conta, total, onPago, onClose, act }) {
   const cfg = L.config;
   const codigo = cfg.pix ? pixCopiaECola({ chave: cfg.pix, nome: cfg.recebedor || L.loja.nome, cidade: cfg.cidade || (conta.perfil && conta.perfil.cidade) || "", valor: total }) : "";

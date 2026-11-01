@@ -2696,3 +2696,27 @@ a.perfil-row { text-decoration: none; }
 .bk-ligar { align-self: flex-start; margin-top: 4px; font: inherit; font-size: 12.5px; font-weight: 800; color: var(--mode-text); background: var(--surface-2); border: 0; border-radius: 999px; padding: 5px 10px; max-width: 100%; }
 .bk-aviso { width: 100%; text-align: left; margin: 4px 0; }
 .bk-trazer { margin-top: 10px; width: 100%; }
+
+/* ===== Topo do Início (TopoInicio, em App.jsx): a foto, o modo e os botões numa linha; embaixo, a data e a saudação
+   grande. No computador, tudo numa linha só (o modo fica na barra lateral). ===== */
+.ini-topo { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l a" "t t"; align-items: center; column-gap: 10px; padding-top: 14px; }
+.ini-topo-l { grid-area: l; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ini-topo-a { grid-area: a; }
+.ini-topo .icon-btn { width: 44px; height: 44px; }
+.ini-topo .ini-mais { background: var(--accent); border-color: transparent; color: #fff; box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent); }
+.ini-topo .ini-mais svg { width: 22px; height: 22px; }
+.shell.glass .ini-topo .ini-mais { background: var(--accent); border-color: transparent; }
+.ini-topo-t { grid-area: t; margin: 22px 0 14px; min-width: 0; }
+.ini-data { margin: 0; color: var(--muted); font-size: 15px; font-weight: 600; }
+.ini-ola { margin: 3px 0 0; font-family: var(--f-display); font-weight: 700; font-size: 32px; line-height: 1.15; letter-spacing: -.03em; text-wrap: balance; }
+.ini > .wx { margin: 0 0 16px; }
+/* no celular com dois modos, o botão do tema sai do topo (não cabe ao lado do modo; fica no Perfil → Aparência) */
+@media (max-width: 439px) { .ini-topo.com-modo .nc { display: none; } }
+@media (min-width: 900px) {
+  .ini-topo { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "l t a"; column-gap: 18px; padding-top: 6px; margin-bottom: 18px; }
+  .ini-topo .mode { display: none; }
+  .ini-topo .me { width: 58px; height: 58px; font-size: 19px; }
+  .ini-topo-t { margin: 0; }
+  .ini-ola { font-size: 36px; }
+}
+.shell.com-foto :is(.ini-ola, .ini-data) { color: var(--foto-tx); text-shadow: 0 1px 2px var(--g-shadow), 0 2px 16px var(--g-shadow); }

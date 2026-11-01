@@ -42,10 +42,10 @@ const lista = xs => xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + "
 // Nome do conselho para cada profissão (o rótulo do campo; a pessoa escreve o número como quiser)
 const CONSELHO = { Psicologia: "CRP", Psicanálise: "Registro", Psiquiatria: "CRM", "Terapia ocupacional": "CREFITO", Fonoaudiologia: "CRFa", Nutrição: "CRN", Fisioterapia: "CREFITO" };
 export const conselhoDe = prof => CONSELHO[prof] || "Registro profissional";
-const servicoPadrao = prof => ({ Psicologia: "psicoterapia individual", Psicanálise: "psicanálise", Psiquiatria: "consulta psiquiátrica", "Terapia ocupacional": "terapia ocupacional", Fonoaudiologia: "fonoaudiologia", Nutrição: "consulta de nutrição", Fisioterapia: "fisioterapia" }[prof] || "atendimento");
+export const servicoPadrao = prof => ({ Psicologia: "psicoterapia individual", Psicanálise: "psicanálise", Psiquiatria: "consulta psiquiátrica", "Terapia ocupacional": "terapia ocupacional", Fonoaudiologia: "fonoaudiologia", Nutrição: "consulta de nutrição", Fisioterapia: "fisioterapia" }[prof] || "atendimento");
 
 // Pagamentos recebidos (cobranças pagas de verdade), do mais novo para o mais velho
-const pagos = db => db.charges.filter(c => c.paid && c.paidAt && !c.hidden && c.amount > 0).sort((a, b) => b.paidAt.localeCompare(a.paidAt));
+export const pagos = db => db.charges.filter(c => c.paid && c.paidAt && !c.hidden && c.amount > 0).sort((a, b) => b.paidAt.localeCompare(a.paidAt));
 const sessoesDe = (db, c) => c.sessionIds.map(id => db.sessions.find(s => s.id === id)).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
 
 /* ---------- arquivo: compartilhar (WhatsApp, e-mail) ou baixar ---------- */
@@ -63,7 +63,7 @@ async function compartilhar(blob, nome, tipo, texto) {
 
 /* ---------- PDF ---------- */
 async function novoPDF() { const { jsPDF } = await import("jspdf"); return new jsPDF({ unit: "mm", format: "a4" }); }
-async function pdfRecibo(r) {
+export async function pdfRecibo(r) {
   const doc = await novoPDF(), W = 210, M = 22; let y = 30;
   doc.setDrawColor(210); doc.setLineWidth(.4); doc.roundedRect(M - 6, 14, W - 2 * (M - 6), 190, 4, 4);
   doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.text("RECIBO", M, y);
@@ -146,6 +146,24 @@ export function DadosRecibo({ conta, act, compacto }) {
 }
 
 /* ---------- recibo de um ou mais pagamentos ---------- */
+// O recibo de algumas cobranças pagas (escolhidos) de um paciente: o valor, as datas, o texto e o que vai no PDF.
+// A folha do site e o pedido "reciboPdf" do app de celular montam do mesmo jeito
+export function montarRecibo({ db, conta, p, escolhidos, servico, cpfPac, outroPaga, pagNome, pagCpf }) {
+  const pf = conta.perfil || {}, doc = pf.doc || {};
+  const valor = escolhidos.reduce((s, c) => s + c.amount, 0);
+  const datas = [...new Set(escolhidos.flatMap(c => sessoesDe(db, c).map(s => s.date)))].sort();
+  const ses = datas.length === 1 ? "1 sessão" : `${datas.length} sessões`;
+  const quando = datas.length ? ` ${datas.length === 1 ? "realizada" : "realizadas"} em ${lista(datas.map(dataBR))}` : "";
+  const pagador = outroPaga && pagNome.trim() ? { nome: pagNome.trim(), cpf: soDigitos(pagCpf) } : { nome: p.name, cpf: soDigitos(cpfPac) };
+  const texto = `Recebi de ${pagador.nome}${pagador.cpf ? `, CPF ${fmtCPF(pagador.cpf)},` : ""} a quantia de ${brlReal(valor)} (${porExtenso(valor)}), referente a ${datas.length ? ses : "atendimento"} de ${servico.trim() || "atendimento"}${quando}`
+    + (outroPaga && pagNome.trim() ? `, ${datas.length === 1 ? "prestada" : "prestadas"} a ${p.name}${soDigitos(cpfPac) ? `, CPF ${fmtCPF(cpfPac)}` : ""}` : "") + ".";
+  const dataRecibo = escolhidos.length ? escolhidos.map(c => c.paidAt).sort().slice(-1)[0] : todayISO();
+  const pdf = { valor, texto, data: dataRecibo, cidade: pf.cidade, assinatura: doc.assinatura,
+    prof: { nome: doc.nome || conta.nome, profissao: pf.profissao, conselho: conselhoDe(pf.profissao), registro: doc.registro, cpf: doc.cpf, endereco: doc.endereco } };
+  return { valor, datas, texto, dataRecibo, pdf };
+}
+export const nomeDoRecibo = (p, mes) => `Recibo ${p.name.split(" ")[0]} ${MES_LONGO[Number(mes.slice(5)) - 1]} ${mes.slice(0, 4)}.pdf`;
+
 export function ReciboSheet({ db, conta, pid, cid, onClose, act }) {
   const p = db.patients.find(x => x.id === pid);
   const todos = useMemo(() => pagos(db).filter(c => c.patientId === pid), [db, pid]);
@@ -166,26 +184,19 @@ export function ReciboSheet({ db, conta, pid, cid, onClose, act }) {
   const pf = conta.perfil || {}, doc = pf.doc || {};
   const faltaProf = !doc.nome || !doc.registro || !doc.cpf;
   const escolhidos = doMes.filter(c => marcados.has(c.id));
-  const valor = escolhidos.reduce((s, c) => s + c.amount, 0);
-  const datas = [...new Set(escolhidos.flatMap(c => sessoesDe(db, c).map(s => s.date)))].sort();
   const trocarMes = m => { setMes(m); setMarcados(new Set(todos.filter(c => c.paidAt.startsWith(m)).map(c => c.id))); };
   const marcar = id => setMarcados(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  const ses = datas.length === 1 ? "1 sessão" : `${datas.length} sessões`;
-  const quando = datas.length ? ` ${datas.length === 1 ? "realizada" : "realizadas"} em ${lista(datas.map(dataBR))}` : "";
-  const pagador = outroPaga && pagNome.trim() ? { nome: pagNome.trim(), cpf: soDigitos(pagCpf) } : { nome: p.name, cpf: soDigitos(cpfPac) };
-  const texto = `Recebi de ${pagador.nome}${pagador.cpf ? `, CPF ${fmtCPF(pagador.cpf)},` : ""} a quantia de ${brlReal(valor)} (${porExtenso(valor)}), referente a ${datas.length ? ses : "atendimento"} de ${servico.trim() || "atendimento"}${quando}`
-    + (outroPaga && pagNome.trim() ? `, ${datas.length === 1 ? "prestada" : "prestadas"} a ${p.name}${soDigitos(cpfPac) ? `, CPF ${fmtCPF(cpfPac)}` : ""}` : "") + ".";
-  const dataRecibo = escolhidos.length ? escolhidos.map(c => c.paidAt).sort().slice(-1)[0] : todayISO();
+  const R = montarRecibo({ db, conta, p, escolhidos, servico, cpfPac, outroPaga, pagNome, pagCpf });
+  const { valor, texto, dataRecibo } = R;
 
   const guardarPaciente = () => act.atualizarPaciente(p.id, { cpf: soDigitos(cpfPac), pagadorNome: outroPaga ? pagNome.trim() : "", pagadorCpf: outroPaga ? soDigitos(pagCpf) : "" });
   const gerar = async modo => {
     if (!escolhidos.length) return;
     setGerando(modo); guardarPaciente();
     try {
-      const blob = await pdfRecibo({ valor, texto, data: dataRecibo, cidade: pf.cidade, assinatura: doc.assinatura,
-        prof: { nome: doc.nome || conta.nome, profissao: pf.profissao, conselho: conselhoDe(pf.profissao), registro: doc.registro, cpf: doc.cpf, endereco: doc.endereco } });
-      const arq = `Recibo ${p.name.split(" ")[0]} ${MES_LONGO[Number(mes.slice(5)) - 1]} ${mes.slice(0, 4)}.pdf`;
+      const blob = await pdfRecibo(R.pdf);
+      const arq = nomeDoRecibo(p, mes);
       const r = modo === "baixar" ? (baixar(blob, arq), "baixou") : await compartilhar(blob, arq, "application/pdf", `Recibo de ${brlReal(valor)}`);
       if (r !== "cancelou") { act.marcarRecibo(escolhidos.map(c => c.id)); act.toast(r === "baixou" ? "Recibo salvo nos downloads" : "Recibo enviado"); }
     } catch (e) { act.toast("Não consegui gerar o PDF. Tente de novo."); }
@@ -242,48 +253,63 @@ export function ReciboSheet({ db, conta, pid, cid, onClose, act }) {
 }
 
 /* ---------- relatório para o imposto (Receita Saúde e Carnê-Leão) ---------- */
+// O ano no relatório: os pagamentos (do mais novo ao mais velho), os meses com recebimento, o total e a sublocação.
+// A folha do site e os pedidos "impostoResumo" e "impostoArquivo" do app de celular usam o mesmo
+export function impostoDoAno(db, ano) {
+  const doAno = pagos(db).filter(c => c.paidAt.startsWith(ano));
+  const meses = []; for (let m = 12; m >= 1; m--) { const ch = `${ano}-${pad(m)}`, cs = doAno.filter(c => c.paidAt.startsWith(ch)); if (cs.length) meses.push({ ch, cs, total: cs.reduce((s, c) => s + c.amount, 0) }); }
+  const total = doAno.reduce((s, c) => s + c.amount, 0);
+  const subl = db.sessions.filter(s => s.date.startsWith(ano) && (s.status === "done" || s.cobrada)).reduce((s, x) => s + (x.sublet || 0), 0);
+  return { doAno, meses, total, subl };
+}
+export function linhaImposto(db, c) {
+  const p = db.patients.find(x => x.id === c.patientId) || { name: "Removido" };
+  return { data: c.paidAt, nome: p.name, cpf: p.cpf || "", pagador: p.pagadorNome || p.name, cpfPag: p.pagadorNome ? p.pagadorCpf || "" : p.cpf || "", valor: c.amount, sessoes: sessoesDe(db, c).map(s => dataBR(s.date)).join(" ") };
+}
+export function csvImposto(db, ano) {
+  const { doAno } = impostoDoAno(db, ano);
+  const q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = [["Data do pagamento", "Paciente", "CPF do paciente", "Quem pagou", "CPF de quem pagou", "Valor", "Sessões", "Emitido no Receita Saúde"].map(q).join(";"),
+    ...doAno.slice().reverse().map(c => { const l = linhaImposto(db, c); return [dataBR(l.data), l.nome, fmtCPF(l.cpf), l.pagador, fmtCPF(l.cpfPag), l.valor.toFixed(2).replace(".", ","), l.sessoes, c.rsaude ? "sim" : "não"].map(q).join(";"); })];
+  return "﻿" + rows.join("\r\n");
+}
+export async function pdfImposto(db, conta, ano) {
+  const { meses, total, subl } = impostoDoAno(db, ano);
+  const doc = await novoPDF(), M = 16; let y = 20;
+  const pf = conta.perfil || {}, d = pf.doc || {};
+  doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text(`Recebimentos de ${ano}`, M, y); y += 7;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+  doc.text([d.nome || conta.nome, d.cpf ? `CPF ${fmtCPF(d.cpf)}` : "", d.registro ? `${conselhoDe(pf.profissao)} ${d.registro}` : ""].filter(Boolean).join(" · "), M, y); y += 6;
+  doc.text(`Total recebido de pessoas físicas: ${brlReal(total)} · sublocação (despesa): ${brlReal(subl)}`, M, y); y += 9;
+  meses.slice().reverse().forEach(m => {
+    if (y > 265) { doc.addPage(); y = 20; }
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); doc.text(`${MES_LONGO[Number(m.ch.slice(5)) - 1]} · ${brlReal(m.total)}`, M, y); y += 6;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    m.cs.slice().reverse().forEach(c => {
+      if (y > 280) { doc.addPage(); y = 20; }
+      const l = linhaImposto(db, c);
+      doc.text(`${dataBR(l.data)}   ${l.nome}${l.cpf ? ` (CPF ${fmtCPF(l.cpf)})` : " (sem CPF)"}${l.pagador !== l.nome ? ` · pago por ${l.pagador}${l.cpfPag ? ` (CPF ${fmtCPF(l.cpfPag)})` : ""}` : ""}`, M, y);
+      doc.text(brlReal(l.valor), 194, y, { align: "right" }); y += 5;
+    });
+    y += 3;
+  });
+  return doc.output("blob");
+}
+
 export function ImpostoSheet({ db, conta, onClose, act }) {
   const todos = pagos(db);
   const anos = [...new Set([todayISO().slice(0, 4), ...todos.map(c => c.paidAt.slice(0, 4))])].sort().reverse();
   const [ano, setAno] = useState(anos[0]);
   const [mesAberto, setMesAberto] = useState(() => { const u = todos.find(c => c.paidAt.startsWith(anos[0])); return u ? u.paidAt.slice(0, 7) : ""; });
-  const doAno = todos.filter(c => c.paidAt.startsWith(ano));
+  const { doAno, meses, total, subl } = impostoDoAno(db, ano);
   const pac = id => db.patients.find(p => p.id === id) || { name: "Removido" };
-  const meses = []; for (let m = 12; m >= 1; m--) { const ch = `${ano}-${pad(m)}`, cs = doAno.filter(c => c.paidAt.startsWith(ch)); if (cs.length) meses.push({ ch, cs, total: cs.reduce((s, c) => s + c.amount, 0) }); }
-  const total = doAno.reduce((s, c) => s + c.amount, 0);
-  const subl = db.sessions.filter(s => s.date.startsWith(ano) && (s.status === "done" || s.cobrada)).reduce((s, x) => s + (x.sublet || 0), 0);
   const semCpf = new Set(doAno.filter(c => !(pac(c.patientId).cpf)).map(c => c.patientId));
   const feitos = doAno.filter(c => c.rsaude).length;
   const T = termoDe(PERFIL.termo || "Paciente");
-  const linha = c => { const p = pac(c.patientId); return { data: c.paidAt, nome: p.name, cpf: p.cpf || "", pagador: p.pagadorNome || p.name, cpfPag: p.pagadorNome ? p.pagadorCpf || "" : p.cpf || "", valor: c.amount, sessoes: sessoesDe(db, c).map(s => dataBR(s.date)).join(" ") }; };
+  const linha = c => linhaImposto(db, c);
 
-  const csv = () => {
-    const q = v => `"${String(v).replace(/"/g, '""')}"`;
-    const rows = [["Data do pagamento", "Paciente", "CPF do paciente", "Quem pagou", "CPF de quem pagou", "Valor", "Sessões", "Emitido no Receita Saúde"].map(q).join(";"),
-      ...doAno.slice().reverse().map(c => { const l = linha(c); return [dataBR(l.data), l.nome, fmtCPF(l.cpf), l.pagador, fmtCPF(l.cpfPag), l.valor.toFixed(2).replace(".", ","), l.sessoes, c.rsaude ? "sim" : "não"].map(q).join(";"); })];
-    return new Blob(["﻿" + rows.join("\r\n")], { type: "text/csv;charset=utf-8" });
-  };
-  const pdf = async () => {
-    const doc = await novoPDF(), M = 16; let y = 20;
-    const pf = conta.perfil || {}, d = pf.doc || {};
-    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text(`Recebimentos de ${ano}`, M, y); y += 7;
-    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
-    doc.text([d.nome || conta.nome, d.cpf ? `CPF ${fmtCPF(d.cpf)}` : "", d.registro ? `${conselhoDe(pf.profissao)} ${d.registro}` : ""].filter(Boolean).join(" · "), M, y); y += 6;
-    doc.text(`Total recebido de pessoas físicas: ${brlReal(total)} · sublocação (despesa): ${brlReal(subl)}`, M, y); y += 9;
-    meses.slice().reverse().forEach(m => {
-      if (y > 265) { doc.addPage(); y = 20; }
-      doc.setFont("helvetica", "bold"); doc.setFontSize(11.5); doc.text(`${MES_LONGO[Number(m.ch.slice(5)) - 1]} · ${brlReal(m.total)}`, M, y); y += 6;
-      doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-      m.cs.slice().reverse().forEach(c => {
-        if (y > 280) { doc.addPage(); y = 20; }
-        const l = linha(c);
-        doc.text(`${dataBR(l.data)}   ${l.nome}${l.cpf ? ` (CPF ${fmtCPF(l.cpf)})` : " (sem CPF)"}${l.pagador !== l.nome ? ` · pago por ${l.pagador}${l.cpfPag ? ` (CPF ${fmtCPF(l.cpfPag)})` : ""}` : ""}`, M, y);
-        doc.text(brlReal(l.valor), 194, y, { align: "right" }); y += 5;
-      });
-      y += 3;
-    });
-    return doc.output("blob");
-  };
+  const csv = () => new Blob([csvImposto(db, ano)], { type: "text/csv;charset=utf-8" });
+  const pdf = () => pdfImposto(db, conta, ano);
   const exportar = async tipo => {
     try {
       const r = tipo === "csv" ? await compartilhar(csv(), `Recebimentos ${ano}.csv`, "text/csv", `Recebimentos de ${ano}`) : await compartilhar(await pdf(), `Recebimentos ${ano}.pdf`, "application/pdf", `Recebimentos de ${ano}`);

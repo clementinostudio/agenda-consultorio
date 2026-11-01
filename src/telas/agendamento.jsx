@@ -1,9 +1,9 @@
 // Link de agendamento: o paciente vê os horários livres e pede um; você aprova com um toque.
 // O paciente abre a página public/agendar/ (sem login); os horários e os pedidos passam pelo servidor (src/link.js).
 import React, { useState, useEffect } from "react";
-import { I, Field, Seg, Toggle, Sheet, todayISO, fromISO, pad, DIA_CURTO, DIA_LONGO, diaCurto, dm, horariosLivres, primeiro, iniciais, copiarTexto, vibrar, termoDe } from "../App.jsx";
+import { I, Field, Seg, Toggle, Sheet, todayISO, fromISO, pad, DIA_CURTO, DIA_LONGO, diaCurto, horariosLivres, primeiro, iniciais, copiarTexto, vibrar, termoDe } from "../App.jsx";
 import { PERIODOS, NOME_PERIODO, MODELOS, periodosDo } from "../horarios.js";
-import { linkDo, enderecoLink } from "../link.js";
+import { linkDo, enderecoLink, recadoDoPedido } from "../link.js";
 const waLink = (phone, txt) => { const d = String(phone || "").replace(/\D/g, ""); const f = d.length >= 10 && d.length <= 11 ? "55" + d : d; return `https://wa.me/${f}?text=${encodeURIComponent(txt)}`; };
 const hhmm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
 
@@ -70,9 +70,7 @@ function PedidosLista({ db, conta, act }) {
   const responder = (p, ok) => {
     const pac = p.pid && db.patients.find(x => x.id === p.pid);
     act.responderPedido(p.id, ok);
-    setFeitos(l => [{ id: p.id, nome: p.nome, phone: p.phone || (pac && pac.phone) || "", ok,
-      msg: ok ? `Oi, ${primeiro(p.nome)}! Confirmado: ${DIA_LONGO[fromISO(p.data).getDay()]}, ${dm(p.data)}, às ${p.hora}. Até lá!`
-        : `Oi, ${primeiro(p.nome)}! Esse horário não vai dar.${linkDo(conta.perfil).endereco ? ` Escolha outro por aqui: ${enderecoLink(linkDo(conta.perfil).endereco, p.pid)}` : " Me fala outro dia e horário que fica bom para você?"}` }, ...l]);
+    setFeitos(l => [{ id: p.id, nome: p.nome, phone: p.phone || (pac && pac.phone) || "", ok, msg: recadoDoPedido(p, ok, conta.perfil) }, ...l]);
   };
   return (
     <div className="pedidos">
