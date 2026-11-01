@@ -174,9 +174,66 @@ export type DadosCasa = {
 };
 export type CasaRetrato = { estado: EstadoCasa; nuvem: boolean; casa: DadosCasa | null }; // nuvem false = a casa de demonstração
 
+/* ---------- Loja (novo: telas nativas da Loja; o lado do site é ../src/app-nativo-trabalho.js, retratoLoja) ----------
+   As tabelas fixas (formas de pagamento, categorias de gasto, cédulas) vêm de @site/loja-contas.js, não do retrato. */
+export type PagLoja = 'dinheiro' | 'pix' | 'debito' | 'credito'; // PAGAMENTOS
+export type EstadoLoja = 'carregando' | 'ok' | 'sem' | 'erro' | 'indisponivel';
+// O resumo de um período (resumoDoPeriodo): totais, o que mais vendeu (até 6) e os dias (até 31)
+export type ResumoLoja = {
+  de: string; ate: string;
+  entrou: number; saiu: number; sobrou: number; vendas: number; ticket: number;
+  porCat: Record<string, number>; // ids de CATS_LOJA
+  top: { nome: string; q: number; total: number }[];
+  dias: { dia: string; entrou: number; saiu: number }[];
+};
+export type MembroLoja = {
+  id: string; nome: string; papel: 'dono' | 'ajudante'; veLucro: boolean;
+  foto: string | null; // só o avatar pronto (SVG pequeno)
+  fotoK: string | null; // a foto de verdade: chave da versão (a imagem vem por pedirSite('lojaFoto'))
+};
+export type ProdutoLoja = { id: string; nome: string; preco: number; cor: string; tinta: string }; // os ativos, na ordem do caixa
+export type VendaLoja = {
+  id: string; hora: string; total: number; pag: PagLoja; desc: string | null;
+  resumo: string; // "2× Brigadeiro, Coxinha" (ou a descrição, ou "Venda")
+  autor: string | null; comItens: boolean;
+};
+export type MovLoja = { id: string; tipo: 'retirada' | 'reforco'; valor: number; desc: string | null; hora: string; pessoal: boolean };
+export type GastoLoja = { id: string; valor: number; desc: string; cat: string; dia: string; daGaveta: boolean; autor: string | null; nota: boolean };
+export type FaltaLoja = { id: string; texto: string; qtd: number; feito: boolean; autor: string | null; criado: number | null };
+// O que deveria estar na gaveta hoje (gaveta): troco do começo + vendas em dinheiro + posto − gastos da gaveta − tirado
+export type GavetaLoja = {
+  troco: number; vendas: number; gastos: number; reforcos: number; retiradas: number; esperado: number;
+  fechado: { contado: number; dif: number; deixou: number | null; hora: string; por: string | null } | null;
+};
+export type DadosLoja = {
+  id: string; nome: string;
+  eu: string; souDona: boolean; veLucro: boolean;
+  podeAnotar: boolean; // false: equipe travada (só quem cuida da loja anota)
+  aviso: string | null; // o texto neutro da equipe, quando há
+  historicoDias: number | null; // 30 quando a versão grátis limita o histórico do resumo; null sem limite
+  temPix: boolean; // a loja tem chave Pix (o QR com valor sai no pedido lojaPix)
+  membros: MembroLoja[];
+  produtos: ProdutoLoja[];
+  hoje: {
+    dia: string; vendas: number; entrou: number; ticket: number;
+    porPag: Record<PagLoja, number>;
+    porHora: { h: number; total: number; n: number }[]; // da primeira à última hora com venda, sem buracos
+    saiu: number | null; sobrou: number | null; // null para quem não vê o lucro
+  };
+  gaveta: GavetaLoja;
+  vendasHoje: VendaLoja[]; // as 50 mais novas
+  movsHoje: MovLoja[]; // na ordem em que aconteceram
+  gastosDe: string; // os gastos vêm desde este dia ('AAAA-MM-01': o mês de agora, ou também o anterior)
+  gastos: GastoLoja[]; // do mais novo ao mais velho
+  faltas: FaltaLoja[]; // a lista do que falta (e o que já foi comprado, feito: true)
+  sempreFalta: string[]; // o que sempre falta e não está na lista agora (até 8)
+  resumo: { hoje: ResumoLoja; sete: ResumoLoja; mes: ResumoLoja } | null; // null para quem não vê o lucro
+};
+export type LojaRetrato = { estado: EstadoLoja; nuvem: boolean; loja: DadosLoja | null };
+
 // O que este site já atende das telas nativas novas (Estado.recursos). Sem o recurso (uma cópia antiga do site),
 // o app abre a área no site, como antes.
-export type Recurso = 'contas2' | 'transporte' | 'casa';
+export type Recurso = 'contas2' | 'transporte' | 'casa' | 'loja2';
 
 export type Estado = {
   v: 1;
@@ -209,6 +266,7 @@ export type Estado = {
   } | null;
   transporte?: Transporte | null; // novo; null = Pessoal desligado
   casa?: CasaRetrato | null; // novo; null = Pessoal desligado
+  loja?: LojaRetrato | null; // novo; null = área Loja desligada (sem o campo: um site sem as telas nativas da Loja)
   recursos?: string[]; // novo: as telas nativas que este site atende (Recurso); sem a lista, nenhuma
 };
 
@@ -285,6 +343,33 @@ export type PedidosSite = {
   // A foto de um veículo ou de alguém da casa (data URL), fora do retrato; o app guarda por id + fotoK
   foto: { dados: { de: 'veiculo' | 'membro'; id: string }; volta: string | null };
 
+  // Loja (recurso 'loja2'; src/app-nativo-trabalho.js). Sem a loja: erro 'sem-loja'; abrindo: 'carregando'; equipe
+  // travada (só nos que anotam): 'travado', com o texto neutro do site. Os ids vêm do app: repetir não duplica.
+  // A venda do caixa: com itens, o nome e o preço vêm dos produtos do site; sem itens, o valor. Repetir devolve a mesma
+  lojaVenda: { dados: { id: string; itens?: { p: string; q: number }[]; valor?: number; pag: PagLoja; desc?: string }; volta: { ok: true; id: string; total: number } | Falha };
+  // os apagar devolvem o item como estava (o Desfazer manda de volta por lojaRestaurar)
+  lojaVendaApagar: { dados: { id: string }; volta: { ok: boolean; item: unknown; erro?: string; texto?: string } };
+  // o Pix copia e cola com o valor e o QR em SVG (null se o gerador do site ainda não baixou). Não grava: em
+  // "O Pix caiu", o app chama lojaVenda { pag: 'pix' }. Sem chave: erro 'sem-pix'
+  lojaPix: { dados: { valor: number }; volta: { codigo: string; svg: string | null; nome: string } | Falha };
+  lojaGasto: { dados: { id: string; valor: number; desc?: string; cat?: string; dia?: string; daGaveta?: boolean }; volta: { ok: true; id: string } | Falha };
+  lojaGastoApagar: { dados: { id: string }; volta: { ok: boolean; item: unknown; erro?: string; texto?: string } };
+  // tirar ou pôr dinheiro na gaveta; pessoal: a dona (com o Pessoal ligado) leva a retirada para o Pessoal
+  lojaMov: { dados: { id: string; tipo: 'retirada' | 'reforco'; valor: number; desc?: string; pessoal?: boolean }; volta: { ok: true; id: string; pessoal: boolean } | Falha };
+  lojaMovApagar: { dados: { id: string; comPessoal?: boolean }; volta: { ok: boolean; item: unknown; erro?: string; texto?: string } };
+  // fecha o caixa do dia (padrão hoje); o site refaz a conta do que deveria ter. Fechar de novo regrava
+  lojaFechar: { dados: { dia?: string; troco?: number; contado: number; deixou?: number }; volta: { ok: true; esperado: number; dif: number; deixou: number } | Falha };
+  // "2 leite condensado" vira 2× leite condensado; id que já está na lista não entra de novo
+  lojaFaltaAdicionar: { dados: { itens: { id: string; texto: string }[] }; volta: { ok: true; novos: number } | Falha };
+  lojaFalta: { dados: { id: string; feito: boolean }; volta: { ok: boolean } };
+  lojaFaltaTirar: { dados: { ids: string[] }; volta: { ok: boolean; itens: unknown[] } };
+  lojaRestaurar: { dados: { colecao: 'venda' | 'gasto' | 'falta' | 'mov'; itens: unknown[] }; volta: { ok: boolean } | Falha };
+  // os marcados da lista viram um gasto (com o preço de cada um, se veio), entram no "sempre falta" e saem da lista
+  lojaComprei: { dados: { id: string; total?: number; precos?: Record<string, number>; cat: string; daGaveta: boolean }; volta: { ok: true; id: string; valor: number } | Falha };
+  // um mês fora do retrato. Erros: sem-lucro, historico (o texto neutro da versão grátis), sem-internet, mes
+  lojaResumo: { dados: { mes: string }; volta: ResumoLoja | Falha };
+  lojaFoto: { dados: { id: string }; volta: string | null }; // a foto de quem está na loja (data URL)
+
   apagarLanc: { dados: { id: string }; volta: { ok: boolean } };
   bolinha: { dados: { texto: string; historico: { quem: 'eu' | 'ela'; texto: string }[] }; volta: RespostaBolinha };
   banco: { dados: { rota: 'resumo' | 'estado'; forcar?: boolean }; volta: ResumoBanco };
@@ -324,7 +409,7 @@ export function receberEstado(e: Estado) {
   estado.mudar(e);
   clearTimeout(gravarDepois);
   // sem login, nada dos dados da pessoa fica guardado no aparelho
-  gravarDepois = setTimeout(() => gravarLocal(K_ESTADO, e.logado ? e : { ...e, pessoal: null, consultorio: null, transporte: null, casa: null }), 600);
+  gravarDepois = setTimeout(() => gravarLocal(K_ESTADO, e.logado ? e : { ...e, pessoal: null, consultorio: null, transporte: null, casa: null, loja: null }), 600);
 }
 export const lerEstado = () => estado.ler();
 export const useEstado = () => useSyncExternalStore(estado.ouvir, estado.ler);

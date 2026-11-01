@@ -98,8 +98,9 @@ export function Vidro({ children, style, raio = Raio.pilula, tinta, interativo, 
       </BlurView>
     );
   }
-  // Android, "reduzir transparência" ou vidro colorido fora do iOS 26: fundo quase sólido
-  const fundo = tinta ?? (c.escuro ? comAlfa('#1E1E21', 0.96) : comAlfa('#FFFFFF', 0.97));
+  // Android, "reduzir transparência" ou vidro colorido fora do iOS 26: fundo sólido (com 3% de transparência o texto
+  // da lista ainda aparecia atrás da barra de baixo no tema claro)
+  const fundo = tinta ?? (c.escuro ? '#1E1E21' : '#FFFFFF');
   const sombra: ViewStyle = c.escuro ? {} : { boxShadow: `0px 8px 24px ${comAlfa(c.sombra, 0.1)}` };
   return <View style={[forma, borda, sombra, { backgroundColor: fundo }, style, { overflow: c.escuro ? 'hidden' : 'visible' }]}>{children}</View>;
 }

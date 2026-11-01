@@ -4,7 +4,9 @@
 // - Os dados são sempre os mesmos (sorteio com semente) e andam com a data de hoje da página (o tirar.mjs dos prints
 //   congela o relógio num dia do meio do mês, para os gráficos terem o que mostrar).
 // - Parâmetros da URL: ?tema=dark|light|auto (padrão dark) · ?vazio=1 (conta nova, sem lançamentos) · ?logado=0
-//   (sem login: o site fica na frente) · ?casa=sem|erro|carregando|indisponivel (a Nossa casa nesse estado).
+//   (sem login: o site fica na frente) · ?casa=sem|erro|carregando|indisponivel (a Nossa casa nesse estado) ·
+//   ?foto=1 (a conta com foto: um retrato quadrado de fundo claro, para ver se o avatar fica redondo) · ?loja=1 (a
+//   Loja também ligada).
 // - Contas fixas, Transporte (o Onix e os apps) e Nossa casa (Felipe e Ana, 60/40) vêm com os campos novos do retrato
 //   e Estado.recursos com as três telas nativas.
 import { partes, saldos } from '@site/casa-contas.js';
@@ -28,7 +30,20 @@ export const PREVIA = {
   vazio: busca.get('vazio') === '1',
   logado: busca.get('logado') !== '0',
   casa: (['sem', 'erro', 'carregando', 'indisponivel'].includes(casaPedida || '') ? casaPedida : null) as CasaRetrato['estado'] | null,
+  foto: busca.get('foto') === '1',
+  loja: busca.get('loja') === '1',
 };
+
+// ?foto=1: um retrato quadrado, de fundo bem claro (se o avatar deixar um canto para fora, aparece no print)
+const FOTO_EXEMPLO = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">'
+  + '<defs><linearGradient id="f" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FDE7C8"/><stop offset="1" stop-color="#F6B98A"/></linearGradient></defs>'
+  + '<rect width="240" height="240" fill="url(#f)"/>'
+  + '<path d="M28 240c6-50 44-78 92-78s86 28 92 78z" fill="#2F3A56"/>'
+  + '<circle cx="120" cy="100" r="50" fill="#C98B62"/>'
+  + '<path d="M70 92c0-34 24-52 52-52 30 0 50 20 48 50-10-14-30-20-52-18-20 2-36 8-48 20z" fill="#3B2A22"/>'
+  + '</svg>',
+)}`;
 
 /* ---------- Datas (no fuso da página) ---------- */
 
@@ -479,8 +494,8 @@ export function retratoExemplo(tema: TemaEscolhido = PREVIA.tema, vazio = PREVIA
   const hoje = new Date();
   const base = {
     v: 1 as const, em: Date.now(), logado: true, tema,
-    conta: { nome: 'Felipe Clementino', email: 'felipe@exemplo.com', foto: null, uid: 'exemplo' },
-    modos: ['consultorio', 'pessoal'] as Estado['modos'], modo: 'pessoal' as const, termo: 'Paciente',
+    conta: { nome: 'Felipe Clementino', email: 'felipe@exemplo.com', foto: PREVIA.foto ? FOTO_EXEMPLO : null, uid: 'exemplo' },
+    modos: (PREVIA.loja ? ['consultorio', 'pessoal', 'loja'] : ['consultorio', 'pessoal']) as Estado['modos'], modo: 'pessoal' as const, termo: 'Paciente',
     plano: vazio ? { pro: false, estado: null, ate: null } : { pro: true, estado: 'ativa', ate: iso(diasAtras(hoje, -42)) },
     servidor: SERVIDOR, bancoLigado: true, categorias: CATEGORIAS, catEntrada: CAT_ENTRADA,
   };

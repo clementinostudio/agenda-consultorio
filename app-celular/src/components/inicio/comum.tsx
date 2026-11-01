@@ -1,43 +1,16 @@
-// Peças pequenas do Início: a foto da conta, o valor curto que respeita o olho, "vence em 3 dias" e as contas do
+// Peças pequenas do Início: o valor curto que respeita o olho, "vence em 3 dias" e as contas do
 // mês (o que sobrou, a série do gráfico, as categorias, as próximas contas).
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import type { StyleProp, TextStyle } from 'react-native';
 
 import { Texto } from '@/components/ui';
-import { Fontes, useCores } from '@/constants/theme';
+import { Fontes } from '@/constants/theme';
 import { acumuladoPorDia, brlCurto, chaveMes, diasAte, diasNoMes, dinheiro, hojeIso, mesAnterior, soma, somaPor } from '@/lib/formato';
 import { useOculto, type ContaFixa, type Estado, type Lanc } from '@/lib/motor';
 
 /* ---------- Nomes ---------- */
 
 export const primeiroNome = (nome?: string | null) => (nome || '').trim().split(/\s+/)[0] || '';
-const iniciais = (nome: string) => {
-  const p = nome.trim().split(/\s+/).filter(Boolean);
-  return ((p[0]?.[0] ?? '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '?';
-};
 export const maiuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-
-/* ---------- A foto da conta ---------- */
-
-// A foto (data URL que o site manda) ou as iniciais num círculo azul e roxo do Avina
-export function Avatar({ nome, foto, tamanho = 44, style }: { nome: string; foto: string | null; tamanho?: number; style?: StyleProp<ViewStyle> }) {
-  const c = useCores();
-  const caixa: ViewStyle = { width: tamanho, height: tamanho, borderRadius: tamanho / 2, overflow: 'hidden', borderWidth: 1.5, borderColor: c.linhaForte };
-  if (foto) {
-    return (
-      <View style={[caixa, style]} accessible={false}>
-        <Image source={{ uri: foto }} contentFit="cover" transition={160} style={StyleSheet.absoluteFill} accessible={false} />
-      </View>
-    );
-  }
-  return (
-    <View style={[caixa, estilos.meio, style]} accessible={false}>
-      <LinearGradient colors={[c.azul, c.roxo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      <Text allowFontScaling={false} style={{ color: '#FFFFFF', fontFamily: Fontes.tituloForte, fontSize: Math.round(tamanho * 0.36), letterSpacing: -0.3 }}>{iniciais(nome)}</Text>
-    </View>
-  );
-}
 
 /* ---------- Valores ---------- */
 
@@ -131,7 +104,3 @@ export function resumirMes(e: Estado | null, hoje = hojeIso()): ResumoMes {
     contasAbertas: contas.filter((x) => !x.paga).sort((a, b) => (a.vence < b.vence ? -1 : a.vence > b.vence ? 1 : 0)),
   };
 }
-
-const estilos = StyleSheet.create({
-  meio: { alignItems: 'center', justifyContent: 'center' },
-});

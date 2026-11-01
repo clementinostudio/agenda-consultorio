@@ -1,6 +1,7 @@
 // As peças de tela do Avina. Tudo segue o tema (useCores) e respeita "reduzir movimento".
 // import { Texto, Dinheiro, Cartao, Linha, Logo, ... } from '@/components/ui';
 export { Aurora, LuzDeFundo, type AuroraProps } from '@/components/ui/aurora';
+export { Avatar, iniciais, type AvatarProps } from '@/components/ui/avatar';
 export { BolinhasPagina } from '@/components/ui/bolinhas';
 export { Botao, type BotaoProps } from '@/components/ui/botao';
 export { Cartao, CartaoTitulo, type CartaoProps } from '@/components/ui/cartao';

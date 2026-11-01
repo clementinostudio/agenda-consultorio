@@ -1,22 +1,15 @@
 // O topo do Perfil: a foto grande (com o lápis, que abre a edição do perfil no site), o nome e o e-mail; e os dois
 // cartões lado a lado: o plano (só a situação, sem venda) e as conexões com bancos (ou as áreas ligadas).
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { Cartao, comAlfa, Icone, LogoBanco, Texto, Tocavel, type NomeIcone } from '@/components/ui';
+import { Avatar, Cartao, comAlfa, Icone, LogoBanco, Texto, Tocavel, type NomeIcone } from '@/components/ui';
 import { Espaco, Fontes, useCores } from '@/constants/theme';
 import { useBanco } from '@/hooks/use-banco';
 import { dm } from '@/lib/formato';
 import { mostrarWeb, type Estado, type Modo } from '@/lib/motor';
 import { abrirNoSiteDaqui, voltarAoInicio } from '@/components/bancos/comum';
-
-const iniciais = (nome: string) => {
-  const p = nome.trim().split(/\s+/).filter(Boolean);
-  return ((p[0]?.[0] ?? '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '?';
-};
 
 export function Cabeca({ e }: { e: Estado }) {
   const c = useCores();
@@ -30,16 +23,7 @@ export function Cabeca({ e }: { e: Estado }) {
         escala={0.96}
         accessibilityLabel="Editar foto e nome"
         style={{ width: T, height: T }}>
-        <View style={[estilos.foto, { width: T, height: T, borderRadius: T / 2, borderColor: c.linhaForte }]}>
-          {foto ? (
-            <Image source={{ uri: foto }} contentFit="cover" transition={160} style={StyleSheet.absoluteFill} accessible={false} />
-          ) : (
-            <>
-              <LinearGradient colors={[c.azul, c.roxo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-              <Text allowFontScaling={false} style={estilos.iniciais}>{iniciais(nome || e.conta?.email || '?')}</Text>
-            </>
-          )}
-        </View>
+        <Avatar nome={nome || e.conta?.email || '?'} foto={foto} tamanho={T} />
         <View style={[estilos.lapis, { backgroundColor: c.cartao3, borderColor: c.fundo }]}>
           <Icone nome="editar" tamanho={15} cor={c.texto} peso="semibold" />
         </View>
@@ -143,8 +127,6 @@ export function Resumo({ e }: { e: Estado }) {
 
 const estilos = StyleSheet.create({
   cabeca: { alignItems: 'center', gap: Espaco.quatro },
-  foto: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
-  iniciais: { color: '#FFFFFF', fontFamily: Fontes.tituloForte, fontSize: 40, letterSpacing: -1 },
   lapis: { position: 'absolute', right: 0, bottom: 2, width: 36, height: 36, borderRadius: 18, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
   nome: { textAlign: 'center', fontSize: 26, lineHeight: 32 },
   resumo: { flexDirection: 'row', gap: Espaco.tres },

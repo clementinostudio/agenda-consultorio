@@ -1,6 +1,11 @@
 // O Início (a primeira aba da casca, src/app/index.tsx): a aurora no topo, o cabeçalho com a saudação, o carrossel
 // de destaques e os cartões que a pessoa escolheu (lib/widgets.ts), na ordem dela, entrando em cascata.
 // - Rolar para baixo esconde a pílula "Pergunte à Bolinha" da barra; rolar para cima traz de volta ("pilula").
+// - Passando da saudação, entra a barra de cima (topo.tsx: a foto, o nome, o olho, o "+" e a troca de área); volta
+//   a sumir perto do topo.
+// - A área em foco (foco.ts: Consultório ou Pessoal, escolhida nos chips e guardada no aparelho) decide o primeiro
+//   cartão do carrossel e a ordem: os cartões dela primeiro; os da outra área no fim, debaixo do nome dela, com
+//   "Mostrar primeiro". Trocar de área sobe para o topo e os cartões entram de novo. Loja abre no site.
 // - Puxar para baixo atualiza: pede ao site para sincronizar com a nuvem e relê os saldos do banco.
 // - Conta nova (sem lançamentos): as boas-vindas da Bolinha no lugar dos cartões que dependem de lançamentos.
 // - Pessoal desligado: o carrossel e os cartões mostram o consultório e as áreas (os do Pessoal não aparecem).
@@ -9,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useState, type ReactNode } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
 import Animated, {
-  Extrapolation, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type AnimatedRef, type SharedValue,
+  Easing, Extrapolation, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type AnimatedRef, type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,14 +27,22 @@ import {
 } from '@/components/inicio/cartoes';
 import { primeiroNome, resumirMes, type ResumoMes } from '@/components/inicio/comum';
 import { CartaoConsultorio } from '@/components/inicio/consultorio';
-import { Aurora, Botao, comAlfa, entradaCascata, LuzDeFundo } from '@/components/ui';
+import { escolherArea, separarPorFoco, useAreaInicio } from '@/components/inicio/foco';
+import { TopoFixo } from '@/components/inicio/topo';
+import { INFO_AREA } from '@/components/inicio/troca-area';
+import { Aurora, Botao, comAlfa, entradaCascata, LuzDeFundo, Secao } from '@/components/ui';
 import { Espaco, useCores } from '@/constants/theme';
 import { atualizarBanco, useBanco } from '@/hooks/use-banco';
-import { pedirSite, useEstado } from '@/lib/motor';
+import { abrirNoSite, pedirSite, useEstado, type Modo } from '@/lib/motor';
 import { useEscolhaWidgets, widgetsVisiveis, type IdWidget, type InfoWidget } from '@/lib/widgets';
 
 // cartões que só fazem sentido com lançamentos (na conta nova, ficam para depois do primeiro gasto)
 const SO_COM_LANC = new Set<IdWidget>(['gastosMes', 'categorias', 'recentes', 'fluxo']);
+
+// a barra de cima entra quando a rolagem passa daqui (a saudação já saiu) e sai abaixo do outro número (sem piscar
+// quando o dedo para bem no limite)
+const MOSTRAR_TOPO = 96;
+const ESCONDER_TOPO = 72;
 
 // os cartões de meia largura vão aos pares, lado a lado; um sozinho ocupa a linha toda
 function emLinhas(lista: InfoWidget[]) {
@@ -72,11 +85,14 @@ export function Inicio({ pilula, rolagem, aoVerAtividades }: InicioProps) {
   const reduzir = useReducedMotion();
   const banco = useBanco();
   const escolha = useEscolhaWidgets();
+  const area = useAreaInicio(e);
 
   // a rolagem: a aurora some, o topo escurece (a barra de status fica legível) e a pílula some ou volta
   const y = useSharedValue(0);
   const antes = useSharedValue(0);
   const alvoPilula = useSharedValue(1);
+  const topoFixo = useSharedValue(0); // a barra de cima (0 escondida, 1 à vista)
+  const alvoTopo = useSharedValue(0);
   const rolar = useAnimatedScrollHandler({
     onScroll: (ev) => {
       const yy = ev.contentOffset.y;
@@ -87,6 +103,11 @@ export function Inicio({ pilula, rolagem, aoVerAtividades }: InicioProps) {
       // perto do topo, sempre à vista; no fim (o "quique" da rolagem), não mexe
       const alvo = yy < 60 ? 1 : yy > fim - 4 ? -1 : d > 4 ? 0 : d < -4 ? 1 : -1;
       if (alvo >= 0 && alvo !== alvoPilula.get()) { alvoPilula.set(alvo); pilula.set(withTiming(alvo, { duration: 220 })); }
+      const t = yy > MOSTRAR_TOPO ? 1 : yy < ESCONDER_TOPO ? 0 : -1;
+      if (t >= 0 && t !== alvoTopo.get()) {
+        alvoTopo.set(t);
+        topoFixo.set(reduzir ? t : withTiming(t, { duration: t ? 260 : 180, easing: Easing.out(Easing.cubic) }));
+      }
     },
   });
   const topo = useAnimatedStyle(() => ({ opacity: interpolate(y.get(), [10, 70], [0, 1], Extrapolation.CLAMP) }));
@@ -98,11 +119,19 @@ export function Inicio({ pilula, rolagem, aoVerAtividades }: InicioProps) {
     setAtualizando(false);
   }, [banco.ligado]);
 
+  // Consultório ou Pessoal: o Início muda o foco e sobe para o topo; a Loja abre no site
+  const subir = () => rolagem.current?.scrollTo({ y: 0, animated: !reduzir });
+  const trocarArea = (m: Modo) => {
+    if (m === 'loja') { abrirNoSite({ area: 'loja' }); return; }
+    escolherArea(m);
+    subir();
+  };
+
   if (!e) return <View style={{ flex: 1 }} />;
   const r = resumirMes(e);
   const novo = !!e.pessoal && !r.temLanc;
   const lista = widgetsVisiveis(e, escolha).filter((w) => !(novo && SO_COM_LANC.has(w.id)));
-  const linhas = emLinhas(lista);
+  const { primeiro, depois, outra } = separarPorFoco(lista, area);
 
   // cada bloco entra de baixo, um pouco depois do anterior (sem animação com "reduzir movimento"; com o vidro, sem
   // esmaecer: components/ui/vidro.tsx)
@@ -115,6 +144,15 @@ export function Inicio({ pilula, rolagem, aoVerAtividades }: InicioProps) {
       </Animated.View>
     );
   };
+
+  const cartoes = (grupo: typeof lista) => emLinhas(grupo).map((l) => (l.length === 2
+    ? bloco(`${l[0].id}+${l[1].id}`, (
+      <View style={estilos.par}>
+        <Widget id={l[0].id} r={r} aoVerAtividades={aoVerAtividades} />
+        <Widget id={l[1].id} r={r} aoVerAtividades={aoVerAtividades} />
+      </View>
+    ))
+    : bloco(l[0].id, <Widget id={l[0].id} r={r} aoVerAtividades={aoVerAtividades} />)));
 
   return (
     <View style={{ flex: 1 }}>
@@ -130,37 +168,42 @@ export function Inicio({ pilula, rolagem, aoVerAtividades }: InicioProps) {
         refreshControl={
           <RefreshControl refreshing={atualizando} onRefresh={atualizar} tintColor={c.apoio} colors={[c.azul]} progressBackgroundColor={c.cartao} progressViewOffset={ins.top} />
         }>
-        {bloco('cabecalho', <Cabecalho e={e} />)}
+        {bloco('cabecalho', <Cabecalho e={e} area={area} aoTrocarArea={trocarArea} />)}
         <View style={{ height: Espaco.seis }} />
-        {novo ? bloco('boas-vindas', <BoasVindas nome={primeiroNome(e.conta?.nome)} />, estilos.lado) : null}
-        {novo ? <View style={{ height: Espaco.tres + 2 }} /> : null}
-        {bloco('carrossel', <Carrossel e={e} r={r} aoVerAtividades={aoVerAtividades} />)}
-        <View style={estilos.cartoes}>
-          {linhas.map((l) => (l.length === 2
-            ? bloco(`${l[0].id}+${l[1].id}`, (
-              <View style={estilos.par}>
-                <Widget id={l[0].id} r={r} aoVerAtividades={aoVerAtividades} />
-                <Widget id={l[1].id} r={r} aoVerAtividades={aoVerAtividades} />
-              </View>
-            ))
-            : bloco(l[0].id, <Widget id={l[0].id} r={r} aoVerAtividades={aoVerAtividades} />)))}
-          {bloco('personalizar', (
-            <Botao
-              titulo="Personalizar início"
-              icone="widgets"
-              variante="secundario"
-              tamanho="medio"
-              onPress={() => router.push('/widgets')}
-              rotulo="Personalizar o início: escolher e ordenar os cartões"
-              style={{ alignSelf: 'center', marginTop: Espaco.tres }}
-            />
-          ))}
+        {/* key: trocar de área monta tudo de novo (o carrossel volta à primeira página e os cartões entram em cascata) */}
+        <View key={area ?? 'todas'}>
+          {novo && area !== 'consultorio' ? bloco('boas-vindas', <BoasVindas nome={primeiroNome(e.conta?.nome)} />, estilos.lado) : null}
+          {novo && area !== 'consultorio' ? <View style={{ height: Espaco.tres + 2 }} /> : null}
+          {bloco('carrossel', <Carrossel e={e} r={r} foco={area} aoVerAtividades={aoVerAtividades} />)}
+          <View style={estilos.cartoes}>
+            {cartoes(primeiro)}
+            {outra ? bloco(`secao-${outra}`, (
+              <Secao
+                titulo={INFO_AREA[outra].nome}
+                acao={{ titulo: 'Mostrar primeiro', onPress: () => trocarArea(outra) }}
+                style={{ marginTop: Espaco.tres }}
+              />
+            )) : null}
+            {cartoes(depois)}
+            {bloco('personalizar', (
+              <Botao
+                titulo="Personalizar início"
+                icone="widgets"
+                variante="secundario"
+                tamanho="medio"
+                onPress={() => router.push('/widgets')}
+                rotulo="Personalizar o início: escolher e ordenar os cartões"
+                style={{ alignSelf: 'center', marginTop: Espaco.tres }}
+              />
+            ))}
+          </View>
         </View>
       </Animated.ScrollView>
       {/* ao rolar, o topo escurece por trás da barra de status */}
       <Animated.View pointerEvents="none" style={[estilos.topo, { height: ins.top + Espaco.cinco }, topo]}>
         <LinearGradient colors={[c.fundo, c.fundo, comAlfa(c.fundo, 0)]} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
       </Animated.View>
+      <TopoFixo e={e} mostrar={topoFixo} area={area} aoTrocarArea={trocarArea} aoSubir={subir} />
     </View>
   );
 }

@@ -51,9 +51,14 @@ export default function Raiz() {
               <Stack.Screen name="contas" />
               <Stack.Screen name="transporte" />
               <Stack.Screen name="casa" />
+              <Stack.Screen name="casa/gasto" options={folha} />
+              <Stack.Screen name="casa/acertar" options={folha} />
+              <Stack.Screen name="casa/mercado" options={{ presentation: 'fullScreenModal' }} />
               <Stack.Screen name="lancamento/[id]" options={folha} />
               <Stack.Screen name="conta/[id]" options={folha} />
               <Stack.Screen name="conta/editar" options={folha} />
+              <Stack.Screen name="veiculo/gasto" options={folha} />
+              <Stack.Screen name="veiculo/documento" options={folha} />
               <Stack.Screen name="novo" options={folha} />
               <Stack.Screen name="widgets" options={folha} />
               <Stack.Screen name="postos" options={{ presentation: 'modal' }} />

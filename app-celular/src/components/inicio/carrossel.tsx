@@ -1,6 +1,7 @@
 // O carrossel do topo do Início: cartões grandes, um por página (com encaixe), e as bolinhas de página que
 // acompanham o dedo. "Este mês" (quanto sobrou) e, com o banco ligado, "Saldo em contas", "Faturas" e "Investido".
-// Sem o Pessoal, o primeiro cartão é o mês do consultório.
+// Com o Consultório em foco (foco.ts), ou sem o Pessoal, o primeiro cartão é o mês do consultório (recebido, a
+// receber, sessões e faltas); o do Pessoal vai para o fim.
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -10,6 +11,7 @@ import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { BarraProgresso } from '@/components/graficos';
 import { useIdSvg } from '@/components/graficos/curva';
 import { listaNomes, quandoVence, useCurto, ValorCurto, type ResumoMes } from '@/components/inicio/comum';
+import type { AreaFoco } from '@/components/inicio/foco';
 import { BolinhasPagina, Cartao, comAlfa, Dinheiro, Esqueleto, Icone, LogoBanco, Texto, useDizerValor, type NomeIcone } from '@/components/ui';
 import { Espaco, Fontes, Raio, useCores } from '@/constants/theme';
 import { totaisBanco, useBanco } from '@/hooks/use-banco';
@@ -84,7 +86,7 @@ function Logos({ bancos }: { bancos: string[] }) {
 
 /* ---------- O carrossel ---------- */
 
-export function Carrossel({ e, r, aoVerAtividades }: { e: Estado; r: ResumoMes; aoVerAtividades: () => void }) {
+export function Carrossel({ e, r, foco, aoVerAtividades }: { e: Estado; r: ResumoMes; foco: AreaFoco | null; aoVerAtividades: () => void }) {
   const dizer = useDizerValor();
   const c = useCores();
   const { width: W } = useWindowDimensions();
@@ -100,12 +102,15 @@ export function Carrossel({ e, r, aoVerAtividades }: { e: Estado; r: ResumoMes; 
   const t = totaisBanco(banco.resumo);
   const nomes = (lista: { banco: string }[]) => [...new Set(lista.map((k) => k.banco))];
   const temBanco = banco.ligado && !!banco.resumo?.bancos?.length;
-  const cartoes: { id: string; montar: (bolinhas: boolean) => ReactNode }[] = [];
+  type Pagina = { id: string; montar: (bolinhas: boolean) => ReactNode };
+  const cartoes: Pagina[] = [];
+  let mes: Pagina | null = null;
+  let consultorio: Pagina | null = null;
 
   if (e.pessoal && r.temLanc) {
     const maior = Math.max(r.entrou, r.saiu);
     const sobrou = r.sobrou;
-    cartoes.push({
+    mes = {
       id: 'mes',
       montar: (b) => (
         <Grande
@@ -125,10 +130,11 @@ export function Carrossel({ e, r, aoVerAtividades }: { e: Estado; r: ResumoMes; 
           </View>
         </Grande>
       ),
-    });
-  } else if (!e.pessoal && e.consultorio) {
+    };
+  }
+  if (e.consultorio && (!e.pessoal || foco === 'consultorio')) {
     const k = e.consultorio;
-    cartoes.push({
+    consultorio = {
       id: 'consultorio',
       montar: (b) => (
         <Grande
@@ -153,8 +159,10 @@ export function Carrossel({ e, r, aoVerAtividades }: { e: Estado; r: ResumoMes; 
           </View>
         </Grande>
       ),
-    });
+    };
   }
+  // o da área em foco abre o carrossel
+  if (foco === 'consultorio') { if (consultorio) cartoes.push(consultorio); } else { if (mes) cartoes.push(mes); if (consultorio) cartoes.push(consultorio); }
 
   if (banco.ligado && !banco.resumo && banco.carregando) {
     cartoes.push({
@@ -238,6 +246,8 @@ export function Carrossel({ e, r, aoVerAtividades }: { e: Estado; r: ResumoMes; 
       ),
     });
   }
+
+  if (foco === 'consultorio' && mes) cartoes.push(mes);
 
   if (!cartoes.length) return null;
   const varios = cartoes.length > 1;

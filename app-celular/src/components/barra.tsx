@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { areasDe, GradeAreas } from '@/components/inicio/areas';
-import { BotaoRedondo, CamadaVidro, comAlfa, Icone, Linha, Mascote, Texto, Tocavel, useVidroAtivo, Vidro, type NomeIcone } from '@/components/ui';
+import { Avatar, BotaoRedondo, CamadaVidro, comAlfa, Icone, Linha, Mascote, Texto, Tocavel, useVidroAtivo, Vidro, type NomeIcone } from '@/components/ui';
 import { Espaco, Fontes, Raio, useCores } from '@/constants/theme';
 import { useEstado } from '@/lib/motor';
 
@@ -138,7 +138,8 @@ export function Barra({ aba, aoTrocar, aoAbrirAreas, areasAberta, pilula }: Barr
 
 /* ---------- A folha com as áreas do Avina ---------- */
 
-// No iOS 26, a folha é de vidro (o Início escurecido aparece através dela); fora dele, sólida.
+// No iOS 26, a folha é de vidro (o Início escurecido aparece através dela); fora dele, sólida. Embaixo, a linha do
+// Perfil com a foto da conta (redonda) e o nome.
 export function FolhaAreas({ aberta, aoFechar }: { aberta: boolean; aoFechar: () => void }) {
   const c = useCores();
   const e = useEstado();
@@ -168,8 +169,9 @@ export function FolhaAreas({ aberta, aoFechar }: { aberta: boolean; aoFechar: ()
         {areas.length ? <GradeAreas areas={areas} antesDeAbrir={aoFechar} /> : null}
         <View style={[estilos.perfil, { backgroundColor: c.cartao, borderColor: c.linha }]}>
           <Linha
-            titulo="Perfil e ajustes"
-            sub="Conta, aparência, bloqueio e avisos"
+            titulo={e?.conta?.nome?.trim() || 'Perfil e ajustes'}
+            sub={e?.conta?.nome?.trim() ? 'Perfil, aparência, bloqueio e avisos' : 'Conta, aparência, bloqueio e avisos'}
+            esquerda={e?.conta ? <Avatar nome={e.conta.nome || e.conta.email || '?'} foto={e.conta.foto ?? null} tamanho={40} /> : undefined}
             icone="configuracoes"
             chevron
             onPress={() => { aoFechar(); router.push('/perfil'); }}
