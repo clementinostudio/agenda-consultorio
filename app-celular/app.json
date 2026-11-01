@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "avina",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#0A0C11",
+    "backgroundColor": "#0A0A0B",
     "ios": {
       "bundleIdentifier": "br.com.avina.app",
       "buildNumber": "1",
@@ -62,9 +62,14 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0A0C11",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 120
+          "backgroundColor": "#F7F6F2",
+          "image": "./assets/images/splash-abertura.png",
+          "imageWidth": 100,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#F7F6F2",
+            "image": "./assets/images/splash-abertura.png"
+          }
         }
       ],
       [

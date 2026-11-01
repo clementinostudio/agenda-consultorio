@@ -5,9 +5,11 @@
 //   da WebView), Compartilhar (com arquivos) e os arquivos baixados (PDF do recibo, planilha): viram o Compartilhar
 //   do celular, de onde dá para salvar em Arquivos ou mandar no WhatsApp;
 // - avisa o app da cor do topo e do fundo, para a barra do celular combinar com a tela.
-// O app responde com window.__avinaResposta(id, erro, valor). A lista de ações fica em src/app/index.tsx.
-// PONTE muda só quando o jeito de conversar muda; o app não abre cópias do site com uma ponte que ele não conhece.
-export const PONTE = 1;
+// O app responde com window.__avinaResposta(id, erro, valor). A lista de ações fica em src/components/camada-web.tsx.
+// No outro sentido (ponte 2), o app pede ao site por window.__avinaNativo(id, acao, dados), que o site define
+// (src/app-nativo.js), e o site responde com uma mensagem { resp: id, erro, valor } (lib/motor.ts).
+// PONTE muda só quando o jeito de conversar muda; o app só abre cópias do site com esta mesma ponte.
+export const PONTE = 2;
 
 export type Pedido = { id: number; acao: string; dados: any };
 

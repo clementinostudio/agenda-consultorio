@@ -1,15 +1,16 @@
 // Posto mais barato perto: a mesma busca do site, em tela nativa. Abre por cima do Avina quando a pessoa toca em
-// Transporte → Combustível → "Posto mais barato perto" (o site manda o combustível e o consumo do carro).
+// Transporte → Combustível → "Posto mais barato perto" (o site manda o combustível e o consumo do carro) e pelo cartão
+// "Combustível agora" do Início. As peças são as mesmas das outras telas (cartão, seções, botões redondos).
 import { router, useLocalSearchParams } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 
-import { BotaoVidro, Cartao, Chips, Tela, Texto, vibrar } from '@/components/base';
+import { BotaoVidro, Tela } from '@/components/base';
 import { FaixaPrecos } from '@/components/faixa-precos';
-import { Espaco, Raio, useCores } from '@/constants/theme';
+import { Botao, BotaoRedondo, Cartao, CartaoTitulo, Chips, Secao, Separador, Texto, vibrar } from '@/components/ui';
+import { Espaco, Fontes, useCores } from '@/constants/theme';
 import { usePostos, type Posto } from '@/hooks/use-postos';
 import { brl, dm, guardar, km, lerGuardado, preco } from '@/lib/formato';
 import { COMBS, haQuanto, linkMapa, resumoPostos, valeIr } from '@site/postos.js';
@@ -43,9 +44,7 @@ export default function Postos() {
 
   return (
     <Tela folha titulo="Posto mais barato" sub={sub} atualizando={p.st === 'buscando' && p.lista.length > 0} aoAtualizar={p.buscar}
-      direita={<BotaoVidro rotulo="Fechar" onPress={() => router.back()} cor={c.cartao3}>
-        {Platform.OS === 'ios' ? <SymbolView name="xmark" size={15} weight="bold" tintColor={c.texto} /> : <Texto v="forte">Fechar</Texto>}
-      </BotaoVidro>}>
+      direita={<BotaoRedondo icone="fechar" rotulo="Fechar" variante="solido" tamanho={36} onPress={() => router.back()} style={{ marginBottom: 4 }} />}>
       <StatusBar style={c.escuro || Platform.OS === 'ios' ? 'light' : 'dark'} />
       <View style={{ gap: Espaco.dois }}>
         <Chips rotulo="Combustível" valor={esc.comb} onTrocar={(comb) => trocar({ comb })} opcoes={COMBS.filter((x: { id: string }) => x.id !== 'gnv')} />
@@ -64,15 +63,15 @@ export default function Postos() {
 
       {r && (
         <Animated.View key={`${esc.comb}-${r.menor.id}`} entering={FadeInDown.springify().damping(18)} style={{ paddingHorizontal: Espaco.cinco, opacity: p.st === 'buscando' ? 0.6 : 1 }}>
-          <Cartao destaque={c.menta + '66'} style={{ backgroundColor: c.escuro ? '#0F1A16' : c.cartao }}>
-            <Texto v="rotulo" cor={c.menta}>{rotulo}</Texto>
+          <Cartao destaque={c.menta} vidro={false}>
+            <CartaoTitulo rotulo={rotulo} icone="combustivel" cor={c.menta} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: Espaco.tres }}>
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
-                <Texto v="numero" style={{ fontSize: 44 }} adjustsFontSizeToFit numberOfLines={1}>{preco(r.menor.preco)}</Texto>
+                {/* o preço divide a linha com o botão: num iPhone pequeno, encolhe em vez de cortar */}
+                <Texto v="numero" style={{ fontSize: 40, lineHeight: 48 }} adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1}>{preco(r.menor.preco)}</Texto>
                 <Texto v="apoio">/litro</Texto>
               </View>
               <BotaoVidro rotulo={`Ir até ${r.menor.nome}`} onPress={() => abrirMapa(r.menor)}>
-                {Platform.OS === 'ios' && <SymbolView name="arrow.triangle.turn.up.right.diamond.fill" size={16} tintColor={c.tintaBotao} />}
                 <Texto v="forte" cor={c.tintaBotao}>Ir até lá</Texto>
               </BotaoVidro>
             </View>
@@ -87,7 +86,7 @@ export default function Postos() {
             {vale && perto && (
               <Texto v="apoio">
                 O mais perto ({perto.nome}, {km(perto.dist)}) cobra {preco(perto.preco)}.{' '}
-                {vale.vale ? <>Mesmo contando a ida e a volta, sobram <Texto v="forte" cor={c.menta} style={{ fontSize: 13 }}>{brl(vale.sobra)}</Texto>.</> : 'Indo só para abastecer, a ida e a volta comem a economia.'}
+                {vale.vale ? <>Mesmo contando a ida e a volta, sobram <Texto v="apoio" cor={c.menta} style={{ fontFamily: Fontes.textoForte }}>{brl(vale.sobra)}</Texto>.</> : 'Indo só para abastecer, a ida e a volta comem a economia.'}
               </Texto>
             )}
           </Cartao>
@@ -95,26 +94,26 @@ export default function Postos() {
       )}
 
       {p.lista.length > 1 && (
-        <View style={{ paddingHorizontal: Espaco.cinco, gap: Espaco.dois }}>
-          <Texto v="rotulo" cor={c.apoio} style={{ marginLeft: 4 }}>Outros postos</Texto>
-          <Animated.View layout={LinearTransition} style={[estilos.lista, { backgroundColor: c.cartao }]}>
+        <Secao titulo="Outros postos" style={{ paddingHorizontal: Espaco.cinco }}>
+          <Cartao padding={0} vidro={false} style={estilos.lista}>
             {p.lista.slice(1, 30).map((x, i) => (
-              <Animated.View key={x.id} entering={FadeIn.delay(Math.min(i, 12) * 35)}>
-                <Pressable onPress={() => abrirMapa(x)} accessibilityRole="button" accessibilityLabel={`${x.nome}, ${preco(x.preco)}, ${km(x.dist)}`}
-                  style={({ pressed }) => [estilos.linha, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.linha }, pressed && { backgroundColor: c.cartao2 }]}>
+              <Animated.View key={x.id} layout={LinearTransition} entering={FadeIn.delay(Math.min(i, 12) * 35)}>
+                {i > 0 ? <Separador style={{ marginHorizontal: Espaco.cinco }} /> : null}
+                <Pressable onPress={() => abrirMapa(x)} accessibilityRole="button" accessibilityLabel={`${x.nome}, ${preco(x.preco)}, ${km(x.dist)}. Abre no mapa`}
+                  style={({ pressed }) => [estilos.linha, pressed && { backgroundColor: c.cartao2 }]}>
                   <View style={{ flex: 1, gap: 2 }}>
                     <Texto v="forte" numberOfLines={1}>{x.nome}</Texto>
                     <Texto v="apoio" numberOfLines={1}>{[x.bairro || x.endereco, km(x.dist), x.t ? haQuanto(x.t) : ''].filter(Boolean).join(' · ')}</Texto>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Texto v="subtitulo" style={{ fontVariant: ['tabular-nums'] }}>{preco(x.preco)}</Texto>
-                    {r && <Texto v="apoio" cor={c.rosa} style={{ fontSize: 12 }}>+{preco(x.preco - r.menor.preco).replace('R$ ', '')}</Texto>}
+                    <Texto style={estilos.preco}>{preco(x.preco)}</Texto>
+                    {r && <Texto v="apoio" cor={c.negativo} style={{ fontSize: 12, fontFamily: Fontes.textoForte }}>+{preco(x.preco - r.menor.preco).replace('R$ ', '')}</Texto>}
                   </View>
                 </Pressable>
               </Animated.View>
             ))}
-          </Animated.View>
-        </View>
+          </Cartao>
+        </Secao>
       )}
 
       {p.st === 'ok' && p.lista.length > 0 && (
@@ -134,12 +133,13 @@ function Vazio({ texto, carregando, acao, aoAgir }: { texto: string; carregando?
     <Animated.View entering={FadeIn} style={{ alignItems: 'center', gap: Espaco.tres, paddingHorizontal: Espaco.oito, paddingVertical: Espaco.oito }}>
       {carregando && <ActivityIndicator color={c.menta} />}
       <Texto v="apoio" style={{ textAlign: 'center' }}>{texto}</Texto>
-      {acao && aoAgir && <BotaoVidro rotulo={acao} onPress={aoAgir} cor={c.cartao3}><Texto v="forte">{acao}</Texto></BotaoVidro>}
+      {acao && aoAgir && <Botao titulo={acao} icone="atualizar" variante="secundario" tamanho="medio" onPress={aoAgir} style={{ alignSelf: 'center' }} />}
     </Animated.View>
   );
 }
 
 const estilos = StyleSheet.create({
-  lista: { borderRadius: Raio.cartao, borderCurve: 'continuous', overflow: 'hidden' },
-  linha: { flexDirection: 'row', alignItems: 'center', gap: Espaco.tres, paddingHorizontal: Espaco.cinco, paddingVertical: 14 },
+  lista: { gap: 0, overflow: 'hidden' },
+  linha: { flexDirection: 'row', alignItems: 'center', gap: Espaco.tres, paddingHorizontal: Espaco.cinco, paddingVertical: 14, minHeight: 64 },
+  preco: { fontFamily: Fontes.tituloForte, fontSize: 17, lineHeight: 22, letterSpacing: -0.2, fontVariant: ['tabular-nums'] },
 });

@@ -3,7 +3,8 @@
 // - O site publica as versões novas em https://app.avina.com.br/celular/. O app procura ao abrir e ao voltar para
 //   ele; se tiver, baixa e guarda no aparelho, e a versão nova entra na próxima vez que o Avina abrir.
 //   Assim o app acompanha o site sem esperar a loja (o código roda na WebView, como a Apple permite).
-// - Só aceita cópias com uma ponte que este app conhece (PONTE em lib/ponte.ts).
+// - Só aceita cópias com a mesma ponte deste app (PONTE em lib/ponte.ts): uma cópia de ponte mais velha não sabe
+//   mandar o retrato dos dados para as telas nativas, e uma mais nova espera um app que ainda não chegou na loja.
 import { Asset } from 'expo-asset';
 import { Directory, File, Paths } from 'expo-file-system';
 
@@ -23,7 +24,7 @@ async function baixada(): Promise<Versao | null> {
 
 export async function carregarSite(): Promise<{ html: string; versao: number }> {
   const v = await baixada();
-  if (v && v.versao > embutida.versao && v.ponte <= PONTE) {
+  if (v && v.versao > embutida.versao && v.ponte === PONTE) {
     try { return { html: await arqHtml.text(), versao: v.versao }; } catch {}
   }
   const [a] = await Asset.loadAsync(require('@/assets/site/avina.html'));
@@ -39,9 +40,9 @@ export async function procurarVersaoNova(aberta: number): Promise<boolean> {
     const r = await fetch(`${ENDERECO}celular/versao.json`, { cache: 'no-store' });
     if (!r.ok) return false;
     const v = (await r.json()) as Versao;
-    if (!(v.versao > aberta) || v.ponte > PONTE) return false;
+    if (!(v.versao > aberta) || v.ponte !== PONTE) return false;
     const ja = await baixada();
-    if (ja && ja.versao >= v.versao) return true;
+    if (ja && ja.ponte === PONTE && ja.versao >= v.versao) return true;
     const h = await fetch(`${ENDERECO}celular/avina.html`, { cache: 'no-store' });
     const html = h.ok ? await h.text() : '';
     if (html.length < 200_000 || !html.includes('</html>')) return false; // veio pela metade

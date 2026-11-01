@@ -1,51 +1,84 @@
-// As cores e as fontes do Avina (as mesmas do site: src/styles.css). Escuro primeiro, claro quando o aparelho pede.
+// As cores e as fontes do Avina no celular.
+// - Escuro: preto fosco e cinzas grafite (nada de azul-marinho), com o azul e a menta do Avina como destaque.
+// - Claro: cinza-gelo de fundo e cartões brancos com sombra bem leve.
+// - O tema segue o que a pessoa escolheu no Avina (Perfil → Aparência: sistema, claro ou escuro), que chega pela
+//   ponte (lib/motor.ts); em "sistema", segue o aparelho.
 import { useColorScheme } from 'react-native';
+
+import { useTemaEscolhido } from '@/lib/motor';
 
 export const Cores = {
   dark: {
-    fundo: '#0A0C11',
-    cartao: '#15171D',
-    cartao2: '#1E2129',
-    cartao3: '#292D36',
-    linha: '#2A2E37',
-    texto: '#F2F4F8',
-    apoio: '#8A91A0',
-    fraco: '#5A606D',
-    azul: '#2B46FF',
+    fundo: '#0A0A0B',
+    fundoAlto: '#101012',
+    cartao: '#161618',
+    cartao2: '#1E1E21',
+    cartao3: '#29292D',
+    vidro: 'rgba(30,30,33,0.72)',
+    linha: 'rgba(255,255,255,0.07)',
+    linhaForte: 'rgba(255,255,255,0.12)',
+    brilho: 'rgba(255,255,255,0.06)', // reflexo de cima dos cartões
+    texto: '#F4F4F5',
+    apoio: '#9B9BA3',
+    fraco: '#6C6C75', // terceiro nível (datas, rodapés): ainda legível no grafite
+    azul: '#4A62FF',
     azulTinta: '#8FA4FF',
+    azulFundo: '#161B3A',
+    roxo: '#8B6CFF',
+    ciano: '#3CC4E6',
     menta: '#46E0A4',
-    mentaFundo: '#123327',
+    mentaFundo: '#0F2A20',
+    positivo: '#46E0A4',
+    negativo: '#FF6B6B',
     loja: '#FFA25E',
     ambar: '#FFB648',
     rosa: '#FF7272',
-    rosaFundo: '#3A1719',
+    rosaFundo: '#341417',
     tintaBotao: '#06150F',
+    sombra: '#000000',
   },
   light: {
-    fundo: '#F1F2F6',
+    fundo: '#F2F2F5',
+    fundoAlto: '#FFFFFF',
     cartao: '#FFFFFF',
-    cartao2: '#F1F2F6',
-    cartao3: '#E2E4EC',
-    linha: '#E4E6ED',
-    texto: '#12141B',
-    apoio: '#676D7D',
-    fraco: '#A3A8B4',
+    cartao2: '#F4F4F7',
+    cartao3: '#E6E6EC',
+    vidro: 'rgba(255,255,255,0.78)',
+    linha: 'rgba(17,17,20,0.07)',
+    linhaForte: 'rgba(17,17,20,0.12)',
+    brilho: 'rgba(255,255,255,0.9)',
+    texto: '#111114',
+    apoio: '#6B6B74',
+    fraco: '#86868F', // terceiro nível: o mais claro que ainda dá para ler no branco
     azul: '#2B46FF',
     azulTinta: '#2338C9',
-    menta: '#0E9466',
+    azulFundo: '#E6EAFF',
+    roxo: '#6B46D7',
+    ciano: '#0F7F97',
+    menta: '#0B8459',
     mentaFundo: '#DDF5EA',
+    positivo: '#0B8459', // os tons do claro são mais fechados que os do escuro: dá para ler no fundo branco
+    negativo: '#CC3441',
     loja: '#B4530F',
     ambar: '#9A6200',
-    rosa: '#D63A47',
+    rosa: '#CC3441',
     rosaFundo: '#FFE5E7',
     tintaBotao: '#FFFFFF',
+    sombra: '#1A1A2E',
   },
 } as const;
 
 export type Paleta = { [K in keyof typeof Cores.dark]: string };
 
+// O tema de agora: o escolhido no Avina, ou o do aparelho quando a escolha é "sistema"
+export function useEscuro(): boolean {
+  const sistema = useColorScheme();
+  const escolhido = useTemaEscolhido();
+  return escolhido === 'auto' ? sistema !== 'light' : escolhido === 'dark';
+}
+
 export function useCores(): Paleta & { escuro: boolean } {
-  const escuro = useColorScheme() !== 'light';
+  const escuro = useEscuro();
   return { ...(escuro ? Cores.dark : Cores.light), escuro };
 }
 

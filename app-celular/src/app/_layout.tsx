@@ -7,31 +7,59 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { Abertura } from '@/components/abertura';
+import { CamadaWeb } from '@/components/camada-web';
 import { Trava } from '@/components/trava';
-import { Cores, useCores } from '@/constants/theme';
+import { Raio, useCores } from '@/constants/theme';
 
-// A abertura (splash) fica até o Avina terminar de carregar (app/index.tsx). Garantia: some em 8 s.
+// A abertura estática (splash do sistema) fica até a abertura animada assumir (components/abertura.tsx).
+// Garantia: some em 8 s, aconteça o que acontecer.
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ fade: true, duration: 250 });
+
+// Folhas que sobem de baixo (lançamento, anotar, widgets): alça no topo e os cantos do Avina
+const FOLHA = { presentation: 'formSheet', sheetGrabberVisible: true, sheetCornerRadius: Raio.cartao } as const;
 
 export default function Raiz() {
   const c = useCores();
   const [fontes, erro] = useFonts({ Sora_600SemiBold, Sora_700Bold, Manrope_500Medium, Manrope_700Bold, Manrope_800ExtraBold });
   useEffect(() => { const t = setTimeout(() => SplashScreen.hideAsync(), 8000); return () => clearTimeout(t); }, []);
-  if (!fontes && !erro) return <View style={{ flex: 1, backgroundColor: Cores.dark.fundo }} />;
+  if (!fontes && !erro) return <View style={{ flex: 1, backgroundColor: c.fundo }} />;
   const base = c.escuro ? DarkTheme : DefaultTheme;
+  const folha = { ...FOLHA, contentStyle: { backgroundColor: c.fundoAlto } };
   return (
-    <ThemeProvider value={{ ...base, colors: { ...base.colors, background: c.fundo, card: c.cartao, text: c.texto, border: c.linha, primary: c.menta } }}>
-      {/* o topo do Avina é sempre escuro (nos dois temas), então a barra de status fica clara */}
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Cores.dark.fundo } }}>
-        <Stack.Screen name="index" />
-        {/* telas nativas que abrem por cima do Avina */}
-        <Stack.Screen name="postos" options={{ presentation: 'modal', contentStyle: { backgroundColor: c.fundo } }} />
-      </Stack>
-      <Trava />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.fundo }}>
+      <ThemeProvider value={{ ...base, colors: { ...base.colors, background: c.fundo, card: c.cartao, text: c.texto, border: c.linha, primary: c.menta } }}>
+        {/* nas telas nativas, a barra de status segue o tema; com o site na frente, a CamadaWeb põe a dela por cima */}
+        <StatusBar style={c.escuro ? 'light' : 'dark'} />
+        <View style={estilos.palco}>
+          {/* o site fica sempre montado: atrás das telas nativas, ou na frente delas (mostrarWeb, sem login) */}
+          <CamadaWeb />
+          <View style={[estilos.telas, { backgroundColor: c.fundo }]}>
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.fundo } }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="chat" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen name="bancos" />
+              <Stack.Screen name="perfil" />
+              <Stack.Screen name="categorias" />
+              <Stack.Screen name="lancamento/[id]" options={{ ...folha, sheetAllowedDetents: [0.6, 1] }} />
+              <Stack.Screen name="novo" options={{ ...folha, sheetAllowedDetents: [0.75, 1] }} />
+              <Stack.Screen name="widgets" options={{ ...folha, sheetAllowedDetents: [0.6, 1] }} />
+              <Stack.Screen name="postos" options={{ presentation: 'modal' }} />
+            </Stack>
+          </View>
+        </View>
+        <Abertura />
+        <Trava />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const estilos = StyleSheet.create({
+  palco: { flex: 1 },
+  telas: { flex: 1, zIndex: 1 },
+});
