@@ -59,6 +59,8 @@
 }
 
 @keyframes vz-entra { from { opacity: 0; transform: translateY(14px); } }
+/* cartões: no escuro, o reflexo bem leve no topo (--brilho-cartao, de src/styles.css; no claro é none) */
+.vz-card:not(.on), .c3-prox, .g4-foco { background-image: var(--brilho-cartao); }
 
 /* ---------- topo de tela: rótulo (ou setas do mês), número grande, apoio e gráfico ---------- */
 .vz-topo { position: relative; overflow: hidden; border-radius: 30px; border: 1px solid var(--line); padding: 12px 0 14px; text-align: center;

@@ -2,7 +2,7 @@
 import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
-import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada, Marca } from "../App.jsx";
+import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada, Marca, Confirmar } from "../App.jsx";
 import { DadosRecibo } from "./consultorio.jsx";
 import { AssinaturaPagina, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaAssin } from "./assinatura.jsx";
 import { GradeHorarios, LinkAgendamento, linkDo } from "./agendamento.jsx";
@@ -10,6 +10,8 @@ import { gradeDo, resumoGrade, periodosIniciais } from "../horarios.js";
 import { linkSuporte } from "../plano.js";
 import { nivelDe, TRILHAS } from "../conquistas.js";
 import { noApp, appIOS, chamarApp } from "../app-nativo.js";
+
+const TEXTO_EXCLUIR = "O login, o perfil e todos os dados saem da nuvem e deste aparelho, de vez. Se você assina o Avina Pro, a assinatura é cancelada junto (nos 7 dias da garantia, devolvemos o valor). Isso não dá para desfazer.";
 
 const TXT_PUSH = {
   servidor: "Falta ligar o servidor de avisos (uma vez só). No computador, dentro da pasta do app, rode: bash servidor-avisos/instalar-avisos.sh",
@@ -70,8 +72,11 @@ function AvisosFechado({ act }) {
   );
 }
 
-function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
+function PerfilPage({ db, conta, tema, inicio: pedido, onClose, act, nuvem }) {
   const pf = conta.perfil || {};
+  // "excluir": o app de celular abre o Perfil já na exclusão da conta (a confirmação aberta, lá embaixo)
+  const paraExcluir = pedido === "excluir", inicio = paraExcluir ? null : pedido;
+  const [excluindo, setExcluindo] = useState(paraExcluir && !!conta.uid);
   const [aba, setAba] = useState(inicio || null);
   // voltar do Android: de uma seção volta para o Perfil; do Perfil, fecha
   const abaRef = useRef(aba); abaRef.current = aba;
@@ -136,6 +141,7 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
   }, [nome, foto, profissao, nasc, cidade, pix, termo, dur, grade, periodos, falta, regLembrar, meta, valorPadrao, subPadrao, reserva, avAtivo, antec, avNomes, avResumo, avFechar, avSemana, estilo, vib, pessoal, consult, lojaU]);
   useEffect(() => { if (!salvo) return; const t = setTimeout(() => setSalvo(false), 1600); return () => clearTimeout(t); }, [salvo]);
   useEffect(() => { if (topo.current) topo.current.scrollTop = 0; }, [aba, sub]);
+  useEffect(() => { if (!paraExcluir) return; const t = setTimeout(() => { if (topo.current) topo.current.scrollTop = topo.current.scrollHeight; }, 80); return () => clearTimeout(t); }, []);
   useEffect(() => { if (aba !== "assinatura") setSub(null); }, [aba]);
   useEffect(() => {
     const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
@@ -263,7 +269,8 @@ function PerfilPage({ db, conta, tema, inicio, onClose, act, nuvem }) {
             </div>
           </div>
           <ConfirmButton label="Apagar meus dados" titulo="Apagar todos os seus dados?" texto={conta.uid ? "Pacientes, sessões, cobranças e gastos somem de vez, da nuvem e de todos os seus aparelhos. A conta continua. Isso não dá para desfazer." : "Pacientes, sessões, cobranças e gastos deste aparelho somem de vez. Isso não dá para desfazer."} acao="Apagar tudo" onConfirm={act.zerar} />
-          {conta.uid && <ConfirmButton label="Excluir minha conta" titulo="Excluir sua conta?" texto="O login, o perfil e todos os dados saem da nuvem e deste aparelho, de vez. Se você assina o Avina Pro, a assinatura é cancelada junto (nos 7 dias da garantia, devolvemos o valor). Isso não dá para desfazer." acao="Excluir conta" onConfirm={act.excluirConta} />}
+          {conta.uid && <ConfirmButton label="Excluir minha conta" titulo="Excluir sua conta?" texto={TEXTO_EXCLUIR} acao="Excluir conta" onConfirm={act.excluirConta} />}
+          {excluindo && <Confirmar titulo="Excluir sua conta?" texto={TEXTO_EXCLUIR} acao="Excluir conta" icon={<I.trash />} onSim={act.excluirConta} onFim={() => setExcluindo(false)} />}
         </>}
 
         {aba === "dados" && <div className="stack">

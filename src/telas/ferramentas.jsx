@@ -252,7 +252,8 @@ export function ImportarSheet({ db, act, onClose, arquivo, doBanco }) {
   // veio do "Trazer lançamentos novos" do painel do banco: já começa buscando
   const jaBuscou = useRef(false);
   useEffect(() => { if (doBanco && !jaBuscou.current && banco && banco.ligado && banco.bancos.length) { jaBuscou.current = true; trazer(); } }, [banco]);
-  const importar = () => act.importarLanc(marcados.map(x => ({ id: uid(), tipo: x.tipo, valor: x.valor, cat: x.cat, desc: x.desc, data: x.data, marca: x.marca, importId: x.importId })));
+  // do Open Finance, guarda também o nome do banco (o app de celular põe o selo do banco na logo)
+  const importar = () => act.importarLanc(marcados.map(x => ({ id: uid(), tipo: x.tipo, valor: x.valor, cat: x.cat, desc: x.desc, data: x.data, marca: x.marca, importId: x.importId, ...(String(x.fid || "").startsWith("of:") && x.banco ? { banco: String(x.banco).slice(0, 60) } : {}) })));
   if (!itens) return (
     <Sheet title="Importar extrato" sub="Traz os lançamentos do banco de uma vez. O arquivo é lido aqui no aparelho e não vai para lugar nenhum." onClose={onClose}>
       <Ilustra n="arquivo" className="sheet-ilustra" />

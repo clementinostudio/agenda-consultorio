@@ -1,0 +1,195 @@
+/* =========================================================
+   A conversa com a Bolinha, com cara de chat de IA (VozBarra em src/App.jsx)
+   - sem conversa: a Bolinha grande no meio, "Olá, Fulano" / "Como posso te ajudar?" e sugestões em chips acima do campo
+   - o que você diz: pílula à direita; a resposta dela: texto corrido à esquerda (sem balão), com as ações embaixo
+   - campo em pílula grande: + (atalhos) à esquerda, falar / enviar / parar à direita
+   - no celular ocupa a tela toda e sobe junto com o teclado (--teclado); no computador é um painel do lado
+   Só usa as cores do tema (src/styles.css), então segue o claro e o escuro sozinho.
+   ========================================================= */
+
+.chat-ia {
+  /* a pílula do que você diz: misturada do texto com o fundo (com foto de fundo, as superfícies do app viram vidro) */
+  --chat-eu: color-mix(in srgb, var(--fg) 10%, var(--bg));
+  --chat-sombra: 0 30px 90px rgba(0, 0, 0, .5);
+  position: fixed; left: 0; right: 0; top: 0; bottom: var(--teclado, 0px); z-index: 55;
+  display: flex; flex-direction: column; background: var(--bg); color: var(--fg);
+  animation: chat-entra .4s cubic-bezier(.16, 1, .3, 1);
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]):not([data-app-theme="dark"]) .chat-ia { --chat-sombra: 0 24px 70px rgba(17, 17, 26, .16); } }
+:root[data-theme="light"]:not([data-app-theme="dark"]) .chat-ia, :root[data-app-theme="light"] .chat-ia { --chat-sombra: 0 24px 70px rgba(17, 17, 26, .16); }
+@keyframes chat-entra { from { opacity: 0; transform: translateY(28px); } }
+
+/* ---------- topo: X, o que está acontecendo e o … ---------- */
+.chat-topo { flex: none; position: relative; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 6px max(14px, env(safe-area-inset-left, 0px)); }
+.chat-redondo { width: 44px; height: 44px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--fg);
+  background: var(--surface-2); border: 1px solid var(--line); box-shadow: var(--card-shadow); transition: transform .12s ease, background .15s; }
+.chat-redondo svg { width: 20px; height: 20px; }
+.chat-menu-btn svg { width: 24px; height: 24px; }
+.chat-redondo:active { transform: scale(.92); }
+.chat-redondo.on { background: var(--surface-3); }
+.chat-status { display: inline-flex; align-items: center; gap: 8px; min-width: 0; height: 32px; padding: 0 14px; border-radius: 999px;
+  color: var(--muted); font-size: 13.5px; font-weight: 700; white-space: nowrap; opacity: 0; transform: translateY(-4px); transition: opacity .2s, transform .2s; }
+.chat-status.on { opacity: 1; transform: none; background: var(--surface-2); border: 1px solid var(--line); }
+.chat-status i { width: 8px; height: 8px; border-radius: 50%; background: var(--mode); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mode) 22%, transparent); animation: chat-pulso 1.2s ease-in-out infinite; }
+.chat-ia.ouvindo .chat-status, .chat-ia.falando .chat-status { color: var(--fg); }
+@keyframes chat-pulso { 50% { transform: scale(.7); opacity: .6; } }
+.chat-topo-d { position: relative; flex: none; }
+
+/* menus (o … do topo e o + do campo) */
+.chat-menu { position: absolute; z-index: 6; min-width: 248px; padding: 6px; border-radius: 22px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--menu-a); border: 1px solid var(--menu-line); box-shadow: inset 0 1px 0 var(--menu-hi), 0 22px 50px rgba(0, 0, 0, .32); animation: chat-menu .18s cubic-bezier(.2, .9, .3, 1); }
+.chat-topo-d .chat-menu { top: calc(100% + 8px); right: 0; transform-origin: top right; }
+.chat-menu button { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border-radius: 16px; text-align: left; color: var(--fg); font-size: 15px; font-weight: 700; }
+.chat-menu button > span:not(.chat-menu-ic) { flex: 1; white-space: nowrap; }
+.chat-menu button > svg { width: 19px; height: 19px; color: var(--muted); flex: none; }
+.chat-menu button:hover:not(:disabled), .chat-menu button:focus-visible { background: var(--surface-2); }
+.chat-menu button:disabled { opacity: .4; }
+.chat-menu-ic { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.chat-menu-ic svg { width: 16px; height: 16px; }
+.chat-menu-ic.menos { background: var(--rose-soft); color: var(--rose); }
+.chat-menu-ic.mais { background: var(--mint-soft); color: var(--mint); }
+@keyframes chat-menu { from { opacity: 0; transform: translateY(-4px) scale(.97); } }
+/* interruptor do "Responder falando" */
+.chat-chave { position: relative; width: 40px; height: 24px; flex: none; border-radius: 999px; background: var(--surface-3); transition: background .2s; }
+.chat-chave::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .2s cubic-bezier(.3, 1.3, .5, 1); }
+.chat-chave.on { background: var(--mode); }
+.chat-chave.on::after { transform: translateX(16px); }
+
+/* ---------- a conversa ---------- */
+.chat-lista { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; width: 100%; max-width: 760px; margin: 0 auto;
+  padding: 14px max(18px, env(safe-area-inset-right, 0px)) 22px max(18px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 22px; }
+.chat-lista.vazia { justify-content: center; }
+.chat-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+
+/* tela vazia: a Bolinha grande e o "Olá" */
+.chat-vazio { display: grid; justify-items: center; text-align: center; padding-bottom: 6vh; animation: chat-vazio .5s cubic-bezier(.2, .8, .2, 1) both; }
+.chat-vazio-bola { display: block; margin-bottom: 22px; }
+.chat-vazio-bola .bolinha { width: 92px; height: 92px; }
+.chat-vazio h2 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 27px; letter-spacing: -.025em; line-height: 1.2; }
+.chat-vazio p { margin: 4px 0 0; color: var(--muted); font-size: 21px; font-weight: 500; letter-spacing: -.01em; line-height: 1.3; }
+@keyframes chat-vazio { from { opacity: 0; transform: translateY(10px); } }
+
+.chat-msg { animation: chat-msg .32s cubic-bezier(.2, 1, .4, 1); }
+@keyframes chat-msg { from { opacity: 0; transform: translateY(8px); } }
+/* o que você diz: pílula à direita */
+.chat-msg.eu { align-self: flex-end; max-width: 84%; }
+.chat-msg.eu p { margin: 0; padding: 11px 18px; border-radius: 24px; background: var(--chat-eu); color: var(--fg); font-size: 16.5px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.chat-msg.eu.rascunho p { opacity: .6; }
+.chat-msg.eu .digitando { min-height: 22px; }
+/* a resposta da Bolinha: texto corrido à esquerda, sem balão */
+.chat-msg.ela { align-self: stretch; min-width: 0; }
+.chat-texto { margin: 0; font-size: 17px; font-weight: 500; line-height: 1.58; letter-spacing: -.003em; color: var(--fg); white-space: pre-line; overflow-wrap: anywhere; }
+.chat-msg.aviso .chat-texto { color: color-mix(in srgb, var(--fg) 82%, var(--muted)); }
+
+/* rodapé de ações: a Bolinha pequena à esquerda; ouvir, copiar, gostei e não gostei à direita */
+.chat-acoes { display: flex; align-items: center; gap: 8px; min-height: 38px; margin-top: 8px; opacity: 0; transition: opacity .35s ease; }
+.chat-acoes.on { opacity: 1; }
+.chat-mini { width: 22px; height: 22px; flex: none; border-radius: 50%; background: var(--mode); display: flex; align-items: center; justify-content: center; gap: 3px; margin-left: 1px; }
+.chat-mini i { width: 2.6px; height: 7.5px; border-radius: 2px; background: #fff; animation: pisca-av 4s infinite; }
+.chat-msg.ela.falando .chat-mini i { animation: fala-av .32s ease-in-out infinite alternate; }
+.chat-msg.ela.falando .chat-mini i:last-child { animation-delay: .16s; }
+.chat-acoes-aviso { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.chat-acoes-d { margin-left: auto; display: flex; gap: 2px; }
+.chat-acoes-d button { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--muted); transition: color .15s, background .15s, transform .12s; }
+.chat-acoes-d button svg { width: 19px; height: 19px; }
+.chat-acoes-d button:active { transform: scale(.9); }
+.chat-acoes-d button.on { color: var(--fg); }
+.chat-acoes-d button.on svg { fill: color-mix(in srgb, var(--fg) 16%, transparent); }
+@media (hover: hover) { .chat-acoes-d button:hover { color: var(--fg); background: var(--surface-2); } }
+
+/* "pensando": a Bolinha se mexe e o texto brilha enquanto muda */
+.chat-pensando { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.chat-pensa-bola { display: block; flex: none; }
+.chat-pensa-bola .bolinha { width: 30px; height: 30px; }
+.chat-pensa-bola .b-sombra { display: none; }
+.chat-pensa-bola .b-corpo { animation: chat-pensa .62s ease-in-out infinite alternate; }
+@keyframes chat-pensa { from { transform: translateY(1.5px) scale(1.04, .95); } to { transform: translateY(-2.5px) scale(.96, 1.05); } }
+.chat-pensando .chat-pensa-tx { display: inline-block !important; min-height: 0; font-size: 16px; font-weight: 600; color: var(--muted);
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 35%, var(--fg) 50%, var(--muted) 65%, var(--muted) 100%); background-size: 250% 100%;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: chat-brilho 1.8s linear infinite, chat-msg .3s ease both; }
+@keyframes chat-brilho { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+
+/* "Anoto assim?": o cartão do que vai ser anotado e os botões numa linha só */
+.chat-anota { display: flex; flex-direction: column; gap: 10px; }
+.chat-cartao { display: flex; flex-direction: column; gap: 10px; }
+.chat-ia .chat-cartao .vozb-card { padding: 6px 14px; border-radius: 22px; background-color: var(--surface); background-image: var(--brilho-cartao); border: 1px solid var(--line);
+  box-shadow: var(--card-shadow); -webkit-backdrop-filter: none; backdrop-filter: none; animation: none; }
+.chat-cartao-acoes { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 8px; }
+.chat-cartao-acoes.dois { grid-template-columns: 1.4fr 1fr; }
+.chat-cartao-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; height: 46px; padding: 0 8px; border-radius: 999px; white-space: nowrap;
+  background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); font-size: 14px; font-weight: 800; transition: transform .12s ease; }
+.chat-cartao-btn svg { width: 16px; height: 16px; flex: none; }
+.chat-cartao-btn.forte { background: var(--fg); color: var(--bg); border-color: transparent; }
+.chat-cartao-btn .num { font-variant-numeric: tabular-nums; opacity: .7; }
+.chat-cartao-btn:active { transform: scale(.96); }
+@media (max-width: 350px) { .chat-cartao-btn:not(.forte) svg { display: none; } } /* celular bem estreito: os três botões ainda cabem numa linha */
+
+/* ---------- embaixo: sugestões e o campo de mensagem ---------- */
+.chat-compor { flex: none; position: relative; z-index: 2; width: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px;
+  /* com o teclado aberto (--teclado), a faixa do "risco" de baixo do iPhone não precisa de espaço */
+  padding: 6px max(12px, env(safe-area-inset-right, 0px)) max(10px, calc(12px + env(safe-area-inset-bottom, 0px) - var(--teclado, 0px))) max(12px, env(safe-area-inset-left, 0px)); }
+.chat-sugestoes { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity;
+  margin: 0 calc(-1 * max(12px, env(safe-area-inset-right, 0px))) 0 calc(-1 * max(12px, env(safe-area-inset-left, 0px)));
+  padding: 2px max(12px, env(safe-area-inset-right, 0px)) 12px max(12px, env(safe-area-inset-left, 0px)); margin-bottom: -10px; scroll-padding: 0 12px; animation: chat-msg .4s .08s cubic-bezier(.2, 1, .4, 1) both; }
+.chat-sugestoes::-webkit-scrollbar { display: none; }
+.chat-sugestoes button { flex: none; height: 46px; padding: 0 18px; border-radius: 999px; scroll-snap-align: start; white-space: nowrap;
+  background: var(--surface); color: var(--fg); border: 1px solid var(--line-forte); box-shadow: var(--card-shadow); font-size: 15px; font-weight: 600; transition: transform .12s ease, background .15s; }
+.chat-sugestoes button:active { transform: scale(.96); }
+@media (hover: hover) { .chat-sugestoes button:hover { background: var(--surface-2); } }
+
+.chat-campo { display: flex; align-items: center; gap: 2px; min-height: 60px; padding: 7px; border-radius: 32px; background: var(--surface); border: 1px solid var(--line-forte);
+  box-shadow: var(--card-shadow), 0 10px 30px rgba(0, 0, 0, .14); transition: border-color .2s; }
+.chat-campo:focus-within { border-color: color-mix(in srgb, var(--fg) 24%, transparent); }
+.chat-campo input { flex: 1; min-width: 0; height: 46px; padding: 0 8px 0 14px; border: 0; outline: 0; background: none; color: var(--fg); font-size: 16.5px; font-weight: 500; }
+.chat-campo input::placeholder { color: var(--muted); opacity: 1; }
+.chat-campo-mais + input { padding-left: 4px; }
+.chat-campo-mais { width: 46px; height: 46px; flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--fg); transition: transform .2s cubic-bezier(.3, 1.4, .5, 1), background .15s; }
+.chat-campo-mais svg { width: 24px; height: 24px; }
+.chat-campo-mais.on { transform: rotate(45deg); background: var(--surface-2); }
+.chat-acao { position: relative; width: 46px; height: 46px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--fg); color: var(--bg); transition: transform .12s ease, background .2s, color .2s; }
+.chat-acao svg { width: 22px; height: 22px; }
+.chat-acao:active { transform: scale(.92); }
+.chat-acao.parar { background: color-mix(in srgb, var(--rose) 18%, transparent); color: var(--rose); }
+/* ouvindo: um anel que cresce com a sua voz */
+.chat-acao.parar.ouvindo::before { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2.5px solid var(--rose); opacity: .5; transform: scale(calc(1 + var(--n, 0) * .35)); transition: transform .12s ease; }
+.chat-parar { width: 15px; height: 15px; border-radius: 4px; background: currentColor; }
+/* o menu do +, logo acima do campo, do lado esquerdo */
+.chat-menu-mais { left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(max(10px, calc(12px + env(safe-area-inset-bottom, 0px) - var(--teclado, 0px))) + 68px); transform-origin: bottom left; }
+
+/* ---------- no computador: um painel do lado direito (a tela continua à vista) ---------- */
+@media (min-width: 900px) {
+  /* um tom acima do fundo da tela, para o painel se destacar dela */
+  .chat-ia { left: auto; top: 14px; right: 14px; bottom: 14px; width: min(440px, calc(100vw - 28px)); border-radius: 28px; overflow: hidden;
+    background: color-mix(in srgb, var(--surface) 50%, var(--bg)); border: 1px solid var(--line-forte); box-shadow: var(--chat-sombra); animation: chat-lado .42s cubic-bezier(.16, 1, .3, 1); }
+  .chat-topo { padding: 14px 14px 6px; }
+  .chat-lista { padding: 12px 22px 20px; }
+  .chat-compor { padding: 6px 14px 14px; }
+  .chat-sugestoes { margin: 0 -14px -10px; padding: 2px 14px 12px; }
+  .chat-menu-mais { left: 14px; bottom: 82px; }
+  .chat-vazio-bola .bolinha { width: 84px; height: 84px; }
+  .chat-vazio h2 { font-size: 25px; }
+  .chat-vazio p { font-size: 19px; }
+  .chat-texto { font-size: 16px; }
+  .chat-msg.eu p { font-size: 15.5px; }
+}
+@keyframes chat-lado { from { opacity: 0; transform: translateX(36px); } }
+
+/* ---------- o botão da Bolinha no computador ----------
+   No canto de baixo, num círculo de vidro (antes ficava sobre um quadrado: o fundo da barra do celular vazava aqui) */
+@media (min-width: 900px) {
+  .nav { background: none; box-shadow: none; }
+  .nav-mic { width: 64px; height: 64px; border-radius: 50%; color: var(--fg);
+    background: var(--mat-grosso); border: 1px solid var(--line-forte); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 14px 36px rgba(0, 0, 0, .3);
+    -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
+  .nav-mic .bolinha { width: 46px; height: 46px; }
+  .nav-mic .b-sombra { display: none; }
+  .nav-mic:hover { transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-ia, .chat-msg, .chat-vazio, .chat-sugestoes, .chat-menu, .chat-mini i, .chat-status i, .chat-pensa-bola .b-corpo, .chat-pensando .chat-pensa-tx { animation: none !important; }
+  .chat-pensando .chat-pensa-tx { -webkit-text-fill-color: currentColor; background: none; }
+  .chat-status, .chat-acoes, .chat-campo-mais, .chat-chave::after { transition: none; }
+}

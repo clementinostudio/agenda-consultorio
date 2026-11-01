@@ -26,7 +26,7 @@ const K_LOJA_INICIAL = e => `agenda-loja-inicial:${e}`;
 import { janelasDoDia } from "./horarios.js";
 import { LIMITE_GRATIS, liberadoDe, ehPro, produtoDoUso } from "./plano.js";
 import { useLinkAgendamento, linkDo } from "./link.js";
-import { noApp, chamarApp, permitirIA } from "./app-nativo.js";
+import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
 
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
@@ -1840,10 +1840,18 @@ function ConfirmButton({ label, onConfirm, icon, titulo, texto, acao }) {
   );
 }
 
+// No app de celular (ponte 2): volta para as telas nativas do app (o Início dele). Fora do app não aparece.
+function VoltarAoApp({ className = "icon-btn" }) {
+  if (!nativoV2) return null;
+  return <button className={className} onClick={() => chamarApp("nativo:voltar").catch(() => {})} aria-label="Voltar ao início do app"><I.setaL /></button>;
+}
+
 function TopBar({ eyebrow, title, act, tema, extra, voltar }) {
   return (
-    <header className={"top" + (voltar ? " com-voltar" : "")}>
-      {voltar && <button className="icon-btn top-voltar" onClick={voltar} aria-label="Voltar"><I.chevL /></button>}
+    <header className={"top" + (voltar || nativoV2 ? " com-voltar" : "")}>
+      {nativoV2
+        ? <span className="top-voltar" style={{ display: "flex", gap: 8 }}><VoltarAoApp />{voltar && <button className="icon-btn" onClick={voltar} aria-label="Voltar"><I.chevL /></button>}</span>
+        : voltar && <button className="icon-btn top-voltar" onClick={voltar} aria-label="Voltar"><I.chevL /></button>}
       <div style={{ minWidth: 0 }}><div className="eyebrow">{eyebrow}</div><h1>{title}</h1></div>
       <div className="top-actions">
         {extra}
@@ -2268,6 +2276,7 @@ function HelloRow({ conta, act, tema, modo }) {
   return (
     <div className="hello">
       <div className="hello-l">
+        <VoltarAoApp />
         <Avatar conta={conta} onClick={act.openSettings} />
         {act.modos && act.modos.length > 1 && <ModeSwitch modo={modo} setModo={act.setModo} modos={act.modos} />}
       </div>
@@ -3228,7 +3237,161 @@ function Celebra({ c, total, onFim, onVer }) {
   );
 }
 
-function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo }) {
+// Entende a frase: primeiro procura um paciente ("Felipe veio"), senão é gasto/entrada
+function entenderFrase(t, db) {
+  const c = interpretarConsultorio(t, db);
+  const itens = interpretarVarios(t);
+  if (c && (c.ok || !itens.some(i => i.valor > 0))) return { tipo: "consult", c };
+  return { tipo: "gastos", itens };
+}
+const POSSO_GASTAR = /\b(posso|da pra|da para|consigo|daria pra|daria para|devo)\s+(gastar|comprar|torrar)\b/;
+
+/* ---------- A Bolinha do app de celular (chat nativo, ponte 2) ----------
+   A mesma conversa da VozBarra, mas a resposta volta como dados e nada é salvo aqui: gasto ou entrada vira uma
+   proposta ({ tipo: "gastos", itens }) que o app mostra; se a pessoa confirmar, o app pede "lancar".
+   Dentro do app, as mensagens são neutras (sem falar de plano). */
+const SEM_PERMISSAO_IA = "Tudo bem. Sem a permissão eu não consigo usar a IA para responder.";
+const itemParaApp = it => {
+  const m = it.marca ? marcaPorId(it.marca) : null;
+  return {
+    tipo: it.tipo === "entrada" ? "entrada" : "saida", valor: Math.round(Number(it.valor) * 100) / 100, data: addDays(todayISO(), -(it.off || 0)),
+    cat: it.cat, desc: it.desc || "", marca: it.marca || null, site: (m && m.site) || null, banco: null,
+    ...(it.moeda ? { moeda: it.moeda, valorOrig: it.valorOrig ?? null, cotacao: it.cotacao ?? null, iof: !!it.iof } : {}),
+  };
+};
+async function responderBolinha(db, usaPessoal, texto, historico) {
+  const t = String(texto || "").trim().slice(0, 600);
+  if (!t) return { tipo: "erro", texto: "Escreva o que você quer anotar ou perguntar." };
+  const s = semAcento(t), conversando = Array.isArray(historico) && historico.length > 0;
+  const hist = (conversando ? historico : []).slice(-8).map(m => ({ quem: m && m.quem === "ela" ? "ela" : "eu", texto: String((m && m.texto) || "").slice(0, 1200) }));
+  const proposta = itens => {
+    const its = itens.filter(i => i.valor > 0).map(itemParaApp);
+    return { tipo: "gastos", texto: its.length > 1 ? `Anoto estes ${its.length} lançamentos?` : "Anoto assim?", itens: its };
+  };
+  // consultório: quem marca é a agenda (lá tem a confirmação e o desfazer)
+  const naAgenda = c => ({ tipo: "resposta", texto: c.ok
+    ? `Entendi: ${primeiro(c.p.name)}, ${textoAcao(c, TERMO).toLowerCase()}. Isso fica com a agenda: abra o Consultório no Avina e marque por lá, onde dá para conferir e desfazer.`
+    : `Entendi ${primeiro(c.p.name)}, mas não o que aconteceu. Diga "veio", "faltou", "pagou" ou "remarca pra quinta às 15h".` });
+  const perguntar = async () => {
+    if (!iaDisponivel()) return { tipo: "erro", texto: navigator.onLine === false ? "Sem internet agora. Tente de novo quando a conexão voltar." : "Para responder perguntas eu preciso de internet." };
+    if (!(await permitirIA())) return { tipo: "erro", texto: SEM_PERMISSAO_IA };
+    try {
+      const j = await chamarIA("/perguntar", { pergunta: t, contexto: contextoPergunta(db, usaPessoal), historico: hist }, 25000);
+      const resp = String(j.resposta || "").trim();
+      return resp ? { tipo: "resposta", texto: resp } : { tipo: "erro", texto: "Não consegui responder agora. Tente perguntar de outro jeito." };
+    } catch (e) { return { tipo: "erro", texto: msgIA(e) }; }
+  };
+  if (/^\s*(cancela|cancelar|esquece|deixa pra la|deixa para la)\b/.test(s)) return { tipo: "resposta", texto: "Tudo bem, não anotei nada." };
+  // "obrigado", "tchau": encerra com educação
+  if (conversando && FIM_CONVERSA.test(s)) return { tipo: "resposta", texto: "Por nada! Se precisar, é só me chamar." };
+  // "posso gastar 300 no sábado?": a conta é feita aqui mesmo, com a previsão do mês (sem internet)
+  if (usaPessoal && POSSO_GASTAR.test(s)) {
+    const { respostaGastar } = await import("./telas/pessoal.jsx");
+    return { tipo: "resposta", texto: respostaGastar(db, t) };
+  }
+  const r = entenderFrase(t, db);
+  const ok = r.tipo === "consult" ? r.c.ok : r.itens.length > 0 && r.itens.every(i => i.valor > 0) && usaPessoal;
+  if (ok) {
+    if (r.tipo === "consult") return naAgenda(r.c);
+    // entendeu, mas com cara de chute (sem saber onde foi, ou sobrou valor na frase): confere com a IA
+    if (duvidoso(r, t) && iaDisponivel() && (await permitirIA())) {
+      try { const r2 = await entenderIA(t, db); if (r2 && r2.tipo === "gastos") return proposta(r2.itens); } catch (e) {}
+    }
+    return proposta(r.itens);
+  }
+  const gastoSemPessoal = { tipo: "erro", texto: "Para anotar gastos, ligue o Pessoal em Perfil → Como você usa o app." };
+  if (r.tipo === "gastos" && !usaPessoal && r.itens.length && r.itens.every(i => i.valor > 0) && !ehPergunta(t)) return gastoSemPessoal;
+  // pergunta ("quanto gastei de uber?"), ou qualquer coisa no meio de uma conversa ("e em setembro?")
+  if (ehPergunta(t) || (conversando && t.split(/\s+/).length >= 2)) return perguntar();
+  // o app não entendeu sozinho: pede ajuda à IA antes de desistir ("torrei 45 conto no boteco")
+  if (iaDisponivel() && t.split(/\s+/).length >= 2) {
+    if (!(await permitirIA())) return { tipo: "erro", texto: SEM_PERMISSAO_IA };
+    try {
+      const r2 = await entenderIA(t, db);
+      if (r2 && r2.tipo === "pergunta") return perguntar();
+      if (r2 && r2.tipo === "consult") return naAgenda(r2.c);
+      if (r2 && r2.tipo === "gastos" && usaPessoal) return proposta(r2.itens);
+    } catch (e) { if (String((e && e.message) || "").startsWith("limite") || (e && e.message) === "cota") return { tipo: "erro", texto: msgIA(e) }; }
+  }
+  if (r.tipo === "consult") return naAgenda(r.c);
+  if (r.itens.length && r.itens.every(i => i.valor > 0) && !usaPessoal) return gastoSemPessoal;
+  return { tipo: "erro", texto: r.itens.some(i => i.valor > 0) ? "Faltou o valor de alguma coisa." : "Não peguei o valor. Ex.: “gastei 30 no uber”." };
+}
+
+/* ---------- A conversa com a Bolinha, com cara de chat de IA (estilos em src/chat.css) ----------
+   Sem conversa: a Bolinha grande, "Olá, Fulano" e sugestões em chips acima do campo. Com conversa: o que você
+   diz em pílula à direita; a resposta dela em texto corrido à esquerda (sem balão), aparecendo palavra por palavra,
+   com ouvir, copiar e gostei/não gostei embaixo. */
+const K_NOTA_BOLINHA = "agenda-bolinha-notas"; // gostei/não gostei: fica só neste aparelho (as últimas 50)
+const IC_CHAT = {
+  gostei: () => <Svg><path d="M7 10v11" /><path d="M15 5.9L14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 8a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9z" /></Svg>,
+  naoGostei: () => <Svg><path d="M17 14V3" /><path d="M9 18.1l1-4.1H4.2a2 2 0 0 1-1.9-2.6l2.3-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z" /></Svg>,
+  enviar: () => <Svg sw={2.4}><path d="M12 19V5.5M6 11l6-6 6 6" /></Svg>,
+};
+// Sugestões da tela vazia: só o que ela sabe responder com os modos ligados (sem internet, só as que ela faz sozinha).
+// "escrever" vai para o campo sem enviar (anotar de verdade é com você); "enviar" é o que vai, quando o rótulo é curto.
+function sugestoesBolinha(usaPessoal) {
+  const comIA = iaDisponivel(), consult = PERFIL.consultorio !== false;
+  const d = fromISO(todayISO());
+  const mes = MES_LONGO[d.getDate() <= 3 ? (d.getMonth() + 11) % 12 : d.getMonth()]; // no começo do mês, o mês que passou
+  return [
+    usaPessoal && comIA && { t: "Quanto gastei este mês?" },
+    usaPessoal && { t: "Posso gastar R$ 200 no sábado?" },
+    consult && comIA && { t: "Quem está devendo?", enviar: "Quem está me devendo?" },
+    usaPessoal && comIA && { t: `Maiores gastos de ${mes}`, enviar: `Quais foram os meus maiores gastos de ${mes}?` },
+    usaPessoal && { t: "Anotar: 30 no Uber", escrever: "Gastei 30 no Uber" },
+    consult && comIA && { t: "Quem eu atendo amanhã?" },
+    consult && comIA && { t: "Quanto recebi este mês?" },
+  ].filter(Boolean);
+}
+// "Pensando": a Bolinha se mexe e o texto vai dizendo o que ela está fazendo
+const PENSANDO = ["Lendo seu pedido…", "Olhando seus números…", "Escrevendo a resposta…"];
+function ChatPensando() {
+  const [i, setI] = useState(0);
+  useEffect(() => { if (i >= PENSANDO.length - 1) return; const t = setTimeout(() => setI(i + 1), 1600); return () => clearTimeout(t); }, [i]);
+  return (
+    <div className="chat-msg ela chat-pensando" role="status">
+      <span className="chat-pensa-bola"><Bolinha estado="pensando" /></span>
+      <span className="digitando chat-pensa-tx" key={i}>{PENSANDO[i]}</span>
+    </div>
+  );
+}
+// A resposta aparece palavra por palavra (rápido: no máximo ~1 s; com "reduzir movimento", de uma vez).
+// O leitor de tela recebe o texto inteiro de uma vez só, e não pedaço por pedaço.
+function TextoQueSurge({ texto, onAndou, onFim }) {
+  const partes = useMemo(() => String(texto).split(/(\s+)/), [texto]);
+  const [n, setN] = useState(() => semMovimento() ? partes.length : 0);
+  useEffect(() => {
+    if (n >= partes.length) { if (onFim) onFim(); return; }
+    const porVez = Math.max(1, Math.ceil(partes.length / 2 / 40)); // palavras por passo: respostas longas andam mais rápido
+    const t = setTimeout(() => setN(x => Math.min(partes.length, x + porVez * 2)), 26);
+    if (onAndou) onAndou();
+    return () => clearTimeout(t);
+  }, [n, partes.length]);
+  // a estrutura fica igual depois de pronta: assim o leitor de tela não lê a resposta duas vezes
+  return <><span className="chat-sr">{texto}</span><span aria-hidden="true">{n >= partes.length ? texto : partes.slice(0, n).join("")}</span></>;
+}
+// Uma resposta da Bolinha: o texto e, quando ele termina de aparecer, as ações (a Bolinha pequena à esquerda)
+function MsgBolinha({ m, falando, temVoz, nota, copia, onOuvir, onCopiar, onNota, onAndou }) {
+  const [pronta, setPronta] = useState(false);
+  return (
+    <div className={"chat-msg ela" + (falando ? " falando" : "")}>
+      <p className="chat-texto"><TextoQueSurge texto={m.texto} onAndou={onAndou} onFim={() => setPronta(true)} /></p>
+      <div className={"chat-acoes" + (pronta ? " on" : "")}>
+        <span className="chat-mini" aria-hidden="true"><i /><i /></span>
+        {copia && !copia.ok && <small className="chat-acoes-aviso" role="status">Não deu para copiar. Segure o texto.</small>}
+        <span className="chat-acoes-d">
+          {temVoz && <button type="button" className={falando ? "on" : ""} onClick={onOuvir} aria-pressed={falando} aria-label={falando ? "Parar de falar" : "Ouvir a resposta"}><I.sound /></button>}
+          <button type="button" className={copia && copia.ok ? "on" : ""} onClick={onCopiar} aria-label={copia && copia.ok ? "Copiado" : "Copiar a resposta"}>{copia && copia.ok ? <I.check /> : <I.copy />}</button>
+          <button type="button" className={nota === "bom" ? "on" : ""} onClick={() => onNota("bom")} aria-pressed={nota === "bom"} aria-label="Gostei da resposta"><IC_CHAT.gostei /></button>
+          <button type="button" className={nota === "ruim" ? "on" : ""} onClick={() => onNota("ruim")} aria-pressed={nota === "ruim"} aria-label="Não gostei da resposta"><IC_CHAT.naoGostei /></button>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function VozBarra({ api, db, usaPessoal, nome, onSalvar, onComando, onEditar, onNovo, onAtivo }) {
   const [ativo, setAtivo] = useState(false);
   const [fase, setFase] = useState("ouvindo"); // ouvindo | teclado | contando | faltando
   const [texto, setTexto] = useState("");
@@ -3238,13 +3401,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const tecRef = useRef(null);
   const ocioso = useRef(null);
   const T = TERMO;
-  // entende a frase: primeiro procura um paciente ("Felipe veio"), senão é gasto/entrada
-  const entender = t => {
-    const c = interpretarConsultorio(t, db);
-    const itens = interpretarVarios(t);
-    if (c && (c.ok || !itens.some(i => i.valor > 0))) return { tipo: "consult", c };
-    return { tipo: "gastos", itens };
-  };
+  const entender = t => entenderFrase(t, db);
   const okDe = r => r.tipo === "consult" ? r.c.ok : (r.itens.length > 0 && r.itens.every(i => i.valor > 0) && usaPessoal);
   // "Falar de novo" depois de faltar algo completa a frase anterior ("gastei no uber" + "30")
   const base = useRef("");
@@ -3271,8 +3428,14 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const pararFala = useRef(() => {});
   const ativoRef = useRef(false);
   const chatRef = useRef(null);
+  const largo = useWide(); // no computador, a conversa é um painel do lado (a tela continua à vista)
+  const [menu, setMenu] = useState(""); // "" | "mais" (o + do campo) | "opcoes" (o … do topo)
+  const menuRef = useRef(""); menuRef.current = menu;
+  const [notas, setNotas] = useState({}); // gostei/não gostei de cada resposta desta conversa
+  const [copia, setCopia] = useState(null); // { id, ok }: a resposta que acabou de ser copiada
+  const [falandoId, setFalandoId] = useState(null); // a resposta que está sendo lida em voz alta
   const addFala = (quem, texto) => setConversa(c => [...c, { id: uid(), quem, texto }].slice(-12));
-  const calar = () => { pararFala.current(); pararFala.current = () => {}; setFalandoResp(false); };
+  const calar = () => { pararFala.current(); pararFala.current = () => {}; setFalandoResp(false); setFalandoId(null); };
   const responderFalando = (texto, depois) => {
     if (!comSom || !falaLigada()) { if (depois) depois(); return; }
     if (ehIOS()) fecharMic(); // com o microfone aberto, o iPhone toca a voz baixinho, no alto-falante de ligação
@@ -3313,7 +3476,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
       return;
     }
     // "posso gastar 300 no sábado?": a conta é feita aqui mesmo, com a previsão do mês (sem internet)
-    if (usaPessoal && /\b(posso|da pra|da para|consigo|daria pra|daria para|devo)\s+(gastar|comprar|torrar)\b/.test(semAcento(t))) {
+    if (usaPessoal && POSSO_GASTAR.test(semAcento(t))) {
       const { respostaGastar } = await import("./telas/pessoal.jsx");
       if (vez.current !== minha) return;
       const resp = respostaGastar(db, t);
@@ -3359,8 +3522,26 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
       setTimeout(() => { if (vez.current === minha) comecar(true, msg); }, 450);
     }
   };
-  // tocar num balão da Bolinha: ouve de novo (tocar de novo enquanto fala: para)
-  const ouvirEsta = texto => { if (falandoResp) return calar(); pararTudoMenosConversa(); destravarFala(); setFalandoResp(true); pararFala.current = falarResposta(texto, () => setFalandoResp(false)); };
+  // "ouvir" numa resposta da Bolinha: ouve de novo (tocar de novo enquanto ela fala essa: para)
+  const ultimaEla = conversa.reduce((u, m) => m.quem === "ela" ? m : u, null);
+  const falandoEsta = m => falandoResp && (falandoId ? falandoId === m.id : !!ultimaEla && ultimaEla.id === m.id);
+  const ouvirEsta = m => {
+    const era = falandoEsta(m); calar(); if (era) return;
+    pararTudoMenosConversa(); destravarFala(); setFalandoId(m.id); setFalandoResp(true);
+    pararFala.current = falarResposta(m.texto, () => { setFalandoResp(false); setFalandoId(null); });
+  };
+  // copiar, gostei/não gostei e limpar a conversa (o … do topo)
+  const tCopia = useRef(0);
+  const copiar = m => { clearTimeout(tCopia.current); copiarTexto(m.texto, { toast: t => { setCopia({ id: m.id, ok: t === "Copiado" }); vibrar("toque"); tCopia.current = setTimeout(() => setCopia(null), 1800); } }); };
+  const darNota = (m, nota) => {
+    const nova = notas[m.id] === nota ? null : nota; // tocar de novo desfaz
+    setNotas(n => ({ ...n, [m.id]: nova })); if (nova) vibrar("toque");
+    const i = conversa.findIndex(x => x.id === m.id), pergunta = conversa.slice(0, i).reverse().find(x => x.quem === "eu");
+    const lista = lerJSON(K_NOTA_BOLINHA, []).filter(x => x && x.id !== m.id);
+    if (nova) lista.push({ id: m.id, nota: nova, quando: Date.now(), pergunta: pergunta ? pergunta.texto.slice(0, 200) : "", resposta: m.texto.slice(0, 400) });
+    gravar(K_NOTA_BOLINHA, lista.slice(-50));
+  };
+  const limpar = () => { pararTudo(); fecharMic(); clearTimeout(ocioso.current); base.current = ""; autoCont.current = false; setMenu(""); setConversa([]); setNotas({}); setCopia(null); setRes(null); setTexto(""); setAviso(""); setResposta(""); setRascunho(""); setFase("resposta"); };
   const pararTudoMenosConversa = () => { nat.cancelar(); srv.cancelar(); };
   const trocarSom = () => { const v = !comSom; setComSom(v); gravar(K_FALA_RESP, v); if (!v) calar(); };
   // silêncio quando o microfone reabriu numa conversa: ela só espera, sem erro
@@ -3402,7 +3583,7 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     if (tecRef.current) tecRef.current.blur();
     if (!(rede ? srv : nat).iniciar()) abrirTeclado();
   };
-  const fechar = () => { pararTudo(); fecharMic(); clearTimeout(ocioso.current); base.current = ""; autoCont.current = false; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); setResposta(""); setConversa([]); setChat(false); setRascunho(""); };
+  const fechar = () => { pararTudo(); fecharMic(); clearTimeout(ocioso.current); base.current = ""; autoCont.current = false; if (tecRef.current) { tecRef.current.blur(); tecRef.current.value = ""; } setAtivo(false); setFase("ouvindo"); setAviso(""); setTexto(""); setRes(null); setResposta(""); setConversa([]); setChat(false); setRascunho(""); setMenu(""); setNotas({}); setCopia(null); };
   const salvar = () => {
     const r = res; if (!r) return fechar();
     // dentro da conversa: anota e continua conversando
@@ -3454,7 +3635,14 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
     const t = setTimeout(() => setConta(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [fase, conta]);
-  useEffect(() => { if (!ativo) return; const k = e => e.key === "Escape" && fechar(); window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [ativo]);
+  // Esc fecha o menu aberto (o + ou o …) e, sem menu, a conversa
+  useEffect(() => { if (!ativo) return; const k = e => { if (e.key !== "Escape") return; if (menuRef.current) setMenu(""); else fechar(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [ativo]);
+  // tocar fora de um menu aberto fecha o menu
+  useEffect(() => {
+    if (!menu) return;
+    const f = e => { if (!e.target.closest(".chat-menu, .chat-menu-btn")) setMenu(""); };
+    document.addEventListener("pointerdown", f); return () => document.removeEventListener("pointerdown", f);
+  }, [menu]);
   // com o teclado aberto, tudo sobe junto e fica logo acima dele (nada some lá em cima)
   useEffect(() => {
     const vv = window.visualViewport, raiz = document.documentElement;
@@ -3478,8 +3666,22 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
   const emConversa = chat || conversa.length > 0;
   const ouvindoAgora = fase === "ouvindo" && (est === "ouvindo" || est === "falando");
   const estadoBola = falandoResp ? "falando" : fase === "pensando" ? "pensando" : ouvindoAgora ? (est === "falando" ? "falando" : "ouvindo") : fase === "contando" ? "contando" : "";
-  const subtitulo = falandoResp ? "falando…" : fase === "pensando" ? "pensando…" : ouvindoAgora ? (est === "falando" ? "ouvindo você…" : "pode falar") : est === "processando" ? "entendendo…" : fase === "contando" ? `anotando em ${conta}…` : "online";
-  const sugestoes = [...(PERFIL.consultorio !== false ? ["Quem eu atendo amanhã?", "Quem está me devendo?", "Quanto recebi este mês?"] : []), ...(usaPessoal ? ["Quanto gastei este mês?", "Quais contas vencem esta semana?"] : [])];
+  // o que está acontecendo, no topo da conversa (o "pensando" aparece na própria conversa)
+  const statusChat = falandoResp ? "Falando…" : ouvindoAgora ? (est === "falando" ? "Ouvindo você…" : "Pode falar") : est === "processando" && fase === "ouvindo" ? "Entendendo…" : ""; // "anotando em 3" já está no botão Salvar
+  // sem nada dito ainda: a tela vazia com a Bolinha grande e as sugestões
+  const vazio = !conversa.length && fase !== "pensando" && fase !== "contando" && !(fase === "faltando" && aviso) && !(fase === "ouvindo" && (texto || est === "processando" || est === "erro"));
+  const sugestoes = vazio ? sugestoesBolinha(usaPessoal) : [];
+  const usarSugestao = s => {
+    if (!s.escrever) return enviar(s.enviar || s.t);
+    setRascunho(s.escrever);
+    setTimeout(() => { const el = chatInput.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 30);
+  };
+  // o botão da direita do campo: parar (pensando, falando, ouvindo ou transcrevendo), enviar (com texto) ou falar
+  const ocupada = fase === "pensando" || falandoResp || ouvindoAgora || (est === "processando" && fase === "ouvindo");
+  const parar = () => { if (ouvindoAgora) return fala.parar(); pararTudo(); setAviso(""); setTexto(""); setFase("resposta"); };
+  // enquanto a resposta aparece, a conversa acompanha (se você não rolou para cima para reler)
+  const rolarFim = () => { const el = chatRef.current; if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) el.scrollTop = el.scrollHeight; };
+  const atalho = tipo => { fechar(); onNovo(tipo); };
   const cartao = (<>
       {itens.length > 0 && (
         <div className="vozb-card">
@@ -3523,44 +3725,73 @@ function VozBarra({ api, db, usaPessoal, onSalvar, onComando, onEditar, onAtivo 
         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(ocioso.current); if (e.target.value.trim()) concluir(e.target.value); } }} />
       {ativo && <Camada onFechar={fechar} escurece={false} />}
       {ativo && emConversa && (
-        <div className={"chat-ia" + (falandoResp ? " falando" : "") + (ouvindoAgora ? " ouvindo" : "")} role="dialog" aria-modal="true" aria-label="Conversa com a Bolinha" style={{ "--n": fala.nivel.toFixed(3) }}>
+        <div className={"chat-ia" + (falandoResp ? " falando" : "") + (ouvindoAgora ? " ouvindo" : "") + (vazio ? " vazio" : "")} role="dialog" aria-modal={!largo} aria-label="Conversa com a Bolinha" style={{ "--n": fala.nivel.toFixed(3) }}>
           <header className="chat-topo">
-            <button className="icon-btn" onClick={fechar} aria-label="Fechar a conversa"><I.chevD /></button>
-            <span className="chat-quem"><span className="chat-bola"><Bolinha estado={estadoBola} /></span><span><b>Bolinha</b><small aria-live="polite">{subtitulo}</small></span></span>
-            {"speechSynthesis" in window && <button className={"icon-btn chat-som" + (comSom ? "" : " mudo")} onClick={trocarSom} aria-pressed={comSom} aria-label={comSom ? "Não responder falando" : "Responder falando"}><I.sound /></button>}
-          </header>
-          <div className="chat-lista" ref={chatRef} aria-live="polite">
-            <div className="chat-msg ela"><span className="chat-av" aria-hidden="true"><i /><i /></span><p>Oi! Pode perguntar sobre a sua agenda, as cobranças{usaPessoal ? " ou os gastos" : ""}, ou anotar alguma coisa. Fale ou escreva.</p></div>
-            {conversa.length === 0 && <div className="chat-sugestoes">{sugestoes.map(s => <button key={s} type="button" onClick={() => enviar(s)}>{s}</button>)}</div>}
-            {conversa.map((m, i) => (
-              <div key={m.id} className={"chat-msg " + m.quem + (m.quem === "ela" && falandoResp && i === conversa.length - 1 ? " falando" : "")}>
-                {m.quem === "ela" && <span className="chat-av" aria-hidden="true"><i /><i /></span>}
-                {m.quem === "ela" && "speechSynthesis" in window
-                  ? <p role="button" tabIndex={0} title="Tocar para ouvir" onClick={() => ouvirEsta(m.texto)} onKeyDown={e => e.key === "Enter" && ouvirEsta(m.texto)}>{m.texto}</p>
-                  : <p>{m.texto}</p>}
-              </div>
-            ))}
-            {texto && fase === "ouvindo" && <div className="chat-msg eu rascunho"><p>{texto}</p></div>}
-            {est === "processando" && fase === "ouvindo" && !texto && <div className="chat-msg eu rascunho"><p className="digitando" aria-label="Transcrevendo"><i /><i /><i /></p></div>}
-            {fase === "pensando" && <div className="chat-msg ela"><span className="chat-av" aria-hidden="true"><i /><i /></span><p className="digitando" aria-label="Pensando"><i /><i /><i /></p></div>}
-            {aviso && fase === "faltando" && <div className="chat-msg ela"><span className="chat-av" aria-hidden="true"><i /><i /></span><p>{aviso}</p></div>}
-            {est === "erro" && fase === "ouvindo" && <div className="chat-msg ela"><span className="chat-av" aria-hidden="true"><i /><i /></span><p>{fala.erro}</p></div>}
-            {fase === "contando" && (itens.length > 0 || c) && (
-              <div className="chat-cartao">
-                {cartao}
-                <div className="chat-cartao-acoes">
-                  <button type="button" className="pill-btn forte" onClick={salvar}><I.check /> Salvar ({conta})</button>
-                  {um && <button type="button" className="pill-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
-                  <button type="button" className="pill-btn" onClick={() => { setRes(null); setFase("resposta"); }}>Descartar</button>
+            <button type="button" className="chat-redondo" onClick={fechar} aria-label="Fechar a conversa"><I.x /></button>
+            <span className={"chat-status" + (statusChat ? " on" : "")} aria-live="polite">{statusChat && <><i aria-hidden="true" />{statusChat}</>}</span>
+            <div className="chat-topo-d">
+              <button type="button" className={"chat-redondo chat-menu-btn" + (menu === "opcoes" ? " on" : "")} onClick={() => setMenu(m => m === "opcoes" ? "" : "opcoes")} aria-label="Mais opções" aria-haspopup="menu" aria-expanded={menu === "opcoes"}><I.more /></button>
+              {menu === "opcoes" && (
+                <div className="chat-menu" role="menu">
+                  {"speechSynthesis" in window && <button type="button" role="menuitemcheckbox" aria-checked={comSom} onClick={trocarSom}><I.sound /><span>Responder falando</span><i className={"chat-chave" + (comSom ? " on" : "")} aria-hidden="true" /></button>}
+                  <button type="button" role="menuitem" disabled={!conversa.length} onClick={limpar}><I.trash /><span>Limpar conversa</span></button>
                 </div>
+              )}
+            </div>
+          </header>
+          <div className={"chat-lista" + (vazio ? " vazia" : "")} ref={chatRef} aria-live="polite" aria-relevant="additions">
+            {vazio ? (
+              <div className="chat-vazio">
+                <span className="chat-vazio-bola"><Bolinha estado={estadoBola} /></span>
+                <h2>Olá{nome ? `, ${primeiro(nome)}` : ""}</h2>
+                <p>{ouvindoAgora ? "Pode falar, estou ouvindo." : "Como posso te ajudar?"}</p>
               </div>
-            )}
+            ) : (<>
+              {conversa.map(m => m.quem === "ela"
+                ? <MsgBolinha key={m.id} m={m} falando={falandoEsta(m)} temVoz={"speechSynthesis" in window} nota={notas[m.id]} copia={copia && copia.id === m.id ? copia : null}
+                    onOuvir={() => ouvirEsta(m)} onCopiar={() => copiar(m)} onNota={n => darNota(m, n)} onAndou={rolarFim} />
+                : <div key={m.id} className="chat-msg eu"><p>{m.texto}</p></div>)}
+              {texto && fase === "ouvindo" && <div className="chat-msg eu rascunho"><p>{texto}</p></div>}
+              {est === "processando" && fase === "ouvindo" && !texto && <div className="chat-msg eu rascunho"><p className="digitando" aria-label="Transcrevendo"><i /><i /><i /></p></div>}
+              {fase === "pensando" && <ChatPensando />}
+              {aviso && fase === "faltando" && <div className="chat-msg ela aviso"><p className="chat-texto">{aviso}</p></div>}
+              {est === "erro" && fase === "ouvindo" && <div className="chat-msg ela aviso"><p className="chat-texto">{fala.erro}</p></div>}
+              {fase === "contando" && (itens.length > 0 || c) && (
+                <div className="chat-msg ela chat-anota">
+                  <p className="chat-texto">{c ? "Registro assim?" : itens.length > 1 ? `Anoto estes ${itens.length} lançamentos?` : "Anoto assim?"}</p>
+                  <div className="chat-cartao">
+                    {cartao}
+                    <div className={"chat-cartao-acoes" + (um ? "" : " dois")}>
+                      <button type="button" className="chat-cartao-btn forte" onClick={salvar}><I.check /> Salvar <span className="num">({conta})</span></button>
+                      {um && <button type="button" className="chat-cartao-btn" onClick={() => { const it = um; fechar(); onEditar(it); }}><I.pencil /> Ajustar</button>}
+                      <button type="button" className="chat-cartao-btn" onClick={() => { setRes(null); setFase("resposta"); }}>Descartar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>)}
           </div>
           <form className="chat-compor" onSubmit={e => { e.preventDefault(); enviar(rascunho); }}>
-            <input ref={chatInput} value={rascunho} onChange={e => setRascunho(e.target.value)} placeholder={ouvindoAgora ? "Ouvindo…" : "Pergunte ou anote alguma coisa"} enterKeyHint="send" autoComplete="off" aria-label="Escreva para a Bolinha" />
-            {rascunho.trim()
-              ? <button type="submit" className="chat-botao" aria-label="Enviar"><I.send /></button>
-              : <button type="button" className={"chat-botao mic" + (ouvindoAgora ? " on" : "")} onClick={tocarMic} aria-label={ouvindoAgora ? "Terminar de falar" : falandoResp ? "Interromper e falar" : "Falar"}>{ouvindoAgora ? <i className="chat-parar" aria-hidden="true" /> : <I.mic />}</button>}
+            {sugestoes.length > 0 && !rascunho.trim() && menu !== "mais" && (
+              <div className="chat-sugestoes" role="group" aria-label="Sugestões">
+                {sugestoes.map(s => <button key={s.t} type="button" onClick={() => usarSugestao(s)}>{s.t}</button>)}
+              </div>
+            )}
+            {menu === "mais" && (
+              <div className="chat-menu chat-menu-mais" role="menu">
+                <button type="button" role="menuitem" onClick={() => atalho("saida")}><span className="chat-menu-ic menos" aria-hidden="true"><I.down /></span><span>Anotar gasto</span></button>
+                <button type="button" role="menuitem" onClick={() => atalho("entrada")}><span className="chat-menu-ic mais" aria-hidden="true"><I.up /></span><span>Anotar entrada</span></button>
+              </div>
+            )}
+            <div className="chat-campo">
+              {usaPessoal && onNovo && <button type="button" className={"chat-campo-mais chat-menu-btn" + (menu === "mais" ? " on" : "")} onClick={() => setMenu(m => m === "mais" ? "" : "mais")} aria-label="Atalhos: anotar gasto ou entrada" aria-haspopup="menu" aria-expanded={menu === "mais"}><I.plus /></button>}
+              <input ref={chatInput} value={rascunho} onChange={e => setRascunho(e.target.value)} placeholder={ouvindoAgora ? "Ouvindo…" : "Pergunte ou anote algo"} enterKeyHint="send" autoComplete="off" aria-label="Escreva para a Bolinha" />
+              {ocupada
+                ? <button type="button" className={"chat-acao parar" + (ouvindoAgora ? " ouvindo" : "")} onClick={parar} aria-label={ouvindoAgora ? "Terminar de falar" : falandoResp ? "Parar de falar" : "Parar"}><i className="chat-parar" aria-hidden="true" /></button>
+                : rascunho.trim()
+                  ? <button type="submit" className="chat-acao" aria-label="Enviar"><IC_CHAT.enviar /></button>
+                  : <button type="button" className="chat-acao" onClick={tocarMic} aria-label="Falar"><I.mic /></button>}
+            </div>
           </form>
         </div>
       )}
@@ -3918,13 +4149,23 @@ function useTema() {
   }, []);
   const host = document.documentElement.getAttribute("data-theme");
   const escuro = modo === "dark" || (modo === "auto" && host !== "light" && (host === "dark" || !window.matchMedia("(prefers-color-scheme: light)").matches));
-  return { modo, setModo, escuro };
+  // Trocar o tema sem piscar: a tela inteira passa de um tema para o outro num esmaecer só (View Transitions) e,
+  // enquanto troca, nenhuma peça anima a própria cor (cada uma mudando no seu tempo é o que parece piscar)
+  const trocar = m => {
+    if (m === modo) return;
+    const root = document.documentElement;
+    root.classList.add("tema-trocando");
+    comTransicao(() => { if (m === "auto") root.removeAttribute("data-app-theme"); else root.setAttribute("data-app-theme", m); setModo(m); }, "tema");
+    setTimeout(() => root.classList.remove("tema-trocando"), 500);
+  };
+  return { modo, setModo: trocar, escuro };
 }
 
 /* =========================================================
    15. APP (depois do login)
    ========================================================= */
 I.minus = () => <Svg sw={2.2}><path d="M5 12h14"/></Svg>;
+I.setaL = () => <Svg sw={2.2}><path d="M19 12H5M11 6l-6 6 6 6"/></Svg>;
 
 // conta nova (nada salvo ainda): começa vazia
 const vazio = () => ({ settings: { pix: "" }, patients: [], sessions: [], charges: [], pessoal: pessoalVazio(), espera: [], fechados: {}, confirmados: {}, revisoes: {} });
@@ -3935,6 +4176,85 @@ function carregarDb(conta) {
   salvo.espera = salvo.espera || []; salvo.fechados = salvo.fechados || {}; salvo.confirmados = salvo.confirmados || {}; salvo.revisoes = salvo.revisoes || {};
   return salvo;
 }
+
+/* ---------- O retrato para as telas nativas do app de celular (ponte 2) ----------
+   É o tipo Estado de app-celular/src/lib/motor.ts: as telas nativas só leem isto; as mudanças voltam como pedidos
+   (registrarNativo, no Painel). As cores e as logos já vão resolvidas. */
+const catParaApp = c => { const k = CORES.find(x => x.id === c.cor) || CORES[0]; return { id: c.id, nome: c.nome, cor: k.cor, ink: k.ink, ic: c.ic }; };
+const MARCA_DA_DESC = new Map(); // acharMarca é tolerante (e por isso lento): guarda o que já achou
+const marcaDaDesc = d => {
+  if (!d) return null;
+  if (!MARCA_DA_DESC.has(d)) { if (MARCA_DA_DESC.size > 3000) MARCA_DA_DESC.clear(); MARCA_DA_DESC.set(d, (acharMarca(d) || {}).id || null); }
+  return MARCA_DA_DESC.get(d);
+};
+// a logo do jeito que o site mostra: a marca escolhida (ou achada pelo nome), senão o site escolhido à mão
+const logoParaApp = (x, nome) => {
+  if (x.semLogo) return { marca: null, site: null };
+  const marca = x.marca || marcaDaDesc(nome), m = marca ? marcaPorId(marca) : null;
+  return { marca: marca || null, site: (m && m.site) || x.logoSite || null };
+};
+const nomeDoBanco = b => (typeof b === "string" && b.trim() && !/meu\s*pluggy/i.test(b) ? b.trim() : null);
+function retratoNativo({ conta, perfil, db, modos, modo, tema, plano, souPro, bancoLigado }) {
+  const hoje = todayISO(), ch = hoje.slice(0, 7), desde = addDays(hoje, -400);
+  const P = db.pessoal || pessoalVazio();
+  const e = plano && plano.estado;
+  const pessoal = !modos.includes("pessoal") ? null : {
+    lanc: P.lanc.filter(l => l && l.data >= desde).map(l => ({
+      id: l.id, tipo: l.tipo === "entrada" ? "entrada" : "saida", valor: Number(l.valor) || 0, data: l.data, cat: l.cat, desc: l.desc || "",
+      ...logoParaApp(l, l.desc), banco: nomeDoBanco(l.banco),
+      ...(l.moeda && l.moeda !== "BRL" ? { moeda: l.moeda, valorOrig: l.valorOrig ?? null } : {}),
+      ...(l.obs ? { obs: String(l.obs) } : {}),
+    })),
+    contas: P.contas.map(c => ({
+      id: c.id, nome: c.nome, valor: Number(c.valor) || 0, dia: c.dia, cat: c.cat || null, paga: !!(c.pagas && c.pagas[ch]), vence: vencimento(c, ch),
+      assinatura: !!c.assinatura, ...logoParaApp(c, c.nome),
+    })),
+    caixinhas: (P.caixinhas || []).map(c => {
+      const B = c.banco && typeof c.banco.valor === "number" ? c.banco : null;
+      return { id: c.id, nome: c.nome, emoji: c.emoji || "🛟", guardado: B ? B.valor : soma(c.movs || [], m => Number(m.valor) || 0), meta: c.meta > 0 ? c.meta : null, doBanco: !!B };
+    }),
+    limites: Object.fromEntries(Object.entries(P.limites || {}).filter(([, v]) => v > 0)),
+    renda: P.renda && P.renda.valor > 0 ? P.renda.valor : null,
+  };
+  const ses = db.sessions.filter(s => s.date.startsWith(ch));
+  const consultorio = !modos.includes("consultorio") ? null : {
+    hoje: itensDoDia(db, hoje).map(i => {
+      const st = situacao(i, new Date());
+      return {
+        hora: i.time, nome: primeiro(i.patient.name),
+        status: st === "done" ? "feita" : st === "missed" ? "faltou" : st === "up" || st === "proj" ? "proxima" : "outra",
+        valor: i.kind === "log" ? (contaDinheiro(i.session) ? i.session.price - i.session.sublet : null) : liquido(i.patient),
+      };
+    }),
+    recebidoMes: liquidoMes(db, ch),
+    aReceber: soma(db.charges.filter(c => !c.paid && !c.hidden), c => Number(c.amount) || 0),
+    sessoesMes: ses.filter(s => s.status === "done").length,
+    faltasMes: ses.filter(s => s.status === "missed").length,
+    pacientesAtivos: db.patients.filter(p => p.active).length,
+  };
+  return {
+    v: 1, em: Date.now(), logado: true, tema: tema.modo,
+    conta: { nome: conta.nome || "", email: conta.email || "", foto: conta.foto || null, uid: conta.uid || null },
+    modos, modo, termo: perfil.termo || "Paciente",
+    // só a situação (nada de preço): "Pro · ativo até…" ou grátis
+    plano: plano ? { pro: !!souPro, estado: (e && e.status) || (plano.cortesiaAte && hoje < plano.cortesiaAte ? "cortesia" : null), ate: (e && (e.ate || e.proxima)) || plano.cortesiaAte || null } : null,
+    servidor: servidorAvisos(), bancoLigado: !!bancoLigado,
+    categorias: CATEGORIAS.map(catParaApp), catEntrada: CAT_ENTRADA.map(catParaApp),
+    pessoal, consultorio,
+  };
+}
+// Sem login (ou cadastro pela metade): o app deixa a tela do site na frente
+const retratoSemLogin = tema => ({
+  v: 1, em: Date.now(), logado: false, tema: tema.modo, conta: null, modos: [], modo: null, termo: "Paciente", plano: null,
+  servidor: servidorAvisos(), bancoLigado: false, categorias: [], catEntrada: [], pessoal: null, consultorio: null,
+});
+const TEMAS_VALIDOS = ["auto", "dark", "light"];
+// "abrir" das telas nativas: nomes amigáveis das abas de cada área
+const ABAS_NOMES = {
+  consultorio: { inicio: "home", home: "home", agenda: "agenda", pacientes: "pac", pac: "pac", financas: "fin", fin: "fin" },
+  pessoal: { inicio: "p-home", gastos: "p-gastos", contas: "p-contas", transporte: "p-transp", casa: "p-casa" },
+  loja: { inicio: "l-caixa", caixa: "l-caixa", gastos: "l-gastos", lista: "l-lista", falta: "l-lista", resumo: "l-resumo" },
+};
 
 function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem }) {
   const perfil = conta.perfil || PERFIL_PADRAO;
@@ -4767,6 +5087,135 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   // só no computador de desenvolvimento (npm run dev): deixa abrir qualquer tela pelo console, para testar
   if (import.meta.env.DEV) window.__avina = { act, setSheet };
 
+  /* ---------- App de celular (ponte 2): o retrato para as telas nativas e os pedidos delas ----------
+     Nada disto roda no navegador nem no PWA (nativoV2 é false). */
+  // Open Finance liberado para esta conta: pergunta uma vez ao abrir e guarda (a próxima abertura já sabe)
+  const kBanco = `avina-banco-ligado:${conta.email}`;
+  const [bancoLigado, setBancoLigado] = useState(() => nativoV2 && !!lerJSON(kBanco, false));
+  const guardarBanco = v => { setBancoLigado(v); gravar(kBanco, v); };
+  useEffect(() => {
+    if (!nativoV2 || !NUVEM || !conta.uid) return;
+    let vivo = true;
+    import("./banco.js").then(b => b.estadoBanco()).then(e => { if (vivo && (e.ligado || navigator.onLine !== false)) guardarBanco(!!e.ligado); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [conta.uid]);
+  const retrato = () => retratoNativo({ conta, perfil, db, modos, modo: modoEf, tema, plano, souPro, bancoLigado });
+  const nat = useRef(null);
+  nat.current = { retrato, act, db, usaPessoal, libera, hojePlano, tema, sheet, close, trocarModoSt, setTab, setP, modos, conta };
+  // manda de novo quando algo muda (e a cada 5 minutos: a agenda de hoje muda de "próxima" para "faltou marcar")
+  useEffect(() => { if (nativoV2) enviarEstado(() => nat.current.retrato()); }, [db, conta, plano, tema.modo, modoEf, bancoLigado, perfil, Math.floor(now.getTime() / 3e5)]);
+  useEffect(() => {
+    if (!nativoV2) return;
+    const N = () => nat.current;
+    const banco = () => import("./banco.js");
+    // a logo do banco (quando a marca é conhecida) já vai junto
+    const comLogo = r => (r && Array.isArray(r.bancos) ? { ...r, bancos: r.bancos.map(b => ({ ...b, logo: ((acharMarca(b.nome || "") || {}).site) || null })) } : r);
+    // troca de área e de aba sem animação (o app mostra a camada do site logo depois)
+    const irPara = (m, tela) => {
+      const n = N();
+      if (!n.modos.includes(m)) m = n.modos[0];
+      const aba = tela && ((ABAS_NOMES[m] || {})[tela] || (ORDEM_ABAS.includes(tela) && modoDaAba(tela) === m ? tela : null));
+      n.trocarModoSt(m);
+      if (aba) n.setTab(aba);
+      rolarTopo();
+    };
+    return registrarNativo({
+      estado: () => N().retrato(),
+      // abrir { area, tela, acao, id }: a área (e a aba) do site e/ou um painel dele
+      abrir: (d = {}) => {
+        const n = N(), a = n.act;
+        const acao = d.acao || (!d.area ? d.tela : null);
+        if (d.area) {
+          if (d.area === "casa" && n.usaPessoal) a.abrirCasa(); // (fecham o painel aberto sozinhas)
+          else if (d.area === "transporte" && n.usaPessoal) a.abrirTransporte();
+          else { if (n.sheet) n.close(); irPara(d.area === "casa" || d.area === "transporte" ? "pessoal" : d.area, d.tela); }
+        }
+        if (!acao) return null;
+        if (acao === "ajustes" || acao === "perfil") a.openSettings();
+        else if (acao === "avisos") a.openSettings("avisos");
+        else if (acao === "excluir-conta") a.openSettings("excluir");
+        else if (acao === "importar-banco") a.importarDoBanco();
+        else if (acao === "importar") a.importar();
+        else if (acao === "editar-lanc") { if (d.id && n.db.pessoal.lanc.some(l => l.id === d.id)) a.editLanc(d.id); else throw new Error("nao-achei"); }
+        else if (acao === "caixinha") a.abrirCaixinha(d.id || null);
+        else if (acao === "contas") irPara("pessoal", "contas");
+        else if (acao === "nova-conta") a.novaConta();
+        else if (acao === "teto") a.abrirTeto(d.id || null);
+        else if (acao === "novo-lanc") a.novoLanc(d.id === "entrada" || d.tipo === "entrada" ? "entrada" : "saida");
+        else if (!d.area) throw new Error("tela");
+        return null;
+      },
+      // lancar { itens }: anota (ou atualiza, se o id já existe) no Pessoal, sem painel e sem aviso na tela do site
+      lancar: ({ itens } = {}) => {
+        const n = N();
+        const lista = (Array.isArray(itens) ? itens : []).filter(it => it && Number(it.valor) > 0 && Number(it.valor) < 1e7);
+        if (!lista.length) return { ok: false, erro: "vazio", texto: "Não achei nada para anotar." };
+        if (!n.usaPessoal) return { ok: false, erro: "pessoal", texto: "Para anotar gastos, ligue o Pessoal em Perfil → Como você usa o app." };
+        const existentes = new Map(n.db.pessoal.lanc.map(l => [l.id, l]));
+        const novos = lista.filter(it => !(it.id && existentes.has(it.id))).length;
+        // limite do plano grátis: só avisa (dentro do app não se fala em assinar)
+        const ch = n.hojePlano.slice(0, 7);
+        if (novos && n.libera && !n.libera.pessoal && n.db.pessoal.lanc.filter(l => l.data && l.data.startsWith(ch)).length + novos > LIMITE_GRATIS.lancMes)
+          return { ok: false, erro: "limite", texto: `O plano grátis tem até ${LIMITE_GRATIS.lancMes} lançamentos por mês.` };
+        const prontos = lista.map(it => {
+          const tipo = it.tipo === "entrada" ? "entrada" : "saida", cats = tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
+          const desc = String(it.desc || "").trim().slice(0, 80);
+          const antes = it.id ? existentes.get(it.id) : null;
+          const marca = it.marca && marcaPorId(it.marca) ? it.marca : (acharMarca(desc) || {}).id || null;
+          const fora = it.moeda && it.moeda !== "BRL" && Number(it.valorOrig) > 0;
+          const l = {
+            ...(antes ? (({ moeda, valorOrig, cotacao, iof, ...resto }) => resto)(antes) : {}),
+            id: antes ? antes.id : (typeof it.id === "string" && it.id ? it.id : uid()),
+            tipo, valor: Math.round(Number(it.valor) * 100) / 100, cat: cats.some(c => c.id === it.cat) ? it.cat : tipo === "entrada" ? "outros-e" : "outros",
+            desc, data: /^\d{4}-\d{2}-\d{2}$/.test(it.data || "") ? it.data : todayISO(), marca,
+            ...(fora ? { moeda: it.moeda, valorOrig: Number(it.valorOrig), ...(it.cotacao ? { cotacao: it.cotacao } : {}), ...(it.iof !== undefined ? { iof: !!it.iof } : {}) } : {}),
+          };
+          if (typeof it.obs === "string") { if (it.obs.trim()) l.obs = it.obs.trim(); else delete l.obs; }
+          // trocou a marca ou o nome: a logo escolhida antes à mão não vale mais
+          if (antes && (antes.marca !== marca || antes.desc !== desc)) { delete l.logoSite; delete l.semLogo; }
+          return { l, novo: !antes };
+        });
+        n.setP(P => prontos.reduce((acc, { l, novo }) => separarAuto({ ...acc, lanc: novo ? [...acc.lanc, l] : acc.lanc.map(x => x.id === l.id ? l : x) }, novo && l.tipo === "entrada" ? l : null), P));
+        return { ok: true, ids: prontos.map(x => x.l.id) };
+      },
+      apagarLanc: ({ id } = {}) => {
+        const n = N(), tinha = !!id && n.db.pessoal.lanc.some(l => l.id === id);
+        if (tinha) n.setP(P => ({ ...P, lanc: P.lanc.filter(x => x.id !== id) }));
+        return { ok: tinha };
+      },
+      bolinha: ({ texto, historico } = {}) => { const n = N(); return responderBolinha(n.db, n.usaPessoal, texto, historico); },
+      // banco { rota, forcar }: saldos (resumo, guardado 15 min) ou os bancos conectados (estado)
+      banco: async ({ rota, forcar } = {}) => {
+        const b = await banco();
+        const r = rota === "estado" ? await b.estadoBanco() : await b.resumoBanco(!!forcar);
+        if (r && r.ligado) guardarBanco(true);
+        return comLogo(r);
+      },
+      desligarBanco: async ({ itemId } = {}) => {
+        if (!itemId) throw new Error("sem-banco");
+        const b = await banco();
+        await b.desligarBanco(itemId); b.esquecerResumo();
+        return { ok: true };
+      },
+      // conectarBanco { itemId }: a janela do banco abre por cima do site (o app já trouxe o site para a frente)
+      conectarBanco: async ({ itemId } = {}) => {
+        const b = await banco(), e = await b.estadoBanco();
+        const novo = await b.conectarBanco({ itemId: itemId || undefined, escuro: N().tema.escuro, teste: !!(e && e.teste) });
+        b.esquecerResumo();
+        return novo ? comLogo({ bancos: [novo] }).bancos[0] : null;
+      },
+      tema: ({ modo } = {}) => { if (TEMAS_VALIDOS.includes(modo)) N().tema.setModo(modo); return null; },
+      // puxar da nuvem agora: o mesmo caminho de quando a pessoa volta para o app (nuvem, casa, loja, pedidos do link)
+      sincronizar: async () => {
+        try { if (document.visibilityState === "visible") document.dispatchEvent(new Event("visibilitychange")); } catch (e) {}
+        await new Promise(ok => setTimeout(ok, 900));
+        return null;
+      },
+      // sair: o mesmo do botão "Sair da conta" do Perfil
+      sair: async () => { await N().act.sair(); return null; },
+    });
+  }, []);
+
   const t = todayISO(), ch = t.slice(0, 7);
   const atrasados = db.patients.filter(p => p.active && p.nextDate && p.nextDate < t).length;
   const pendentes = db.charges.filter(c => !c.paid).length;
@@ -4859,6 +5308,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
 
       <div className={"topo-fixo" + (rolou && !sheet ? " on" : "")} aria-hidden={!(rolou && !sheet)} inert={rolou && !sheet ? undefined : ""}>
         <div className="topo-fixo-in">
+          <VoltarAoApp className="icon-btn redondo" />
           <Avatar conta={conta} onClick={act.openSettings} label="Sua conta" />
           <button className="topo-fixo-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{tabEf === "home" || tabEf === "p-home" ? primeiro(conta.nome) : tabEf === "l-caixa" ? ((loja.loja && loja.loja.nome) || "Loja") : (abas.find(a => a.id === tabEf) || {}).l || (tabEf === "p-casa" ? ((casa.casa && casa.casa.nome) || "Nossa casa") : "")}</button>
           <button className="icon-btn redondo" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>
@@ -4871,7 +5321,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         const c = conquistas.find(x => x.id === festa[0]);
         return c && <Celebra key={c.id} c={c} total={conquistas.filter(x => x.feito).length} onFim={() => setFesta(f => f.slice(1))} onVer={() => { setFesta([]); act.openSettings("conquistas"); }} />;
       })()}
-      <VozBarra api={vozApi} db={db} usaPessoal={usaPessoal} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onComando={act.comandoVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />
+      <VozBarra api={vozApi} db={db} usaPessoal={usaPessoal} nome={conta.nome} onNovo={act.novoLanc} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onComando={act.comandoVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />
       <nav className="nav" aria-label="Seções">
         <div className="nav-in">
           {abas.map(a => (
@@ -4977,6 +5427,15 @@ function App() {
     const contas = lerJSON(K.contas, {}); gravar(K.contas, { ...contas, [conta.email]: conta });
     return { ...s, conta };
   });
+  // App de celular (ponte 2): sem login (ou com o cadastro pela metade) o retrato vai vazio, e o app deixa a tela
+  // do site na frente. Com login, quem manda o retrato e atende os pedidos é o Painel.
+  const comPainel = !recuperar && !!(sessao && sessao.conta && sessao.conta.perfil && !sessao.conta.perfil.refazer);
+  useEffect(() => {
+    if (!nativoV2 || comPainel) return;
+    const r = () => retratoSemLogin(tema);
+    enviarEstado(r);
+    return registrarNativo({ estado: r, tema: ({ modo } = {}) => { if (TEMAS_VALIDOS.includes(modo)) tema.setModo(modo); return null; } });
+  }, [comPainel, tema.modo]);
   if (recuperar) return <NovaSenha onPronto={async user => {
     setRecuperar(false);
     if (!(sessao && sessao.conta)) entrar(await contaDaNuvem(user, lerJSON(K.contas, {})[user.email]), false);

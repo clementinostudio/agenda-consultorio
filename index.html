@@ -63,6 +63,8 @@
     <script>
       (function () {
         var el = document.getElementById("intro");
+        // dentro do app de celular (window.AvinaApp já existe aqui) quem faz a abertura é o próprio app
+        if (window.AvinaApp) { el.remove(); return; }
         var logado = false; try { logado = !!JSON.parse(localStorage.getItem("agenda-sessao") || "null"); } catch (e) {}
         var instalado = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
         var veio = ["#entrar", "#criar", "#demo"].indexOf(location.hash) >= 0;

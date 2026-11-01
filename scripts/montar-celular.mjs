@@ -10,7 +10,7 @@ import { execSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PONTE = 1;
+const PONTE = 2; // 2: telas nativas por cima do site (retrato "estado" e pedidos por window.__avinaNativo)
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SAIDA = join(raiz, "dist-celular");
 const BASE = "https://app.avina.com.br/";

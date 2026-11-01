@@ -1,13 +1,15 @@
 // Parte do app carregada sob demanda (só quando é aberta). Gerado a partir do App.jsx.
-import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
+import React, { Suspense, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, useDeferredValue, memo } from "react";
 import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
 import { DinheiroHome } from "./dinheiro.jsx";
-import { CatBolinha, Linha, useContagem, Topo, Comparacao } from "./visual.jsx";
+import { CatBolinha, useContagem, Topo, Comparacao, menosMovimento } from "./visual.jsx";
+import { SeloBanco, nomeBanco } from "./bancos.jsx";
+import "../pessoal.css";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
 import { logoPropria, lerArquivo } from "../App.jsx";
-import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, relativo, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, liquidoDia, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos, Confirmar, vibrar } from "../App.jsx";
+import { todayISO, addDays, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, contaDinheiro, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos, Confirmar, vibrar } from "../App.jsx";
 import { saldos as saldosCasa } from "../casa.js";
 
 /* ---------- Logo enquanto digita: sugere as empresas parecidas (mesmo com erro de digitação),
@@ -89,6 +91,162 @@ function resumoPessoal(db, chave) {
   return { saidas, entradas, consult, pagas, abertas, entrou, saiu, sobra: entrou - saiu, aPagar: soma(abertas, c => c.valor), porCat };
 }
 
+/* ---------- gráficos (SVG puro, no tamanho de verdade da tela: traço, tracejado e ponto não distorcem) ---------- */
+// Curva suave que não passa do ponto (monotônica): o gasto acumulado nunca parece descer entre um dia e outro
+function curva(p) {
+  const n = p.length;
+  if (n < 2) return "";
+  const f = v => Math.round(v * 10) / 10;
+  if (n === 2) return `M${f(p[0][0])},${f(p[0][1])}L${f(p[1][0])},${f(p[1][1])}`;
+  const dx = [], m = [];
+  for (let i = 0; i < n - 1; i++) { dx[i] = p[i + 1][0] - p[i][0]; m[i] = (p[i + 1][1] - p[i][1]) / (dx[i] || 1); }
+  const t = [m[0]];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+  t[n - 1] = m[n - 2];
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+    const a = t[i] / m[i], b = t[i + 1] / m[i], s = a * a + b * b;
+    if (s > 9) { const k = 3 / Math.sqrt(s); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+  }
+  let d = `M${f(p[0][0])},${f(p[0][1])}`;
+  for (let i = 0; i < n - 1; i++) { const h = dx[i] / 3; d += `C${f(p[i][0] + h)},${f(p[i][1] + t[i] * h)} ${f(p[i + 1][0] - h)},${f(p[i + 1][1] - t[i + 1] * h)} ${f(p[i + 1][0])},${f(p[i + 1][1])}`; }
+  return d;
+}
+
+// Linha do mês: a do período (cheia, com área em degradê) se desenha da esquerda para a direita, a de comparação
+// fica tracejada atrás e a previsão segue tracejada na mesma cor. O ponto de hoje pulsa.
+// Tocar e arrastar (ou passar o mouse) mostra o valor do dia.
+//   series: [{ v: [números], tipo: "cheia" | "fantasma" | "previsao", de: índice em que a série começa }]
+//   n: quantos pontos cabem no eixo (dias do mês); eixo: [{ i, t }] rótulos embaixo; dica(i): o texto do dia i
+function GraficoLinha({ series, n, cor = "var(--mode)", altura = 132, eixo, legenda, dica, rotulo }) {
+  const caixa = useRef(null);
+  const [W, setW] = useState(0);
+  const [toque, setToque] = useState(null);
+  const ultimo = useRef(-1);
+  const clip = useRef("pg" + Math.random().toString(36).slice(2, 8)).current;
+  useLayoutEffect(() => {
+    const el = caixa.current; if (!el) return;
+    setW(el.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)));
+    ro.observe(el); return () => ro.disconnect();
+  }, []);
+  // começa a desenhar quando o gráfico aparece (o relógio do SVG conta desde que a página abriu)
+  const desenho = useRef(null);
+  useEffect(() => { const a = desenho.current; if (W > 0 && a && a.beginElement) try { a.beginElement(); } catch (e) {} }, [W > 0]);
+  const H = altura, TOP = 14, BASE = 6, PX = 6;
+  const todas = series.flatMap(s => s.v.filter(Number.isFinite));
+  const N = Math.max(n || 0, ...series.map(s => (s.de || 0) + s.v.length), 2);
+  const lo = Math.min(0, ...todas), hi = Math.max(lo + 1, ...todas) * (Math.max(...todas, 0) > 0 ? 1.06 : 1);
+  const x = i => PX + (i / (N - 1)) * Math.max(1, W - PX * 2);
+  const y = v => TOP + (1 - (v - lo) / (hi - lo || 1)) * (H - TOP - BASE);
+  const pts = s => s.v.map((v, k) => [x((s.de || 0) + k), y(v)]);
+  const prin = series.find(s => s.tipo === "cheia" && s.v.length > 0);
+  const fimI = prin ? (prin.de || 0) + prin.v.length - 1 : -1;
+  const ponto = prin ? [x(fimI), y(prin.v[prin.v.length - 1])] : null;
+  const maxI = Math.max(...series.map(s => (s.de || 0) + s.v.length - 1));
+  const mover = e => {
+    if (!dica || !W) return;
+    const r = caixa.current.getBoundingClientRect();
+    const i = Math.max(0, Math.min(maxI, Math.round(((e.clientX - r.left - PX) / Math.max(1, W - PX * 2)) * (N - 1))));
+    if (i !== ultimo.current) { ultimo.current = i; if (e.pointerType === "touch") vibrar("toque"); setToque(i); }
+  };
+  const largar = () => { ultimo.current = -1; setToque(null); };
+  const valorEm = (s, i) => { const k = i - (s.de || 0); return k >= 0 && k < s.v.length ? s.v[k] : null; };
+  const anima = !menosMovimento();
+  return (
+    <div className="ps-graf" style={{ "--lc": cor }}>
+      <div ref={caixa} className="ps-graf-area" style={{ height: H }} onPointerMove={mover} onPointerDown={mover} onPointerLeave={largar} onPointerUp={e => e.pointerType !== "mouse" && largar()} onPointerCancel={largar}>
+        {W > 0 && <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={rotulo}>
+          <defs>
+            <linearGradient id={clip + "a"} x1="0" x2="0" y1="0" y2="1"><stop offset="0" style={{ stopColor: cor, stopOpacity: .3 }} /><stop offset="1" style={{ stopColor: cor, stopOpacity: 0 }} /></linearGradient>
+            {/* a linha se desenha: o recorte cresce da esquerda para a direita (se a animação não rodar, fica tudo à mostra) */}
+            <clipPath id={clip}><rect x="0" y="-20" width={W + 20} height={H + 40}>{anima && <animate ref={desenho} attributeName="width" from="0" to={W + 20} dur="1.1s" begin="indefinite" fill="freeze" calcMode="spline" keySplines=".45 0 .2 1" keyTimes="0;1" />}</rect></clipPath>
+          </defs>
+          {lo < 0 && <line x1={PX} x2={W - PX} y1={y(0)} y2={y(0)} className="ps-graf-zero" />}
+          {series.filter(s => s.tipo === "fantasma" && s.v.length > 1).map((s, k) => <path key={"f" + k} className="ps-graf-ant" d={curva(pts(s))} />)}
+          <g clipPath={`url(#${clip})`}>
+            {prin && prin.v.length > 1 && <path d={`${curva(pts(prin))}L${ponto[0]},${H}L${x(prin.de || 0)},${H}Z`} fill={`url(#${clip}a)`} />}
+            {prin && prin.v.length > 1 && <path className="ps-graf-linha" d={curva(pts(prin))} />}
+            {series.filter(s => s.tipo === "previsao" && s.v.length > 1).map((s, k) => <path key={"p" + k} className="ps-graf-prev" d={curva(pts(s))} />)}
+          </g>
+          {ponto && toque == null && <g className="ps-graf-ponto" style={{ "--px": `${ponto[0]}px`, "--py": `${ponto[1]}px` }}>
+            <circle cx={ponto[0]} cy={ponto[1]} r="9" className="onda" />
+            <circle cx={ponto[0]} cy={ponto[1]} r="5.5" className="miolo" />
+          </g>}
+          {toque != null && <g className="ps-graf-mira">
+            <line x1={x(toque)} x2={x(toque)} y1={4} y2={H} />
+            {series.map((s, k) => { const v = valorEm(s, toque); return v == null ? null : <circle key={k} cx={x(toque)} cy={y(v)} r={s.tipo === "fantasma" ? 3.5 : 5} className={s.tipo} />; })}
+          </g>}
+        </svg>}
+        {toque != null && dica && W > 0 && <div className={"ps-graf-dica" + (x(toque) < 80 ? " esq" : x(toque) > W - 80 ? " dir" : "")} style={{ left: x(toque) }}>{dica(toque)}</div>}
+      </div>
+      {eixo && W > 0 && <div className="ps-graf-eixo" aria-hidden="true">{eixo.map((e, k) => <span key={k} className={x(e.i) < 24 ? "ini" : x(e.i) > W - 24 ? "fim" : ""} style={{ left: x(e.i) }}>{e.t}</span>)}</div>}
+      {legenda && <div className="ps-graf-leg">{legenda.map((l, k) => <span key={k}><i className={l.tipo || "cheia"} />{l.t}</span>)}</div>}
+    </div>
+  );
+}
+
+// Barra segmentada por categoria (cantos redondos e espaço entre os pedaços), na cor de cada uma
+function BarraCategorias({ cats, total }) {
+  const top = cats.slice(0, 6), resto = soma(cats.slice(6), c => c[1]);
+  const pedacos = [...top.map(([id, v]) => ({ id, v, cor: `var(--g-${id}, ${catVars(catDe(id))["--cc"]})` })), ...(resto > 0 ? [{ id: "resto", v: resto, cor: "var(--surface-3)" }] : [])].filter(p => p.v > 0);
+  if (!pedacos.length) return null;
+  return (
+    <div className="ps-seg" role="img" aria-label={pedacos.map(p => `${p.id === "resto" ? "Outras" : catDe(p.id).nome} ${Math.round((p.v / (total || 1)) * 100)}%`).join(", ")}>
+      {pedacos.map((p, k) => <i key={p.id} style={{ flexGrow: p.v, background: p.cor, "--i": k }} />)}
+    </div>
+  );
+}
+// Uma categoria na lista: o ícone com anel (o teto, se tiver; senão a parte do mês), nome, o que sobra e o valor
+function LinhaCategoria({ id, v, total, teto, on, apaga, onClick }) {
+  const c = catDe(id), sobra = teto - v;
+  return (
+    <button type="button" className={"ps-cat" + (on ? " on" : apaga ? " apaga" : "")} aria-pressed={on} onClick={onClick}>
+      <CatBolinha cat={c} p={teto ? v / teto : v / (total || 1)} tam={42} />
+      <span className="ps-cat-mid">
+        <span className="ps-cat-nm">{c.nome}</span>
+        <span className={"ps-cat-sb" + (teto && sobra < 0 ? " acima" : "")}>{teto ? (sobra >= 0 ? `Sobram ${brl(sobra)} do teto` : `${brl(-sobra)} acima do teto`) : `${Math.round((v / (total || 1)) * 100)}% do mês`}</span>
+      </span>
+      <b className="ps-cat-v">{brl(v)}</b>
+    </button>
+  );
+}
+
+// Fluxo do mês: o que entrou e o que saiu, em duas barras na mesma escala
+function FluxoMes({ entrou, saiu, aPagar }) {
+  const max = Math.max(entrou, saiu, 1), sobra = entrou - saiu;
+  return (
+    <div className="ps-fluxo">
+      <div className="ps-fluxo-l"><span>Entrou</span><span className="ps-fluxo-t"><i style={{ width: `${(entrou / max) * 100}%` }} /></span><b className="mais">+{brl(entrou)}</b></div>
+      <div className="ps-fluxo-l sai"><span>Saiu</span><span className="ps-fluxo-t"><i style={{ width: `${(saiu / max) * 100}%`, "--i": 1 }} /></span><b className="menos">−{brl(saiu)}</b></div>
+      <div className="ps-fluxo-pe"><span>{sobra >= 0 ? "Sobra" : "Faltam"} <b className={sobra < 0 ? "menos" : ""}>{brl(Math.abs(sobra))}</b></span>{aPagar > 0 && <span>Contas a pagar <b>{brl(aPagar)}</b></span>}</div>
+    </div>
+  );
+}
+
+/* ---------- datas das atividades ---------- */
+const DIA_SEMANA = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+const MES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+// "17 de out" (com o ano, quando não é deste ano)
+const diaMes = (iso, hoje, ponto = "") => { const d = fromISO(iso); return `${d.getDate()} de ${MES_ABREV[d.getMonth()]}${ponto}${iso.slice(0, 4) !== hoje.slice(0, 4) ? ` de ${d.getFullYear()}` : ""}`; };
+// Título de cada dia na lista: Hoje, Ontem, o dia da semana (nos últimos 6 dias) e "17 de out." nos mais antigos
+function tituloDia(iso, hoje) {
+  if (iso === hoje) return "Hoje";
+  const d = diffDias(iso, hoje);
+  if (d === 1) return "Ontem";
+  if (d === -1) return "Amanhã";
+  if (d > 1 && d <= 6) return DIA_SEMANA[fromISO(iso).getDay()];
+  return diaMes(iso, hoje, ".");
+}
+// texto em que a busca procura (guardado por lançamento: com mil linhas, digitar não refaz tudo)
+const textoBusca = new WeakMap();
+function buscavel(l) {
+  let t = textoBusca.get(l);
+  if (t === undefined) { t = normalizar(`${l.desc || ""} ${catDe(l.cat).nome} ${nomeBanco(l.banco)} ${fmtNum(l.valor)}`); textoBusca.set(l, t); }
+  return t;
+}
+
 // Previsão do mês: simula dia a dia até o fim do mês, a partir do saldo de hoje.
 // Entra: o salário (se ainda não caiu) e as sessões marcadas (se o consultório conta como entrada).
 // Sai: as contas fixas que faltam, no dia do vencimento, e o gasto do dia a dia no ritmo de agora.
@@ -124,29 +282,39 @@ function previsaoMes(db) {
   return { fim: saldo, diaNeg: saldo < 0 || diaNeg ? diaNeg : null, ritmo, renda: R ? R.valor : 0, diaRenda: R ? R.dia : null, contas: saiContas, consult: entraConsult, ultimo, diaHoje, serie };
 }
 
+// rótulos embaixo de um gráfico do mês: o dia 1, hoje e o último dia (sem encavalar)
+function eixoDoMes(n, hojeI, mes) {
+  const longe = i => hojeI == null || Math.abs(i - hojeI) >= Math.max(4, n / 7);
+  return [longe(0) && { i: 0, t: `1 ${mes}` }, hojeI != null && { i: hojeI, t: "hoje" }, longe(n - 1) && { i: n - 1, t: `${n} ${mes}` }].filter(Boolean);
+}
+
 function CartaoPrevisao({ db }) {
   const p = previsaoMes(db);
+  const hoje = todayISO(), ch = hoje.slice(0, 7), mes = MES_ABREV[fromISO(hoje).getMonth()];
+  const feito = useMemo(() => serieSaldo(db, `${ch}-01`, hoje), [db, ch, hoje]);
   if (p.diaHoje >= p.ultimo) return null;
-  const min = Math.min(0, ...p.serie), max = Math.max(1, ...p.serie), W = 300, H = 60;
-  const pts = p.serie.map((v, i) => `${(i / Math.max(1, p.serie.length - 1)) * W},${H - ((v - min) / (max - min || 1)) * H}`).join(" ");
-  const zero = H - ((0 - min) / (max - min || 1)) * H;
   const ruim = p.fim < 0 || p.diaNeg;
+  // o que já aconteceu (linha cheia) e, de hoje até o fim do mês, a previsão (tracejada) que sai do ponto de hoje
+  const agora = feito[feito.length - 1] || 0;
+  const previsto = [agora, ...p.serie.slice(1)];
+  const valorDia = i => (i < p.diaHoje ? feito[i] : previsto[i - p.diaHoje + 1]);
   return (
-    <section className={"panel previsao" + (ruim ? " ruim" : "")}>
+    <section className={"panel previsao ps-prev" + (ruim ? " ruim" : "")}>
       <div className="panel-head"><h3>Previsão do mês</h3></div>
       <p className="previsao-t">{p.fim >= 0 && !p.diaNeg
         ? <>Nesse ritmo, <b>sobram {brl(p.fim)}</b> no dia {p.ultimo}.</>
         : p.diaNeg && p.diaNeg <= p.diaHoje ? <>O mês já está no vermelho. Nesse ritmo, <b>termina faltando {brl(-Math.min(0, p.fim))}</b>.</>
         : <>Nesse ritmo, <b>falta dinheiro a partir do dia {p.diaNeg || p.ultimo}</b>{p.fim < 0 ? <> ({brl(-p.fim)} no fim do mês)</> : null}.</>}</p>
-      <svg className="previsao-g" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
-        {min < 0 && <line x1="0" x2={W} y1={zero} y2={zero} className="zero" />}
-        <polyline points={pts} />
-      </svg>
-      <div className="previsao-itens">
-        {p.renda > 0 && <span className="mais">+{brl(p.renda)} salário (dia {p.diaRenda})</span>}
-        {p.consult > 0 && <span className="mais">+{brl(p.consult)} sessões marcadas</span>}
-        {p.contas > 0 && <span className="menos">−{brl(p.contas)} contas que faltam</span>}
-        <span className="menos">−{brl(p.ritmo)} por dia no dia a dia</span>
+      <GraficoLinha key={ch} n={p.ultimo} altura={110} cor={ruim ? "var(--amber)" : "var(--mode)"}
+        series={[{ v: feito, tipo: "cheia" }, { v: previsto, de: p.diaHoje - 1, tipo: "previsao" }]}
+        eixo={eixoDoMes(p.ultimo, p.diaHoje - 1, mes)} legenda={[{ t: "até hoje" }, { t: "previsão", tipo: "previsao" }]}
+        dica={i => <><small>{i + 1} de {mes}{i >= p.diaHoje ? " · previsto" : ""}</small>{brl(valorDia(i))}</>}
+        rotulo={`Sobra do mês até hoje e a previsão até o dia ${p.ultimo}: ${brl(p.fim)}`} />
+      <div className="previsao-itens ps-prev-itens">
+        {p.renda > 0 && <span className="mais"><i />+{brl(p.renda)} salário (dia {p.diaRenda})</span>}
+        {p.consult > 0 && <span className="mais"><i />+{brl(p.consult)} sessões marcadas</span>}
+        {p.contas > 0 && <span className="menos"><i />−{brl(p.contas)} contas que faltam</span>}
+        <span className="menos"><i />−{brl(p.ritmo)} por dia no dia a dia</span>
       </div>
       {ruim && <div className="hint">Dá para segurar: um teto em Gastos ajuda a ver onde cortar.</div>}
     </section>
@@ -250,15 +418,16 @@ function AssinaturasAchadas({ db, act }) {
   );
 }
 
+// Saldo acumulado dia a dia (entradas − saídas − contas pagas, mais o consultório se conta como entrada).
+// Uma passada pelos lançamentos, separando por dia (com milhares de lançamentos, não filtra tudo a cada dia).
 function serieSaldo(db, ini, fim) {
-  const P = db.pessoal, out = [];
+  const P = db.pessoal, porDia = new Map(), out = [];
+  const somar = (d, v) => porDia.set(d, (porDia.get(d) || 0) + v);
+  P.lanc.forEach(l => { if (l.data >= ini && l.data <= fim) somar(l.data, l.tipo === "entrada" ? l.valor : -l.valor); });
+  P.contas.forEach(c => Object.values(c.pagas || {}).forEach(d => { if (typeof d === "string" && d >= ini && d <= fim) somar(d, -c.valor); }));
+  if (P.incluirConsultorio) (db.sessions || []).forEach(x => { if (x.date >= ini && x.date <= fim && contaDinheiro(x)) somar(x.date, x.price - x.sublet); });
   let acc = 0;
-  for (let d = ini; d <= fim; d = addDays(d, 1)) {
-    acc += soma(P.lanc.filter(l => l.data === d), l => l.tipo === "entrada" ? l.valor : -l.valor);
-    if (P.incluirConsultorio) acc += liquidoDia(db, d);
-    acc -= soma(P.contas.filter(c => c.pagas && Object.values(c.pagas).includes(d)), c => c.valor);
-    out.push(acc);
-  }
+  for (let d = ini; d <= fim; d = addDays(d, 1)) { acc += porDia.get(d) || 0; out.push(acc); }
   return out;
 }
 
@@ -292,23 +461,42 @@ function conversaPessoal(db, act) {
   return falas.slice(0, ESTILO === "curto" ? 2 : 4);
 }
 
+// Marca achada pelo nome, guardada: achar é caro (compara com centenas de marcas) e a lista repete os mesmos nomes
+const marcasPorNome = new Map();
+function marcaDoNome(nome) {
+  const k = nome || "";
+  if (!marcasPorNome.has(k)) { if (marcasPorNome.size > 3000) marcasPorNome.clear(); marcasPorNome.set(k, (acharMarca(k) || {}).id || null); }
+  return marcasPorNome.get(k);
+}
+
+// Uma atividade: a logo da empresa (com o selo do banco no canto quando veio do Open Finance), o nome,
+// "data · categoria", o banco embaixo em cinza e o valor (saída em vermelho, entrada em verde).
+// memo: com centenas de linhas, só redesenha a que mudou (oculto e hoje entram só para redesenhar quando mudam).
 // sel: modo de seleção ligado; segurar o dedo num lançamento também liga a seleção (como nos apps do celular)
-function LancRow({ l, act, sel, marcado, onMarcar, onSegurar }) {
-  const cat = catDe(l.cat);
+const LancRow = memo(function LancRow({ l, onAbrir, sel, marcado, onMarcar, onSegurar, hoje }) {
+  const cat = catDe(l.cat), banco = nomeBanco(l.banco);
   const tempo = useRef(0), segurou = useRef(false);
   const apertou = () => { if (!onSegurar) return; segurou.current = false; clearTimeout(tempo.current); tempo.current = setTimeout(() => { segurou.current = true; onSegurar(l.id); }, 450); };
   const soltou = () => clearTimeout(tempo.current);
-  const tocou = () => { if (segurou.current) { segurou.current = false; return; } if (sel) onMarcar(l.id); else act.editLanc(l.id); };
+  const tocou = () => { if (segurou.current) { segurou.current = false; return; } if (sel) onMarcar(l.id); else onAbrir(l.id); };
+  const entra = l.tipo === "entrada";
   return (
-    <button className={"txn" + (sel ? " sel" : "") + (marcado ? " marcado" : "")} onClick={tocou} onPointerDown={apertou} onPointerUp={soltou} onPointerLeave={soltou} onPointerCancel={soltou}
+    <button className={"ps-at" + (sel ? " sel" : "") + (marcado ? " marcado" : "")} onClick={tocou} onPointerDown={apertou} onPointerUp={soltou} onPointerLeave={soltou} onPointerCancel={soltou}
       onContextMenu={e => { if (onSegurar) e.preventDefault(); }} aria-pressed={sel ? !!marcado : undefined}>
       {sel && <span className={"sel-box" + (marcado ? " on" : "")} aria-hidden="true">{marcado && <I.check />}</span>}
-      <MarcaLogo key={(l.marca || l.logoSite || l.cat) + (l.desc || "")} marca={l.semLogo ? null : l.marca || (acharMarca(l.desc || "") || {}).id} site={l.semLogo ? null : l.logoSite} nome={l.desc} cat={cat} className="txn-av" />
-      <span className="mid"><span className="nm">{l.desc || cat.nome}</span><span className="sb">{cat.nome}{l.moeda ? ` · ${ESCONDER ? "•••" : fmtMoeda(l.valorOrig, l.moeda)}` : ""} · {relativo(l.data).toLowerCase()}</span></span>
-      <span className={"amt" + (l.tipo === "entrada" ? " pos" : "")}>{l.tipo === "entrada" ? "+" : "−"}<Money v={l.valor} /></span>
+      <span className="ps-at-av">
+        <MarcaLogo key={(l.marca || l.logoSite || l.cat) + (l.desc || "")} marca={l.semLogo ? null : l.marca || marcaDoNome(l.desc)} site={l.semLogo ? null : l.logoSite} nome={l.desc} cat={cat} className="txn-av" />
+        {banco && <SeloBanco banco={banco} />}
+      </span>
+      <span className="ps-at-mid">
+        <span className="ps-at-nm">{l.desc || cat.nome}</span>
+        <span className="ps-at-sb">{diaMes(l.data, hoje || todayISO())} · {cat.nome}{l.moeda ? ` · ${ESCONDER ? "•••" : fmtMoeda(l.valorOrig, l.moeda)}` : ""}</span>
+        {banco && <span className="ps-at-bc">{banco}</span>}
+      </span>
+      <span className={"ps-at-v" + (entra ? " entra" : "")}>{entra ? "+" : "−"}{brl(l.valor)}</span>
     </button>
   );
-}
+});
 
 function BillRow({ c, chave, act }) {
   const s = situacaoConta(c, chave), cat = catDe(c.cat);
@@ -337,23 +525,27 @@ function SaldoMes({ db, act }) {
   const [rng, setRng] = useState("mes");
   const r = resumoPessoal(db, chave);
   const ini = rng === "7" ? addDays(t, -6) : rng === "30" ? addDays(t, -29) : `${chave}-01`;
-  const serie = serieSaldo(db, ini, t);
+  const serie = useMemo(() => serieSaldo(db, ini, t), [db, ini, t]);
   const saldo = serie.length ? serie[serie.length - 1] : 0;
   const v = useContagem(saldo);
   // no mês: o mês passado inteiro atrás, para comparar o ritmo
   const pm = new Date(d.getFullYear(), d.getMonth() - 1, 1), chAnt = `${pm.getFullYear()}-${pad(pm.getMonth() + 1)}`;
   const nAnt = new Date(d.getFullYear(), d.getMonth(), 0).getDate(), nMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  const anterior = rng === "mes" ? serieSaldo(db, `${chAnt}-01`, `${chAnt}-${pad(nAnt)}`) : [];
+  const anterior = useMemo(() => (rng === "mes" ? serieSaldo(db, `${chAnt}-01`, `${chAnt}-${pad(nAnt)}`) : []), [db, rng, chAnt, nAnt]);
   const temAnt = anterior.some(x => x !== 0);
   const rotulo = rng === "mes" ? `Sobra de ${MES_LONGO[d.getMonth()]}` : `Saldo dos últimos ${rng} dias`;
+  const mesAb = MES_ABREV[d.getMonth()];
   return (
     <section className={"c3-saldo" + (saldo < 0 ? " neg" : "")}>
       <div className="c3-saldo-lab">{rotulo}<button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></div>
       <div className="c3-saldo-v"><Money v={ESCONDER ? saldo : v} /></div>
       <div className="c3-saldo-sub"><span className="mais">+{brl(r.entrou)}</span><span className="menos">−{brl(r.saiu)}</span><span>no mês</span></div>
-      {serie.length > 1 && <div className="c3-saldo-g" key={rng}>
-        <Linha n={rng === "mes" ? Math.max(nMes, nAnt) : serie.length} series={[...(temAnt ? [{ v: anterior, fantasma: true }] : []), { v: serie, cor: saldo < 0 ? "var(--rose)" : "var(--mode)" }]}
-          legenda={rng === "mes" ? [{ t: MES_LONGO[d.getMonth()] }, ...(temAnt ? [{ t: MES_LONGO[pm.getMonth()], fantasma: true }] : [])] : null} rotuloDir="hoje"
+      {serie.length > 1 && <div className="c3-saldo-g ps-saldo-g" key={rng}>
+        <GraficoLinha n={rng === "mes" ? Math.max(nMes, nAnt) : serie.length} altura={124} cor={saldo < 0 ? "var(--rose)" : "var(--mode)"}
+          series={[...(temAnt ? [{ v: anterior, tipo: "fantasma" }] : []), { v: serie, tipo: "cheia" }]}
+          eixo={rng === "mes" ? eixoDoMes(nMes, serie.length - 1, mesAb) : [{ i: 0, t: diaMes(ini, t) }, { i: serie.length - 1, t: "hoje" }]}
+          legenda={rng === "mes" && temAnt ? [{ t: MES_LONGO[d.getMonth()] }, { t: MES_LONGO[pm.getMonth()], tipo: "fantasma" }] : null}
+          dica={i => { const dia = addDays(ini, i), ant = rng === "mes" && temAnt ? anterior[i] : null; return <><small>{i === serie.length - 1 ? "Hoje" : diaMes(dia, t)}</small>{i < serie.length ? brl(serie[i]) : "—"}{ant != null && <em>{MES_LONGO[pm.getMonth()].slice(0, 3)}: {brl(ant)}</em>}</>; }}
           rotulo={`${rotulo}: ${brl(saldo)}`} />
       </div>}
       <div className="ranges" role="tablist">
@@ -397,25 +589,21 @@ function ProximosMes({ db, act }) {
   );
 }
 
-// Gastos por categoria: cartões com o anel; com teto, o anel é o teto e embaixo mostra o que sobra
+// Gastos por categoria (Início): o total do mês, a barra segmentada e as maiores. Com teto, o anel é o teto.
 function CategoriasMes({ db, act }) {
   const ch = todayISO().slice(0, 7), r = resumoPessoal(db, ch), lim = db.pessoal.limites || {};
   const cats = Object.entries(r.porCat).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   if (!cats.length) return null;
   const tot = soma(cats, c => c[1]);
   return (
-    <section className="c3-cats" aria-label="Gastos por categoria">
-      <div className="vz-head"><h3>Gastos por categoria</h3><button className="link" onClick={() => act.setTab("p-gastos")}>Ver tudo</button></div>
-      <div className="vz-trilho">
-        {cats.map(([id, v]) => { const ct = catDe(id), teto = lim[id] || 0, sobra = teto - v; return (
-          <button key={id} type="button" className="vz-card" onClick={() => id === "transporte" ? act.abrirTransporte() : act.abrirTeto(id)}>
-            <CatBolinha cat={ct} p={teto ? v / teto : v / tot} />
-            <span className="vz-card-n">{ct.nome}</span>
-            <b className="num vz-card-v"><Money v={v} /></b>
-            {teto ? <small className={sobra < 0 ? "acima" : ""}>{sobra >= 0 ? `/ ${brl(sobra)} sobrando` : `${brl(-sobra)} acima do teto`}</small> : <small>{Math.round((v / tot) * 100)}% do mês</small>}
-          </button>
-        ); })}
+    <section className="ps-card ps-cats" aria-label="Gastos por categoria">
+      <button type="button" className="ps-card-h" onClick={() => act.setTab("p-gastos")}><span>Gastos por categoria · este mês</span><I.chev /></button>
+      <b className="ps-card-v"><Money v={tot} /></b>
+      <BarraCategorias cats={cats} total={tot} />
+      <div className="ps-cats-lista">
+        {cats.slice(0, 4).map(([id, v]) => <LinhaCategoria key={id} id={id} v={v} total={tot} teto={lim[id] || 0} onClick={() => id === "transporte" ? act.abrirTransporte() : act.abrirTeto(id)} />)}
       </div>
+      {cats.length > 4 && <button type="button" className="link ps-card-pe" onClick={() => act.setTab("p-gastos")}>Ver as {cats.length} categorias</button>}
     </section>
   );
 }
@@ -456,7 +644,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
           </div>
           <div className="panel">
             <div className="panel-head"><h3>Últimos lançamentos</h3><button className="link" onClick={() => act.setTab("p-gastos")}>Ver tudo</button></div>
-            {ultimos.length === 0 ? <div className="empty">Nada anotado ainda. Toque em + para o primeiro gasto.</div> : ultimos.map(l => <LancRow key={l.id} l={l} act={act} />)}
+            {ultimos.length === 0 ? <div className="empty">Nada anotado ainda. Toque em + para o primeiro gasto.</div> : ultimos.map(l => <LancRow key={l.id} l={l} onAbrir={act.editLanc} hoje={t} oculto={ESCONDER} />)}
           </div>
         </div>
       </div>
@@ -516,39 +704,86 @@ function acumuladoMes(db, ch, n) {
 }
 const diasDoMes = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 
+// altura que um dia ocupa na lista antes de ser desenhado (título + linhas; a do banco tem uma linha a mais):
+// fora da tela o navegador não desenha o dia (content-visibility), e a rolagem não pula
+const alturaGrupo = g => 46 + soma(g.itens, l => (nomeBanco(l.banco) ? 84 : 66));
+// quantas linhas a lista desenha de cada vez (as outras entram ao chegar perto do fim; mil lançamentos não travam)
+const LOTE = 60;
+
 function GastosTab({ db, act, tema }) {
   const [off, setOff] = useState(0);
   const [filtro, setFiltro] = useState("tudo");
-  const [cat, setCat] = useState(null); // categoria escolhida nos cartões: filtra os lançamentos
-  const base = new Date();
+  const [cat, setCat] = useState(null); // categoria escolhida (na lista de categorias ou nos filtros)
+  const [banco, setBanco] = useState(null); // só o que veio deste banco
+  const [busca, setBusca] = useState("");
+  const [todasCats, setTodasCats] = useState(false);
+  const termo = normalizar(useDeferredValue(busca)); // digitar não espera a lista
+  const base = new Date(), hoje = todayISO();
   const m = new Date(base.getFullYear(), base.getMonth() + off, 1), pm = new Date(m.getFullYear(), m.getMonth() - 1, 1);
   const chave = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`, chAnt = `${pm.getFullYear()}-${pad(pm.getMonth() + 1)}`;
-  const r = resumoPessoal(db, chave);
-  const tetos = db.pessoal.limites || {};
+  const P = db.pessoal, lancs = P.lanc;
+  const r = useMemo(() => resumoPessoal(db, chave), [db, chave]);
+  const tetos = P.limites || {};
   // categorias com gasto no mês + as que têm teto (mesmo sem gasto ainda)
   const cats = [...Object.entries(r.porCat), ...Object.keys(tetos).filter(id => tetos[id] > 0 && !r.porCat[id]).map(id => [id, 0])].sort((a, b) => b[1] - a[1]);
   const totalCat = soma(cats, c => c[1]) || 1;
   // o ritmo do mês: no mês atual, compara com o anterior até o mesmo dia
-  const atual = off === 0, hojeD = Number(todayISO().slice(8, 10));
+  const atual = off === 0, hojeD = Number(hoje.slice(8, 10));
   const nM = diasDoMes(m), nA = diasDoMes(pm);
-  const serieA = acumuladoMes(db, chave, nM).slice(0, atual ? hojeD : nM), serieB = acumuladoMes(db, chAnt, nA);
+  const serieA = useMemo(() => acumuladoMes(db, chave, nM).slice(0, atual ? hojeD : nM), [lancs, P.contas, chave, atual, hojeD]);
+  const serieB = useMemo(() => acumuladoMes(db, chAnt, nA), [lancs, P.contas, chAnt]);
   const antAte = serieB[Math.min(atual ? hojeD : nA, nA) - 1] || 0, agoraAte = serieA[serieA.length - 1] || 0;
   const mudarMes = k => { setOff(k); setCat(null); vibrar("toque"); };
-  let lista = db.pessoal.lanc.filter(l => l.data.startsWith(chave));
-  if (cat) lista = lista.filter(l => l.tipo === "saida" && l.cat === cat);
-  else if (filtro === "saida") lista = lista.filter(l => l.tipo === "saida");
-  else if (filtro === "entrada") lista = lista.filter(l => l.tipo === "entrada");
-  lista.sort((a, b) => b.data.localeCompare(a.data));
-  const grupos = []; lista.forEach(l => { const g = grupos[grupos.length - 1]; if (g && g.d === l.data) g.itens.push(l); else grupos.push({ d: l.data, itens: [l] }); });
+
+  // a lista: do mês (ou, buscando, de todos os meses), com os filtros, agrupada por dia
+  const doMes = useMemo(() => lancs.filter(l => l.data.startsWith(chave)), [lancs, chave]);
+  const lista = useMemo(() => {
+    let x = termo ? lancs.filter(l => buscavel(l).includes(termo)) : doMes;
+    if (cat) x = x.filter(l => l.tipo === "saida" && l.cat === cat);
+    else if (filtro !== "tudo") x = x.filter(l => l.tipo === filtro);
+    if (banco) x = x.filter(l => nomeBanco(l.banco) === banco);
+    return [...x].sort((a, b) => b.data.localeCompare(a.data));
+  }, [lancs, doMes, termo, cat, filtro, banco]);
+  const grupos = useMemo(() => {
+    const g = [];
+    lista.forEach(l => { let u = g[g.length - 1]; if (!u || u.d !== l.data) g.push(u = { d: l.data, itens: [], saiu: 0 }); u.itens.push(l); if (l.tipo === "saida") u.saiu += l.valor; });
+    return g;
+  }, [lista]);
+  // filtros: os bancos de onde vieram lançamentos e as categorias com gasto no mês
+  const bancos = useMemo(() => [...new Set(lancs.map(l => nomeBanco(l.banco)).filter(Boolean))].slice(0, 4), [lancs]);
+  const catsChip = useMemo(() => { const t = {}; doMes.forEach(l => { if (l.tipo === "saida") t[l.cat] = (t[l.cat] || 0) + l.valor; }); return Object.keys(t).sort((a, b) => t[b] - t[a]); }, [doMes]);
+  const algumFiltro = !!(cat || banco || filtro !== "tudo");
+  const limpar = () => { setCat(null); setBanco(null); setFiltro("tudo"); vibrar("toque"); };
+
+  // desenha aos poucos: um lote agora e mais ao chegar perto do fim
+  const [mostra, setMostra] = useState(LOTE);
+  useEffect(() => { setMostra(LOTE); }, [chave, termo, cat, filtro, banco]);
+  const fimRef = useRef(null);
+  useEffect(() => {
+    const el = fimRef.current;
+    if (!el || mostra >= lista.length || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) setMostra(k => k + LOTE * 2); }, { rootMargin: "900px 0px" });
+    io.observe(el); return () => io.disconnect();
+  }, [mostra, lista.length]);
+  const visiveis = [];
+  for (let resta = mostra, k = 0; k < grupos.length && resta > 0; k++) { const g = grupos[k]; visiveis.push(resta >= g.itens.length ? g : { ...g, itens: g.itens.slice(0, resta) }); resta -= g.itens.length; }
+
   // Seleção para apagar vários de uma vez
   const [sel, setSel] = useState(null); // null = modo normal; Set de ids = selecionando
   const [confirmar, setConfirmar] = useState(false);
-  useEffect(() => { setSel(null); }, [off, filtro, cat]);
-  const marcar = id => setSel(s => { const n = new Set(s || []); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const segurar = id => { vibrar("toque"); setSel(s => new Set([...(s || []), id])); };
+  useEffect(() => { setSel(null); }, [off, filtro, cat, banco, termo]);
+  const marcar = useCallback(id => setSel(s => { const n = new Set(s || []); if (n.has(id)) n.delete(id); else n.add(id); return n; }), []);
+  const segurar = useCallback(id => { vibrar("toque"); setSel(s => new Set([...(s || []), id])); }, []);
+  // act muda a cada desenho do app: pela referência, a linha (memo) não precisa redesenhar por isso
+  const actRef = useRef(act); actRef.current = act;
+  const abrir = useCallback(id => actRef.current.editLanc(id), []);
   const todos = sel && lista.length > 0 && lista.every(l => sel.has(l.id));
   const nomeMes = MES_LONGO[m.getMonth()], ano = m.getFullYear() !== base.getFullYear() ? ` de ${m.getFullYear()}` : "";
+  const mesAb = MES_ABREV[m.getMonth()], antAb = MES_ABREV[pm.getMonth()];
   const ct = cat && catDe(cat), teto = cat ? tetos[cat] || 0 : 0, gastoCat = cat ? r.porCat[cat] || 0 : 0;
+  const temGraf = (serieA.length > 1 && agoraAte > 0) || serieB[nA - 1] > 0;
+  const comConsult = r.consult > 0 && filtro !== "saida" && !cat && !banco && !termo;
+  const catsVer = todasCats || cats.length <= 5 ? cats : cats.filter((c, k) => k < 4 || c[0] === cat);
   return (
     <div className="page g4">
       <TopBar eyebrow={`${nomeMes} de ${m.getFullYear()}`} title="Gastos" act={act} tema={tema} />
@@ -556,27 +791,23 @@ function GastosTab({ db, act, tema }) {
         <div className="col">
           <Topo rotulo={<>Saiu em <b>{nomeMes}</b>{ano}</>} valor={r.saiu} nav={{ ant: () => mudarMes(off - 1), prox: () => mudarMes(off + 1), podeProx: true }}
             apoio={<Comparacao agora={atual ? agoraAte : r.saiu} antes={atual ? antAte : serieB[nA - 1] || 0} nomeAnt={MES_LONGO[pm.getMonth()]} ateDia={atual ? hojeD : null} />}>
-            {(serieA.length > 1 && agoraAte > 0) || serieB[nA - 1] > 0 ? <Linha key={chave} n={Math.max(nM, nA)} series={[...(serieB[nA - 1] > 0 ? [{ v: serieB, fantasma: true }] : []), ...(serieA.length > 1 ? [{ v: serieA }] : [])]}
-              legenda={[{ t: nomeMes }, ...(serieB[nA - 1] > 0 ? [{ t: MES_LONGO[pm.getMonth()], fantasma: true }] : [])]} rotuloDir={atual ? "hoje" : `${nM} ${nomeMes.slice(0, 3)}`} rotulo={`Gastos acumulados em ${nomeMes}`} /> : null}
-            <div className="g4-resumo">
-              <span><small>Entrou</small><b className="mais">+{brl(r.entrou)}</b></span>
-              <span><small>{r.sobra >= 0 ? "Sobra" : "Faltam"}</small><b className={r.sobra >= 0 ? "" : "menos"}>{brl(Math.abs(r.sobra))}</b></span>
-              <span><small>Contas a pagar</small><b>{brl(r.aPagar)}</b></span>
-            </div>
+            {temGraf ? <div className="ps-topo-g"><GraficoLinha key={chave} n={Math.max(nM, nA)} altura={128}
+              series={[...(serieB[nA - 1] > 0 ? [{ v: serieB, tipo: "fantasma" }] : []), ...(serieA.length > 1 ? [{ v: serieA, tipo: "cheia" }] : [])]}
+              eixo={eixoDoMes(nM, atual ? hojeD - 1 : null, mesAb)}
+              legenda={[{ t: nomeMes }, ...(serieB[nA - 1] > 0 ? [{ t: MES_LONGO[pm.getMonth()], tipo: "fantasma" }] : [])]}
+              dica={i => <><small>{i + 1} de {mesAb}</small>{i < serieA.length ? brl(serieA[i]) : "—"}{serieB[i] != null && serieB[nA - 1] > 0 && <em>{antAb}: {brl(serieB[i])}</em>}</>}
+              rotulo={`Gastos acumulados em ${nomeMes}: ${brl(r.saiu)}`} /></div> : null}
+            <FluxoMes entrou={r.entrou} saiu={r.saiu} aPagar={r.aPagar} />
           </Topo>
 
-          {cats.length > 0 && <section aria-label="Gastos por categoria">
-            <div className="vz-head"><h3>Por categoria</h3><button className="link" onClick={() => act.abrirTeto()}>{Object.values(tetos).some(v => v > 0) ? "Tetos" : "Definir tetos"}</button></div>
-            <div className="vz-trilho">
-              {cats.map(([id, v]) => { const c = catDe(id), t = tetos[id] > 0 ? tetos[id] : 0, sobra = t - v; return (
-                <button key={id} type="button" className={"vz-card" + (cat === id ? " on" : cat ? " apaga" : "")} aria-pressed={cat === id} style={{ "--gc": `var(--g-${id}, var(--mode))` }} onClick={() => { setCat(cat === id ? null : id); vibrar("toque"); }}>
-                  <CatBolinha cat={c} p={t ? v / t : v / totalCat} />
-                  <span className="vz-card-n">{c.nome}</span>
-                  <b className="num vz-card-v"><Money v={v} /></b>
-                  {t ? <small className={sobra < 0 ? "acima" : ""}>{sobra >= 0 ? `/ ${brl(sobra)} sobrando` : `${brl(-sobra)} acima do teto`}</small> : <small>{Math.round((v / totalCat) * 100)}% do mês</small>}
-                </button>
-              ); })}
+          {cats.length > 0 && <section className="ps-card ps-cats" aria-label="Gastos por categoria">
+            <div className="ps-card-h"><span>Por categoria</span><button className="link" onClick={() => act.abrirTeto()}>{Object.values(tetos).some(v => v > 0) ? "Tetos" : "Definir tetos"}</button></div>
+            <BarraCategorias cats={cats.filter(c => c[1] > 0)} total={totalCat} />
+            <div className="ps-cats-lista">
+              {catsVer.map(([id, v]) => <LinhaCategoria key={id} id={id} v={v} total={totalCat} teto={tetos[id] > 0 ? tetos[id] : 0} on={cat === id} apaga={!!cat && cat !== id}
+                onClick={() => { setCat(cat === id ? null : id); setFiltro("tudo"); vibrar("toque"); }} />)}
             </div>
+            {cats.length > 5 && <button type="button" className="link ps-card-pe" onClick={() => setTodasCats(!todasCats)}>{todasCats ? "Ver menos" : `Ver as ${cats.length} categorias`}</button>}
           </section>}
 
           {cat && <section className="g4-foco">
@@ -591,7 +822,7 @@ function GastosTab({ db, act, tema }) {
           <ParaOndeFoi db={db} chave={chave} act={act} />
         </div>
         <div className="col">
-          <div className="panel g4-lanc">
+          <div className="panel g4-lanc ps-ativ">
             {sel ? (
               <div className="panel-head sel-head">
                 <h3>{sel.size ? `${sel.size} ${sel.size === 1 ? "selecionado" : "selecionados"}` : "Toque para selecionar"}</h3>
@@ -601,8 +832,8 @@ function GastosTab({ db, act, tema }) {
                 </span>
               </div>
             ) : (
-              <div className="g4-lanc-topo">
-                <h3>{cat ? ct.nome : <>{nomeMes} <span>{m.getFullYear()}</span></>}</h3>
+              <div className="g4-lanc-topo ps-ativ-topo">
+                <h3>{termo ? "Busca" : cat ? ct.nome : <>{nomeMes} <span>{m.getFullYear()}</span></>}</h3>
                 <span className="panel-acts">
                   {lista.length > 0 && <button className="link" onClick={() => setSel(new Set())}><I.check /> Selecionar</button>}
                   <button className="link" onClick={act.importar}><I.upload /> Importar</button>
@@ -610,24 +841,34 @@ function GastosTab({ db, act, tema }) {
                 </span>
               </div>
             )}
-            {!cat && <div className="chips" role="tablist">
-              {[["tudo", "Tudo"], ["saida", "Gastos"], ["entrada", "Entradas"]].map(([v, l]) => <button key={v} role="tab" aria-selected={filtro === v} className={"fchip" + (filtro === v ? " on" : "")} onClick={() => setFiltro(v)}>{l}</button>)}
-            </div>}
-            {cat && <button className="c2-filtro" onClick={() => setCat(null)}><span className="ci" style={catVars(ct)}><CatIcon cat={ct} /></span>Só {ct.nome.toLowerCase()}<I.x /></button>}
-            {r.consult > 0 && filtro !== "saida" && !cat && (
-              <div className="txn">
-                <span className="txn-av cat" style={catVars({ cor: "azul" })}><I.logo /></span>
-                <span className="mid"><span className="nm">Consultório</span><span className="sb">Líquido das sessões do mês</span></span>
-                <span className="amt pos">+<Money v={r.consult} /></span>
+            <label className="ps-busca">
+              <I.search />
+              <input type="search" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar" enterKeyHint="search" autoComplete="off" aria-label="Buscar nos lançamentos de todos os meses" />
+              {busca && <button type="button" onClick={() => setBusca("")} aria-label="Limpar a busca"><I.x /></button>}
+            </label>
+            <div className="ps-chips" role="group" aria-label="Filtros">
+              <button type="button" className={"ps-chip" + (!algumFiltro ? " on" : "")} aria-pressed={!algumFiltro} onClick={limpar}>Tudo</button>
+              {[["saida", "Saídas"], ["entrada", "Entradas"]].map(([v, l]) => <button key={v} type="button" className={"ps-chip" + (!cat && filtro === v ? " on" : "")} aria-pressed={!cat && filtro === v}
+                onClick={() => { setCat(null); setFiltro(!cat && filtro === v ? "tudo" : v); vibrar("toque"); }}>{l}</button>)}
+              {bancos.map(b => <button key={b} type="button" className={"ps-chip" + (banco === b ? " on" : "")} aria-pressed={banco === b} onClick={() => { setBanco(banco === b ? null : b); vibrar("toque"); }}><SeloBanco banco={b} />{b}</button>)}
+              {catsChip.map(id => { const c = catDe(id); return <button key={id} type="button" className={"ps-chip cat" + (cat === id ? " on" : "")} style={catVars(c)} aria-pressed={cat === id} onClick={() => { setCat(cat === id ? null : id); setFiltro("tudo"); vibrar("toque"); }}><span className="ps-chip-cor" aria-hidden="true" />{c.nome}</button>; })}
+            </div>
+            {termo && <div className="ps-ativ-info">{lista.length ? `${lista.length} ${lista.length === 1 ? "lançamento" : "lançamentos"} em todos os meses` : `Nada com “${busca.trim()}”${algumFiltro ? " nesses filtros" : ""}.`}</div>}
+            {comConsult && (
+              <div className="ps-at">
+                <span className="ps-at-av"><span className="txn-av cat" style={catVars({ cor: "azul" })}><I.logo /></span></span>
+                <span className="ps-at-mid"><span className="ps-at-nm">Consultório</span><span className="ps-at-sb">Líquido das sessões</span></span>
+                <span className="ps-at-v entra">+{brl(r.consult)}</span>
               </div>
             )}
-            {grupos.length === 0 && !(r.consult > 0 && filtro !== "saida" && !cat) && <div className="empty com-ilustra"><Ilustra n="arquivo" /><b>Nada por aqui neste mês</b>Anote falando ou traga tudo do banco de uma vez.<button className="ghost-chip" onClick={act.importar}><I.upload /> Importar extrato</button></div>}
-            {grupos.map(g => { const saiu = soma(g.itens.filter(l => l.tipo === "saida"), l => l.valor); return (
-              <React.Fragment key={g.d}>
-                <div className="day-sep g4-dia"><span>{relativo(g.d)}</span>{saiu > 0 && g.itens.length > 1 && <small className="num">−{brl(saiu)}</small>}</div>
-                {g.itens.map(l => <LancRow key={l.id} l={l} act={act} sel={!!sel} marcado={!!sel && sel.has(l.id)} onMarcar={marcar} onSegurar={segurar} />)}
-              </React.Fragment>
-            ); })}
+            {grupos.length === 0 && !comConsult && !termo && <div className="empty com-ilustra"><Ilustra n="arquivo" /><b>{algumFiltro ? "Nada nesses filtros" : "Nada por aqui neste mês"}</b>{algumFiltro ? <button className="ghost-chip" onClick={limpar}><I.x /> Tirar os filtros</button> : <>Anote falando ou traga tudo do banco de uma vez.<button className="ghost-chip" onClick={act.importar}><I.upload /> Importar extrato</button></>}</div>}
+            {visiveis.map(g => (
+              <section key={g.d} className="ps-grupo" aria-label={tituloDia(g.d, hoje)} style={{ containIntrinsicSize: `auto ${alturaGrupo(g)}px` }}>
+                <div className="ps-dia"><h4>{tituloDia(g.d, hoje)}</h4>{g.saiu > 0 && g.itens.length > 1 && <small>−{brl(g.saiu)}</small>}</div>
+                {g.itens.map(l => <LancRow key={l.id} l={l} onAbrir={abrir} sel={!!sel} marcado={!!sel && sel.has(l.id)} onMarcar={marcar} onSegurar={segurar} hoje={hoje} oculto={ESCONDER} />)}
+              </section>
+            ))}
+            {mostra < lista.length && <div ref={fimRef} className="ps-ativ-mais"><button className="link" onClick={() => setMostra(k => k + LOTE * 2)}>Mostrar mais ({lista.length - mostra})</button></div>}
           </div>
         </div>
       </div>
@@ -648,16 +889,36 @@ function GastosTab({ db, act, tema }) {
 function ReguaContas({ contas, chave, hoje }) {
   const [a, mm] = chave.split("-").map(Number), n = new Date(a, mm, 0).getDate(), dh = Number(hoje.slice(8, 10));
   const pos = d => `${((Math.min(d, n) - 1) / (n - 1)) * 100}%`;
-  // contas que vencem perto umas das outras viram uma pilha só (senão as bolinhas se amontoam)
-  const ord = contas.map(c => ({ c, d: Number(vencimento(c, chave).slice(8, 10)) })).sort((x, y) => x.d - y.d);
-  const grupos = []; ord.forEach(x => { const g = grupos[grupos.length - 1]; if (g && x.d - g.ini <= Math.max(2, Math.round(n / 12))) g.itens.push(x); else grupos.push({ ini: x.d, itens: [x] }); });
+  // a largura de verdade da régua: decide quantos dias cabem entre duas logos sem uma cortar a outra
+  const ref = useRef(null);
+  const [W, setW] = useState(280);
+  useLayoutEffect(() => {
+    const el = ref.current; if (!el) return;
+    setW(el.clientWidth || 280);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width) || 280));
+    ro.observe(el); return () => ro.disconnect();
+  }, []);
+  const minDias = 46 / (W / (n - 1)); // 46 px entre os centros: a logo (32) e o "+2"
+  // contas que vencem perto umas das outras viram uma pilha só: na frente a logo da que mais importa
+  // (atrasada, depois a que falta pagar) e um "+2" com quantas mais (logos lado a lado se cortavam)
+  const ord = contas.map(c => ({ c, d: Number(vencimento(c, chave).slice(8, 10)), paga: !!(c.pagas && c.pagas[chave]) })).sort((x, y) => x.d - y.d);
+  let grupos = ord.map(x => ({ itens: [x], meio: x.d }));
+  for (let k = 1; k < grupos.length;) {
+    const g0 = grupos[k - 1], g1 = grupos[k];
+    if (g1.meio - g0.meio < minDias) { const itens = [...g0.itens, ...g1.itens]; grupos.splice(k - 1, 2, { itens, meio: itens.reduce((s, x) => s + x.d, 0) / itens.length }); k = Math.max(1, k - 1); }
+    else k++;
+  }
+  const peso = x => (x.paga ? 2 : x.d < dh ? 0 : 1);
   return (
-    <div className="g4-regua" aria-hidden="true">
+    <div className="g4-regua" aria-hidden="true" ref={ref}>
       <div className="g4-regua-linha"><i style={{ width: pos(dh) }} /></div>
-      {grupos.map((g, gi) => { const meio = g.itens.reduce((s, x) => s + x.d, 0) / g.itens.length, abertas = g.itens.filter(x => !(x.c.pagas && x.c.pagas[chave])), todasPagas = !abertas.length, atrasada = abertas.some(x => x.d < dh); return (
-        <span key={gi} className={"g4-regua-c" + (todasPagas ? " paga" : atrasada ? " atrasada" : "")} style={{ left: pos(meio), "--k": 0 }} title={g.itens.map(x => `${x.c.nome} (dia ${x.d})`).join(", ")}>
-          <span className="g4-regua-pilha">{g.itens.slice(0, 3).map(({ c }) => { const mid = c.semLogo ? null : c.marca || (acharMarca(c.nome) || {}).id; return <MarcaLogo key={c.id} marca={mid} site={c.logoSite} nome={c.nome} cat={catDe(c.cat)} className="txn-av" />; })}</span>
-          {g.itens.length > 3 && <em>+{g.itens.length - 3}</em>}
+      {grupos.map((g, gi) => { const meio = g.meio, abertas = g.itens.filter(x => !x.paga), todasPagas = !abertas.length, atrasada = abertas.some(x => x.d < dh);
+        const { c } = [...g.itens].sort((a, b) => peso(a) - peso(b) || a.d - b.d)[0], mid = c.semLogo ? null : c.marca || (acharMarca(c.nome) || {}).id;
+        return (
+        <span key={gi} className={"g4-regua-c" + (g.itens.length > 1 ? " varias" : "") + (todasPagas ? " paga" : atrasada ? " atrasada" : "")} style={{ left: pos(meio), "--k": 0 }} title={g.itens.map(x => `${x.c.nome} (dia ${x.d})`).join(", ")}>
+          <span className="g4-regua-pilha"><MarcaLogo key={c.id} marca={mid} site={c.logoSite} nome={c.nome} cat={catDe(c.cat)} className="txn-av" /></span>
+          {g.itens.length > 1 && <em>+{g.itens.length - 1}</em>}
           {todasPagas && <i><I.check /></i>}
           <small>{g.itens.length > 1 && g.itens[0].d !== g.itens[g.itens.length - 1].d ? `${g.itens[0].d}–${g.itens[g.itens.length - 1].d}` : g.itens[0].d}</small>
         </span>
@@ -736,7 +997,8 @@ function ContasTab({ db, act, tema }) {
 }
 
 // campos que outras telas guardam no lançamento (transporte, extrato, voz): editar aqui não pode apagar
-const extrasDe = l => { if (!l) return {}; const o = {}; ["sub", "litros", "precoLitro", "combustivel", "km", "manut", "importId", "via"].forEach(k => { if (l[k] !== undefined) o[k] = l[k]; }); return o; };
+// (banco: de onde veio pelo Open Finance; casaId: o gasto também está na casa; rendaMes: o salário lançado sozinho)
+const extrasDe = l => { if (!l) return {}; const o = {}; ["sub", "litros", "precoLitro", "combustivel", "km", "manut", "importId", "via", "banco", "casaId", "rendaMes", "obs"].forEach(k => { if (l[k] !== undefined) o[k] = l[k]; }); return o; };
 // Início pessoal: a casa compartilhada (ou o convite para criar uma)
 function CasaCartao({ casa, onAbrir }) {
   if (!casa || ["carregando", "indisponivel", "erro"].includes(casa.estado) && !casa.casa) return null;
@@ -809,9 +1071,12 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onVoz, onFoto, onS
         {entendi && entendi.valor > 0 && <div className="voice-ok"><I.check /><span>Entendi: {entendi.tipo === "entrada" ? "entrada" : "gasto"} de {entendi.moeda ? `${fmtMoeda(entendi.valorOrig, entendi.moeda)} (${brlReal(entendi.valor)})` : brlReal(entendi.valor)} em {catDe(entendi.cat).nome}{entendi.off ? (entendi.off === 1 ? ", ontem" : ", anteontem") : ", hoje"}. Confira e salve.</span></div>}
       </>}
       <Seg big value={tipo} onChange={x => { setTipo(x); setCat(null); }} options={[{ v: "saida", l: "Gasto" }, { v: "entrada", l: "Entrada" }]} />
-      <label className={"big-amt" + (tipo === "entrada" ? " in" : "")} htmlFor="l-valor"><span>{simb}</span>
-        <input id="l-valor" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" autoFocus={!inicial} placeholder="0,00" value={valor} onChange={e => setValor(soNumero(e.target.value))} aria-label="Valor" />
+      {/* o campo tem a largura do número (medida por uma cópia escondida): o "R$" fica colado nele, e os dois juntos no centro */}
+      <label className={"big-amt ps-valor" + (tipo === "entrada" ? " in" : "")} htmlFor="l-valor"><span>{simb}</span>
+        <span className="ps-valor-campo"><span className="ps-valor-medida" aria-hidden="true">{valor || "0,00"}</span>
+          <input id="l-valor" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" autoFocus={!inicial} placeholder="0,00" value={valor} onChange={e => setValor(soNumero(e.target.value))} aria-label="Valor" /></span>
       </label>
+      {inicial && nomeBanco(inicial.banco) && <div className="ps-lanc-banco"><span className="ps-at-av"><MarcaLogo marca={(acharMarca(nomeBanco(inicial.banco)) || {}).id} nome={nomeBanco(inicial.banco)} className="txn-av" /></span><span><b>{nomeBanco(inicial.banco)}</b><small>Veio do banco pelo Open Finance. Mudar aqui não muda lá.</small></span></div>}
       <div className="moeda-linha">
         <select className="moeda-sel" value={moeda} onChange={e => setMoeda(e.target.value)} aria-label="Moeda">
           <option value="BRL">🇧🇷 Real</option>

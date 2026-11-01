@@ -7,53 +7,57 @@ img { max-width: 100%; }
 
 /* Layout: mobile primeiro (uma coluna, barra flutuante embaixo). A partir de 900px: barra lateral fixa à esquerda,
    conteúdo em duas colunas e painéis viram janelas centralizadas. Dois modos: Consultório (azul) e Pessoal (verde). */
+/* Escuro: preto fosco e cinzas grafite (nada de azul-marinho), cartões com borda bem sutil e um reflexo leve no
+   topo (--brilho-cartao). Os mesmos tons do app de celular (app-celular/src/constants/theme.ts). */
 :root{
-  --bg:#0A0C11; --bg-glow:#171B24; --dot:rgba(255,255,255,.045);
+  --bg:#0A0A0B; --bg-glow:#141416; --dot:rgba(255,255,255,.04);
   /* cores de gráfico por categoria (validadas para o tema escuro) */
   --g-mercado:#059F6B; --g-casa:#4459F6; --g-transporte:#03A3C3; --g-comida:#D6751E; --g-saude:#D74B86; --g-lazer:#7653E4; --g-compras:#D14037; --g-outros:#B68B0E;
-  --surface:#15171D; --surface-2:#1E2129; --surface-3:#292D36; --card:#1A1D24; --card-shadow:none;
-  --line:#2A2E37; --fg:#F2F4F8; --muted:#8A91A0; --faint:#5A606D;
-  --accent:#2B46FF; --accent-hi:#4A62FF; --accent-soft:#1B2550; --accent-ink:#8FA4FF; --avatar-ink:#AFC0FF;
-  --mint:#46E0A4; --mint-soft:#123327; --mint-btn:#46E0A4; --loja:#FFA25E; --loja-soft:#3A2414;
-  --amber:#FFB648; --amber-soft:#3A2A12; --amber-solid:#FFB648;
-  --rose:#FF7272; --rose-soft:#3A1719; --now:#FF5A6E;
-  --nav-bg:#1C1F27; --nav-fg:#8A91A0; --side-bg:rgba(21,23,29,.86);
-  --menu-a:#23262E; --menu-b:#111317; --menu-line:rgba(255,255,255,.14); --menu-hi:rgba(255,255,255,.10); --menu-hi2:rgba(255,255,255,.06);
-  --scrim:rgba(3,4,8,.62); --push-bg:rgba(36,38,46,.9);
-  --g-surface:rgba(20,22,28,.46); --g-surface-2:rgba(255,255,255,.08); --g-surface-3:rgba(255,255,255,.16); --g-card:rgba(20,22,28,.44); --g-line:rgba(255,255,255,.13); --g-hi:rgba(255,255,255,.12);
-  --g-sheet:rgba(22,24,30,.74); --g-nav:rgba(24,27,34,.72); --g-shadow:rgba(0,0,0,.45); --g-amber:rgba(58,42,18,.62); --veil-a:rgba(10,12,17,.15); --veil-b:rgba(10,12,17,.7);
+  --surface:#161618; --surface-2:#1E1E21; --surface-3:#29292D; --card:#161618;
+  --card-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+  --brilho-cartao:linear-gradient(to bottom,rgba(255,255,255,.028),rgba(255,255,255,0) 40%);
+  --line:rgba(255,255,255,.075); --line-forte:rgba(255,255,255,.12); --fg:#F4F4F5; --muted:#9B9BA3; --faint:#606068;
+  --accent:#2B46FF; --accent-hi:#4A62FF; --accent-soft:#171C3E; --accent-ink:#8FA4FF; --avatar-ink:#AFC0FF;
+  --mint:#46E0A4; --mint-soft:#0F2A20; --mint-btn:#46E0A4; --loja:#FFA25E; --loja-soft:#33200F;
+  --amber:#FFB648; --amber-soft:#33250F; --amber-solid:#FFB648;
+  --rose:#FF7272; --rose-soft:#341417; --now:#FF5A6E;
+  --nav-bg:#1E1E21; --nav-fg:#9B9BA3; --side-bg:rgba(16,16,18,.9);
+  --menu-a:#232326; --menu-b:#141416; --menu-line:rgba(255,255,255,.12); --menu-hi:rgba(255,255,255,.09); --menu-hi2:rgba(255,255,255,.05);
+  --scrim:rgba(0,0,0,.62); --push-bg:rgba(34,34,38,.92);
+  --g-surface:rgba(22,22,24,.5); --g-surface-2:rgba(255,255,255,.08); --g-surface-3:rgba(255,255,255,.16); --g-card:rgba(22,22,24,.48); --g-line:rgba(255,255,255,.13); --g-hi:rgba(255,255,255,.12);
+  --g-sheet:rgba(20,20,22,.8); --g-nav:rgba(22,22,24,.82); --g-shadow:rgba(0,0,0,.45); --g-amber:rgba(51,37,15,.66); --veil-a:rgba(10,10,11,.15); --veil-b:rgba(10,10,11,.7);
   --f-display:"Sora","Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
   color-scheme:dark;
 }
 @media (prefers-color-scheme:light){
   :root:not([data-theme="dark"]):not([data-app-theme="dark"]){
-    --bg:#F1F2F6; --bg-glow:#FFFFFF; --dot:rgba(18,20,40,.07); --g-mercado:#059F6B; --g-casa:#3948E4; --g-transporte:#118FAA; --g-comida:#DD7B28; --g-saude:#D04480; --g-lazer:#6B46D7; --g-compras:#D8473D; --g-outros:#D4A30D;
-    --surface:#FFFFFF; --surface-2:#F1F2F6; --surface-3:#E2E4EC; --card:#FFFFFF; --card-shadow:0 1px 2px rgba(18,20,40,.05),0 4px 16px rgba(18,20,40,.06);
-    --line:#E4E6ED; --fg:#12141B; --muted:#676D7D; --faint:#A3A8B4;
+    --bg:#F2F2F5; --bg-glow:#FFFFFF; --dot:rgba(17,17,20,.07); --g-mercado:#059F6B; --g-casa:#3948E4; --g-transporte:#118FAA; --g-comida:#DD7B28; --g-saude:#D04480; --g-lazer:#6B46D7; --g-compras:#D8473D; --g-outros:#D4A30D;
+    --surface:#FFFFFF; --surface-2:#F3F3F6; --surface-3:#E5E5EB; --card:#FFFFFF; --card-shadow:0 1px 2px rgba(17,17,26,.04),0 6px 18px rgba(17,17,26,.06); --brilho-cartao:none;
+    --line:rgba(17,17,20,.08); --line-forte:rgba(17,17,20,.13); --fg:#111114; --muted:#6B6B74; --faint:#A6A6AF;
     --accent-soft:#E6EAFF; --accent-ink:#2338C9; --avatar-ink:#2B46FF;
     --mint:#0E9466; --mint-soft:#DDF5EA; --mint-btn:#2BD08F; --loja:#B4530F; --loja-soft:#FFEBDC;
     --amber:#9A6200; --amber-soft:#FFF0D2;
     --rose:#D63A47; --rose-soft:#FFE5E7;
-    --nav-bg:#15171D; --side-bg:rgba(255,255,255,.88);
-    --menu-a:#FFFFFF; --menu-b:#F3F4F8; --menu-line:rgba(18,20,40,.10); --menu-hi:rgba(255,255,255,.9); --menu-hi2:rgba(18,20,40,.035);
-    --scrim:rgba(18,20,27,.36); --push-bg:rgba(255,255,255,.94);
-    --g-surface:rgba(255,255,255,.58); --g-surface-2:rgba(255,255,255,.46); --g-surface-3:rgba(255,255,255,.75); --g-card:rgba(255,255,255,.6); --g-line:rgba(255,255,255,.65); --g-hi:rgba(255,255,255,.85); --g-sheet:rgba(255,255,255,.8); --g-nav:rgba(21,23,29,.72); --g-shadow:rgba(255,255,255,.6); --g-amber:rgba(255,240,210,.7); --veil-a:rgba(241,242,246,.1); --veil-b:rgba(241,242,246,.62);
+    --nav-bg:#18181B; --side-bg:rgba(255,255,255,.9);
+    --menu-a:#FFFFFF; --menu-b:#F5F5F8; --menu-line:rgba(17,17,20,.10); --menu-hi:rgba(255,255,255,.9); --menu-hi2:rgba(17,17,20,.035);
+    --scrim:rgba(17,17,20,.36); --push-bg:rgba(255,255,255,.94);
+    --g-surface:rgba(255,255,255,.58); --g-surface-2:rgba(255,255,255,.46); --g-surface-3:rgba(255,255,255,.75); --g-card:rgba(255,255,255,.6); --g-line:rgba(255,255,255,.65); --g-hi:rgba(255,255,255,.85); --g-sheet:rgba(255,255,255,.8); --g-nav:rgba(24,24,27,.72); --g-shadow:rgba(255,255,255,.6); --g-amber:rgba(255,240,210,.7); --veil-a:rgba(242,242,245,.1); --veil-b:rgba(242,242,245,.62);
     color-scheme:light;
   }
 }
 :root[data-theme="light"]:not([data-app-theme="dark"]),:root[data-app-theme="light"]{
-  --bg:#F1F2F6; --bg-glow:#FFFFFF; --dot:rgba(18,20,40,.07); --g-mercado:#059F6B; --g-casa:#3948E4; --g-transporte:#118FAA; --g-comida:#DD7B28; --g-saude:#D04480; --g-lazer:#6B46D7; --g-compras:#D8473D; --g-outros:#D4A30D;
-  --surface:#FFFFFF; --surface-2:#F1F2F6; --surface-3:#E2E4EC; --card:#FFFFFF; --card-shadow:0 1px 2px rgba(18,20,40,.05),0 4px 16px rgba(18,20,40,.06);
-  --line:#E4E6ED; --fg:#12141B; --muted:#676D7D; --faint:#A3A8B4;
+  --bg:#F2F2F5; --bg-glow:#FFFFFF; --dot:rgba(17,17,20,.07); --g-mercado:#059F6B; --g-casa:#3948E4; --g-transporte:#118FAA; --g-comida:#DD7B28; --g-saude:#D04480; --g-lazer:#6B46D7; --g-compras:#D8473D; --g-outros:#D4A30D;
+  --surface:#FFFFFF; --surface-2:#F3F3F6; --surface-3:#E5E5EB; --card:#FFFFFF; --card-shadow:0 1px 2px rgba(17,17,26,.04),0 6px 18px rgba(17,17,26,.06); --brilho-cartao:none;
+  --line:rgba(17,17,20,.08); --line-forte:rgba(17,17,20,.13); --fg:#111114; --muted:#6B6B74; --faint:#A6A6AF;
   --accent-soft:#E6EAFF; --accent-ink:#2338C9; --avatar-ink:#2B46FF;
   --mint:#0E9466; --mint-soft:#DDF5EA; --mint-btn:#2BD08F; --loja:#B4530F; --loja-soft:#FFEBDC;
   --amber:#9A6200; --amber-soft:#FFF0D2;
   --rose:#D63A47; --rose-soft:#FFE5E7;
-  --nav-bg:#15171D; --side-bg:rgba(255,255,255,.88);
-  --menu-a:#FFFFFF; --menu-b:#F3F4F8; --menu-line:rgba(18,20,40,.10); --menu-hi:rgba(255,255,255,.9); --menu-hi2:rgba(18,20,40,.035);
-  --scrim:rgba(18,20,27,.36); --push-bg:rgba(255,255,255,.94);
-  --g-surface:rgba(255,255,255,.58); --g-surface-2:rgba(255,255,255,.46); --g-surface-3:rgba(255,255,255,.75); --g-card:rgba(255,255,255,.6); --g-line:rgba(255,255,255,.65); --g-hi:rgba(255,255,255,.85); --g-sheet:rgba(255,255,255,.8); --g-nav:rgba(21,23,29,.72); --g-shadow:rgba(255,255,255,.6); --g-amber:rgba(255,240,210,.7); --veil-a:rgba(241,242,246,.1); --veil-b:rgba(241,242,246,.62);
+  --nav-bg:#18181B; --side-bg:rgba(255,255,255,.9);
+  --menu-a:#FFFFFF; --menu-b:#F5F5F8; --menu-line:rgba(17,17,20,.10); --menu-hi:rgba(255,255,255,.9); --menu-hi2:rgba(17,17,20,.035);
+  --scrim:rgba(17,17,20,.36); --push-bg:rgba(255,255,255,.94);
+  --g-surface:rgba(255,255,255,.58); --g-surface-2:rgba(255,255,255,.46); --g-surface-3:rgba(255,255,255,.75); --g-card:rgba(255,255,255,.6); --g-line:rgba(255,255,255,.65); --g-hi:rgba(255,255,255,.85); --g-sheet:rgba(255,255,255,.8); --g-nav:rgba(24,24,27,.72); --g-shadow:rgba(255,255,255,.6); --g-amber:rgba(255,240,210,.7); --veil-a:rgba(242,242,245,.1); --veil-b:rgba(242,242,245,.62);
   color-scheme:light;
 }
 
@@ -206,8 +210,10 @@ button:disabled{cursor:default}
 .rg.on{background:var(--surface-3);color:var(--fg)}
 .bal-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}
 .bt{background:var(--surface-2);border-radius:18px;padding:10px 12px;min-width:0;text-align:left;display:flex;flex-direction:column}
-.bt span{font-size:12.5px;font-weight:700;color:var(--muted)}
-.bt b{font-family:var(--f-display);font-weight:600;font-size:15.5px;margin-top:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt>span{font-size:12.5px;font-weight:700;color:var(--muted)} /* só o rótulo: ".bt span" pegava também o valor (Money), que saía miúdo e cinza */
+.bt b{font-family:var(--f-display);font-weight:600;font-size:16.5px;margin-top:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt b .mny .cur{font-size:.62em;vertical-align:.5em;opacity:.65}
+.bt b .mny .cents{opacity:.6}
 
 /* Quadros com ícone (estilo carteira) */
 .tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -841,6 +847,12 @@ html[data-vt="modo"]::view-transition-new(root) { animation: vt-modo-entra .42s 
 @keyframes vt-sai-dir { to { opacity: 0; transform: translate3d(28px, 0, 0); } }
 @keyframes vt-entra-dir { from { opacity: 0; transform: translate3d(40px, 0, 0); } }
 @keyframes vt-entra-esq { from { opacity: 0; transform: translate3d(-40px, 0, 0); } }
+/* troca de tema: o tema novo aparece por cima do antigo num esmaecer só (barras juntas), e nenhuma peça anima a
+   própria cor enquanto isso (cada uma mudando no seu tempo é o que parecia piscar) */
+html[data-vt="tema"]::view-transition-old(root), html[data-vt="tema"]::view-transition-old(barra-baixo), html[data-vt="tema"]::view-transition-old(topo-fixo), html[data-vt="tema"]::view-transition-old(avisos) { animation: none; }
+html[data-vt="tema"]::view-transition-new(root), html[data-vt="tema"]::view-transition-new(barra-baixo), html[data-vt="tema"]::view-transition-new(topo-fixo), html[data-vt="tema"]::view-transition-new(avisos) { animation: vt-tema .32s ease both; }
+@keyframes vt-tema { from { opacity: 0; } }
+html.tema-trocando *, html.tema-trocando *::before, html.tema-trocando *::after { transition: none !important; }
 @keyframes vt-modo-sai { to { opacity: 0; transform: scale(.97); } }
 @keyframes vt-modo-entra { from { opacity: 0; transform: scale(1.03); } }
 /* aviso de instalar */
@@ -879,10 +891,10 @@ main.app.puxando { transition: none; }
   --vidro-brilho: linear-gradient(to bottom, rgba(255, 255, 255, .075), rgba(255, 255, 255, 0) 42%);
   --vidro-borda: rgba(255, 255, 255, .14);
   --vidro-sombra: inset 0 1px 0 rgba(255, 255, 255, .2), inset 0 0 0 1px rgba(255, 255, 255, .035), inset 0 -1px 0 rgba(0, 0, 0, .18), 0 1px 1px rgba(0, 0, 0, .1), 0 12px 32px rgba(0, 0, 0, .22);
-  --mat-ultrafino: rgba(26, 29, 37, .5);
-  --mat-fino: rgba(24, 27, 34, .58);
-  --mat-regular: rgba(22, 24, 31, .72);
-  --mat-grosso: rgba(20, 22, 28, .84);
+  --mat-ultrafino: rgba(28, 28, 31, .5);
+  --mat-fino: rgba(26, 26, 29, .58);
+  --mat-regular: rgba(22, 22, 25, .74);
+  --mat-grosso: rgba(20, 20, 22, .86);
 }
 @media (prefers-color-scheme: light) { :root:not([data-app-theme="dark"]) {
   --vidro-brilho: linear-gradient(to bottom, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 45%);
@@ -1008,7 +1020,7 @@ main.app { animation: entra .42s cubic-bezier(.2, .8, .2, 1) backwards; }
   --vidro-brilho: linear-gradient(to bottom, rgba(255, 255, 255, .05), rgba(255, 255, 255, 0) 55%);
   --vidro-borda: transparent;
   --vidro-sombra: inset 0 0 0 .5px rgba(255, 255, 255, .26), inset 1.5px 1.5px 1px -1px rgba(255, 255, 255, .5), inset -1px -1px 1px -.5px rgba(255, 255, 255, .2), inset 0 0 14px rgba(255, 255, 255, .05), 0 8px 24px rgba(0, 0, 0, .16);
-  --mat-ultrafino: rgba(255, 255, 255, .07); --mat-fino: rgba(28, 31, 40, .36); --mat-regular: rgba(26, 29, 37, .55); --mat-grosso: rgba(22, 24, 31, .78);
+  --mat-ultrafino: rgba(255, 255, 255, .07); --mat-fino: rgba(28, 28, 31, .38); --mat-regular: rgba(24, 24, 27, .6); --mat-grosso: rgba(20, 20, 22, .82);
 }
 @media (prefers-color-scheme: light) { :root:not([data-app-theme="dark"]) {
   --vidro-brilho: linear-gradient(to bottom, rgba(255, 255, 255, .3), rgba(255, 255, 255, 0) 55%);
@@ -1194,13 +1206,13 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 /* ===== Avisos do sistema: nova versão e sem internet (src/avisos.jsx) ===== */
 .avisos-sis { position: fixed; z-index: 75; left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + 10px); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 14px; pointer-events: none; }
 .avisos-sis > * { pointer-events: auto; animation: aviso-desce .42s cubic-bezier(.2, 1.2, .4, 1) both; }
-.aviso-pilula { display: flex; align-items: center; gap: 8px; padding: 8px 14px 8px 10px; border-radius: 999px; font-size: 13.5px; font-weight: 600; color: #F2F4F8; background: rgba(28, 31, 40, .9); border: 1px solid rgba(255, 255, 255, .1); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 10px 30px rgba(0, 0, 0, .3); max-width: 100%; }
+.aviso-pilula { display: flex; align-items: center; gap: 8px; padding: 8px 14px 8px 10px; border-radius: 999px; font-size: 13.5px; font-weight: 600; color: #F4F4F5; background: rgba(30, 30, 33, .92); border: 1px solid rgba(255, 255, 255, .1); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); box-shadow: 0 10px 30px rgba(0, 0, 0, .3); max-width: 100%; }
 .aviso-pilula i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; }
 .aviso-pilula svg { width: 14px; height: 14px; }
 .aviso-pilula b { font-weight: 800; }
 .aviso-pilula.offline i { background: rgba(255, 182, 72, .18); color: #FFB648; }
 .aviso-pilula.online i { background: rgba(70, 224, 164, .18); color: #46E0A4; }
-.aviso-versao { width: min(100%, 460px); display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; border-radius: 22px; color: #F2F4F8; background: rgba(24, 27, 36, .94); border: 1px solid rgba(255, 255, 255, .1); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: 0 16px 40px rgba(0, 0, 0, .35); }
+.aviso-versao { width: min(100%, 460px); display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; border-radius: 22px; color: #F4F4F5; background: rgba(26, 26, 29, .95); border: 1px solid rgba(255, 255, 255, .1); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: 0 16px 40px rgba(0, 0, 0, .35); }
 .aviso-versao > i { width: 36px; height: 36px; border-radius: 12px; flex: none; display: grid; place-items: center; color: #fff; background: linear-gradient(#06CFFF, #1167F6 70%, #2B2CF0); }
 .aviso-versao > i svg { width: 18px; height: 18px; }
 .aviso-versao > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
@@ -1524,51 +1536,7 @@ button.catrow:active { background: var(--surface-2); }
 .vozb-msg.ela p[role="button"] { cursor: pointer; }
 .vozb-msg.ela p[role="button"]:active { transform: scale(.98); }
 
-/* ---------- Conversa com a Bolinha: tela própria, como um app de mensagens ---------- */
-.chat-ia { position: fixed; left: 0; right: 0; top: 0; bottom: var(--teclado, 0px); z-index: 55; display: flex; flex-direction: column; background-color: var(--bg); background-image: radial-gradient(120% 55% at 50% 0%, var(--bg-glow), var(--bg) 70%); animation: chat-entra .4s cubic-bezier(.16, 1, .3, 1); }
-@keyframes chat-entra { from { opacity: 0; transform: translateY(28px); } }
-.chat-topo { flex: none; display: flex; align-items: center; gap: 10px; padding: calc(10px + env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 10px max(14px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 84%, transparent); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
-.chat-quem { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
-.chat-bola { flex: none; width: 44px; height: 44px; display: grid; place-items: center; }
-.chat-bola .bolinha { width: 44px; height: 44px; }
-.chat-quem > span:last-child { display: flex; flex-direction: column; min-width: 0; }
-.chat-quem b { font-family: var(--f-display); font-weight: 600; font-size: 18px; letter-spacing: -.01em; }
-.chat-quem small { color: var(--muted); font-size: 13px; font-weight: 700; }
-.chat-ia.ouvindo .chat-quem small, .chat-ia.falando .chat-quem small { color: var(--mode-text); }
-.chat-som.mudo { opacity: .45; }
-.chat-lista { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; width: 100%; max-width: 720px; margin: 0 auto; padding: 18px max(14px, env(safe-area-inset-right, 0px)) 14px max(14px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 10px; }
-.chat-msg { display: flex; align-items: flex-end; gap: 8px; max-width: 86%; animation: msg-entra .32s cubic-bezier(.2, 1.1, .4, 1); }
-.chat-msg p { margin: 0; padding: 11px 15px; border-radius: 22px; font-size: 16.5px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
-.chat-msg.eu { align-self: flex-end; }
-.chat-msg.eu p { background: var(--mode); color: var(--mode-ink); border-bottom-right-radius: 6px; }
-.chat-msg.eu.rascunho p { opacity: .55; }
-.chat-msg.ela { align-self: flex-start; }
-.chat-msg.ela p { background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-bottom-left-radius: 6px; box-shadow: var(--card-shadow); }
-.chat-msg.ela p[role="button"] { cursor: pointer; }
-.chat-msg.ela p[role="button"]:active { transform: scale(.985); }
-.chat-msg.ela.falando p { border-color: color-mix(in srgb, var(--mode) 55%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mode) 18%, transparent); }
-.chat-av { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--mode); display: flex; align-items: center; justify-content: center; gap: 3px; margin-bottom: 2px; }
-.chat-av i { width: 3px; height: 9px; border-radius: 2px; background: var(--mode-ink); animation: pisca-av 4s infinite; }
-.chat-msg.ela.falando .chat-av i { animation: fala-av .32s ease-in-out infinite alternate; }
-.chat-msg.ela.falando .chat-av i:last-child { animation-delay: .16s; }
-.chat-msg .digitando { display: inline-flex; gap: 5px; align-items: center; min-height: 46px; }
-.chat-sugestoes { display: flex; flex-wrap: wrap; gap: 8px; padding-left: 34px; }
-.chat-sugestoes button { padding: 10px 14px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--fg); font-weight: 700; font-size: 14.5px; text-align: left; }
-.chat-sugestoes button:active { transform: scale(.97); }
-.chat-cartao { align-self: stretch; margin-left: 34px; display: flex; flex-direction: column; gap: 10px; animation: msg-entra .32s cubic-bezier(.2, 1.1, .4, 1); }
-.chat-cartao .vozb-card { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: var(--card-shadow); }
-.chat-cartao-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
-.chat-compor { flex: none; width: 100%; max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px max(12px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
-.chat-ia::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(72px + env(safe-area-inset-bottom, 0px)); z-index: -1; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, transparent); }
-.chat-compor input { flex: 1; min-width: 0; height: 50px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font-size: 16px; font-weight: 600; outline: none; }
-.chat-compor input:focus { border-color: var(--mode); }
-.chat-compor input::placeholder { color: var(--muted); }
-.chat-botao { position: relative; flex: none; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; background: var(--mode); color: var(--mode-ink); box-shadow: 0 8px 22px color-mix(in srgb, var(--mode) 35%, transparent); }
-.chat-botao:active { transform: scale(.93); }
-.chat-botao svg { width: 22px; height: 22px; }
-.chat-botao.mic.on::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 3px solid var(--mode); opacity: .55; transform: scale(calc(1 + var(--n, 0) * .4)); transition: transform .12s ease; }
-.chat-parar { width: 16px; height: 16px; border-radius: 4px; background: currentColor; }
-@media (prefers-reduced-motion: reduce) { .chat-ia, .chat-msg, .chat-cartao, .chat-av i { animation: none !important; } }
+/* A conversa com a Bolinha (o chat) fica em src/chat.css */
 
 /* ---------- Avatares prontos (bolinhas) ---------- */
 .photo { flex-wrap: wrap; }
@@ -1598,28 +1566,30 @@ button.catrow:active { background: var(--surface-2); }
    Barra de cima ao rolar: vidro fosco com sombra ESCURA embaixo (antes era uma névoa da cor do fundo).
    Foto de fundo no tema claro: sem véu leitoso; o texto direto sobre a foto fica branco com sombra escura. */
 :root {
-  --nav-fundo: radial-gradient(120% 140% at 0% 100%, rgba(92, 64, 140, .38), transparent 60%), radial-gradient(120% 140% at 100% 100%, rgba(58, 74, 128, .34), transparent 60%), linear-gradient(to bottom, rgba(34, 36, 48, .86), rgba(42, 40, 60, .94));
-  --nav-ic: #9EA2AE; --nav-ic-on: #fff;
-  --nav-sombra: inset 0 1px 0 rgba(255, 255, 255, .06), 0 -10px 30px rgba(0, 0, 0, .28);
+  /* grafite quase opaco: o desfoque do navegador espelha a borda de cima (o texto logo acima da barra aparecia
+     "refletido" dentro dela), então o vidro aqui é bem fechado */
+  --nav-fundo: linear-gradient(to bottom, rgba(26, 26, 29, .975), rgba(18, 18, 20, .99));
+  --nav-ic: #9B9BA3; --nav-ic-on: #fff;
+  --nav-sombra: inset 0 1px 0 rgba(255, 255, 255, .07), 0 -10px 30px rgba(0, 0, 0, .35);
   --topo-vidro: color-mix(in srgb, var(--bg) 93%, transparent); --topo-linha: rgba(255, 255, 255, .07); --topo-sombra: 0 12px 30px rgba(0, 0, 0, .5);
   --foto-tx: var(--fg); --foto-tx-2: var(--muted);
-  --act-bg: var(--nav-bg); --act-fg: #F2F4F8; --act-borda: transparent;
+  --act-bg: var(--nav-bg); --act-fg: #F4F4F5; --act-borda: transparent;
 }
 @media (prefers-color-scheme: light) { :root:not([data-app-theme="dark"]) {
-  --nav-fundo: linear-gradient(to bottom, rgba(255, 255, 255, .82), rgba(248, 249, 252, .94));
-  --nav-ic: #8A8FA0; --nav-ic-on: #14161C;
-  --nav-sombra: inset 0 1px 0 rgba(18, 20, 40, .07), 0 -8px 26px rgba(20, 24, 40, .09);
-  --topo-vidro: color-mix(in srgb, var(--bg) 94%, transparent); --topo-linha: rgba(18, 20, 40, .08); --topo-sombra: 0 10px 28px rgba(20, 24, 40, .16);
+  --nav-fundo: linear-gradient(to bottom, rgba(255, 255, 255, .975), rgba(250, 250, 252, .99));
+  --nav-ic: #8A8A93; --nav-ic-on: #111114;
+  --nav-sombra: inset 0 1px 0 rgba(17, 17, 20, .07), 0 -8px 26px rgba(17, 17, 26, .08);
+  --topo-vidro: color-mix(in srgb, var(--bg) 94%, transparent); --topo-linha: rgba(17, 17, 20, .08); --topo-sombra: 0 10px 28px rgba(17, 17, 26, .14);
   --veil-a: rgba(8, 10, 16, .36); --veil-b: rgba(8, 10, 16, .08); --g-shadow: rgba(0, 0, 0, .42);
   --g-surface: rgba(255, 255, 255, .7); --g-card: rgba(255, 255, 255, .74); --g-nav: rgba(255, 255, 255, .72);
   --foto-tx: #fff; --foto-tx-2: rgba(255, 255, 255, .86);
   --act-bg: var(--surface); --act-fg: var(--fg); --act-borda: var(--line);
 } }
 :root[data-app-theme="light"] {
-  --nav-fundo: linear-gradient(to bottom, rgba(255, 255, 255, .82), rgba(248, 249, 252, .94));
-  --nav-ic: #8A8FA0; --nav-ic-on: #14161C;
-  --nav-sombra: inset 0 1px 0 rgba(18, 20, 40, .07), 0 -8px 26px rgba(20, 24, 40, .09);
-  --topo-vidro: color-mix(in srgb, var(--bg) 94%, transparent); --topo-linha: rgba(18, 20, 40, .08); --topo-sombra: 0 10px 28px rgba(20, 24, 40, .16);
+  --nav-fundo: linear-gradient(to bottom, rgba(255, 255, 255, .975), rgba(250, 250, 252, .99));
+  --nav-ic: #8A8A93; --nav-ic-on: #111114;
+  --nav-sombra: inset 0 1px 0 rgba(17, 17, 20, .07), 0 -8px 26px rgba(17, 17, 26, .08);
+  --topo-vidro: color-mix(in srgb, var(--bg) 94%, transparent); --topo-linha: rgba(17, 17, 20, .08); --topo-sombra: 0 10px 28px rgba(17, 17, 26, .14);
   --veil-a: rgba(8, 10, 16, .36); --veil-b: rgba(8, 10, 16, .08); --g-shadow: rgba(0, 0, 0, .42);
   --g-surface: rgba(255, 255, 255, .7); --g-card: rgba(255, 255, 255, .74); --g-nav: rgba(255, 255, 255, .72);
   --foto-tx: #fff; --foto-tx-2: rgba(255, 255, 255, .86);
@@ -1628,6 +1598,11 @@ button.catrow:active { background: var(--surface-2); }
 .nav { background: var(--nav-fundo); box-shadow: var(--nav-sombra); }
 .nv, .nav-mic { color: var(--nav-ic); }
 .nv.on, .nav-mic.on { color: var(--nav-ic-on); }
+/* cartões: no escuro, um reflexo bem leve no topo (no claro, --brilho-cartao é none e fica só a sombra suave) */
+:is(.panel, .next, .bal, .tile, .rhythm, .week, .goal, .reserve, .tl-card, .bub, .transp-card, .casa-cartao, .conq-prox) { background-image: var(--brilho-cartao); }
+/* o rótulo acima do título fica como foi escrito ("2 sessões hoje", "outubro de 2026"), só com a primeira letra maiúscula */
+.top .eyebrow { text-transform: none; }
+.top .eyebrow::first-letter { text-transform: uppercase; }
 
 /* ===== Barra de baixo "Botões soltos" (escolhida em Aparência) =====
    Sem faixa: cada aba é um quadrado de cantos bem redondos, separado dos outros, flutuando sobre a tela. */
@@ -1660,7 +1635,7 @@ button.catrow:active { background: var(--surface-2); }
 .panel-acts .link { white-space: nowrap; }
 
 /* Barra de cima ao rolar: a névoa escura de antes, igual nos dois temas (no claro também) */
-:root { --topo-nevoa: #0A0C11; }
+:root { --topo-nevoa: #0A0A0B; } /* a mesma cor do fundo escuro (e da barra de status: corDaBarra) */
 .topo-fixo::before { height: calc(env(safe-area-inset-top, 0px) + 164px); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none;
   background: linear-gradient(to bottom, var(--topo-nevoa) 0%, color-mix(in srgb, var(--topo-nevoa) 97%, transparent) calc(env(safe-area-inset-top, 0px) + 76px), color-mix(in srgb, var(--topo-nevoa) 80%, transparent) calc(env(safe-area-inset-top, 0px) + 108px), transparent 100%); }
 /* sobre a névoa escura, título e botões claros (também no tema claro) */

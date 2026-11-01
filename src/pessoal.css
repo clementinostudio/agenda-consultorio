@@ -1,0 +1,219 @@
+/* =========================================================
+   Pessoal com cara de app de banco (src/telas/pessoal.jsx e src/telas/bancos.jsx):
+   a lista de atividades com o selo do banco, os gráficos (linha do mês, barra por categoria, fluxo)
+   e o painel do banco. Só usa as cores do tema (--surface, --mode, --g-<categoria>…): vale para o claro e o escuro.
+   ========================================================= */
+
+/* ---------- cartão (borda fina, raio grande e um brilho leve no topo no escuro) ---------- */
+.ps-card { position: relative; overflow: hidden; border-radius: 28px; border: 1px solid var(--line); box-shadow: var(--card-shadow); padding: 18px 18px 10px;
+  background: linear-gradient(180deg, var(--bg-glow), var(--surface) 46%); }
+.ps-card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 0; background: none; color: var(--muted); font-size: 14.5px; font-weight: 600; text-align: left; }
+.ps-card-h > svg { width: 16px; height: 16px; flex: none; }
+.ps-card-h .link { color: var(--mode-text); font-weight: 800; font-size: 13.5px; }
+.ps-card-v { display: block; margin-top: 6px; font-family: var(--f-display); font-size: 30px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
+.ps-card-v .mny .cur { font-size: .5em; }
+.ps-card-pe { display: block; margin: 4px auto 6px; font-weight: 800; font-size: 13.5px; color: var(--mode-text); }
+
+/* ---------- barra segmentada por categoria ---------- */
+.ps-seg { display: flex; gap: 4px; height: 12px; margin: 16px 0 8px; }
+.ps-seg i { display: block; min-width: 8px; border-radius: 999px; transform-origin: left center; animation: ps-cresce .7s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 70ms + .1s); }
+@keyframes ps-cresce { from { transform: scaleX(0); opacity: 0; } }
+
+/* uma categoria: ícone com anel, nome, o que sobra e o valor */
+.ps-cats-lista { display: flex; flex-direction: column; margin: 4px -8px 0; }
+.ps-cat { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border-radius: 18px; background: none; color: var(--fg); text-align: left; transition: background .15s, opacity .2s, transform .12s; }
+.ps-cat:active { transform: scale(.985); }
+.ps-cat.on { background: color-mix(in srgb, var(--mode) 12%, transparent); }
+.ps-cat.apaga { opacity: .45; }
+@media (hover: hover) { .ps-cat:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); } .ps-cat.on:hover { background: color-mix(in srgb, var(--mode) 14%, transparent); } }
+.ps-cat-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ps-cat-nm { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-cat-sb { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-cat-sb.acima { color: var(--rose); }
+.ps-cat-v { flex: none; font-family: var(--f-display); font-weight: 600; font-size: 15px; font-variant-numeric: tabular-nums; }
+
+/* ---------- gráfico de linha do mês ---------- */
+.ps-graf { position: relative; width: 100%; }
+.ps-graf-area { position: relative; width: 100%; touch-action: pan-y; -webkit-user-select: none; user-select: none; cursor: crosshair; }
+.ps-graf-area > svg { display: block; overflow: visible; }
+.ps-graf-linha { fill: none; stroke: var(--lc); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.ps-graf-ant { fill: none; stroke: var(--muted); stroke-width: 1.7; stroke-dasharray: 2 5; stroke-linecap: round; opacity: .75; }
+.ps-graf-prev { fill: none; stroke: var(--lc); stroke-width: 2.2; stroke-dasharray: 2 6; stroke-linecap: round; opacity: .85; }
+.ps-graf-zero { stroke: color-mix(in srgb, var(--fg) 22%, transparent); stroke-width: 1; stroke-dasharray: 3 4; }
+.ps-graf-ponto .miolo { fill: var(--lc); stroke: var(--surface); stroke-width: 2.5; transform-box: fill-box; transform-origin: center; animation: ps-ponto .4s cubic-bezier(.3, 1.6, .5, 1) 1.1s both; }
+.ps-graf-ponto .onda { fill: none; stroke: var(--lc); stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; animation: ps-onda 2.4s ease-out 1.5s infinite; }
+@keyframes ps-ponto { from { transform: scale(0); } }
+@keyframes ps-onda { from { transform: scale(.6); opacity: .7; } to { transform: scale(2.1); opacity: 0; } }
+.ps-graf-mira line { stroke: color-mix(in srgb, var(--fg) 30%, transparent); stroke-width: 1; stroke-dasharray: 2 3; }
+.ps-graf-mira circle { fill: var(--lc); stroke: var(--surface); stroke-width: 2; }
+.ps-graf-mira circle.fantasma { fill: var(--muted); }
+.ps-graf-mira circle.previsao { fill: var(--surface); stroke: var(--lc); }
+.ps-graf-dica { position: absolute; top: -8px; z-index: 3; transform: translate(-50%, -100%); display: grid; gap: 1px; padding: 6px 10px; border-radius: 12px; background: var(--fg); color: var(--bg);
+  font-family: var(--f-display); font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: left; pointer-events: none; box-shadow: 0 8px 24px rgba(0, 0, 0, .22); }
+.ps-graf-dica.esq { transform: translate(-12px, -100%); } .ps-graf-dica.dir { transform: translate(calc(-100% + 12px), -100%); }
+.ps-graf-dica small, .ps-graf-dica em { font-family: var(--f-body, inherit); font-style: normal; font-size: 11.5px; font-weight: 700; opacity: .65; }
+.ps-graf-eixo { position: relative; height: 16px; margin-top: 6px; color: var(--muted); font-size: 11.5px; font-weight: 700; }
+.ps-graf-eixo span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.ps-graf-eixo span.ini { transform: translateX(-6px); } .ps-graf-eixo span.fim { transform: translateX(calc(-100% + 6px)); }
+.ps-graf-leg { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.ps-graf-leg span { display: inline-flex; align-items: center; gap: 6px; }
+.ps-graf-leg i { width: 14px; height: 3px; border-radius: 2px; background: var(--lc); }
+.ps-graf-leg i.fantasma { background: repeating-linear-gradient(90deg, var(--muted) 0 3px, transparent 3px 6px); }
+.ps-graf-leg i.previsao { background: repeating-linear-gradient(90deg, var(--lc) 0 3px, transparent 3px 7px); }
+@media (prefers-reduced-motion: reduce) { .ps-graf-ponto .miolo, .ps-seg i, .ps-fluxo-t i, .ps-bk-barra i { animation: none; } .ps-graf-ponto .onda { animation: none; } }
+
+/* dentro do topo de Gastos e do cartão da sobra (Início): com a mesma margem dos números */
+.ps-topo-g { margin: 14px 16px 0; }
+.c3-saldo-g.ps-saldo-g { margin: 12px 16px 6px; }
+.ps-saldo-g .ps-graf-leg { justify-content: center; }
+
+/* ---------- fluxo do mês: entrou × saiu ---------- */
+.ps-fluxo { display: grid; gap: 9px; margin: 16px 16px 0; padding: 14px 14px 12px; border-radius: 20px; background: color-mix(in srgb, var(--fg) 5%, transparent); text-align: left; }
+.ps-fluxo-l { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.ps-fluxo-t { height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--fg) 7%, transparent); overflow: hidden; }
+.ps-fluxo-t i { display: block; height: 100%; min-width: 4px; border-radius: inherit; background: var(--mint); transform-origin: left center; animation: ps-cresce .8s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 90ms + .25s); }
+.ps-fluxo-l.sai .ps-fluxo-t i { background: var(--rose); }
+.ps-fluxo-l b { font-family: var(--f-display); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ps-fluxo b.mais { color: var(--mint); } .ps-fluxo b.menos { color: var(--rose); }
+.ps-fluxo-pe { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; font-weight: 700; }
+.ps-fluxo-pe b { color: var(--fg); font-family: var(--f-display); font-variant-numeric: tabular-nums; }
+
+/* ---------- previsão do mês ---------- */
+.ps-prev .ps-graf { margin: 4px 0 2px; }
+.ps-prev-itens span { display: inline-flex; align-items: center; gap: 6px; }
+.ps-prev-itens i { width: 7px; height: 7px; border-radius: 50%; background: var(--rose); }
+.ps-prev-itens .mais i { background: var(--mint); }
+.ps-prev { padding-bottom: 14px; }
+
+/* ---------- a lista de atividades ---------- */
+.ps-ativ { padding-bottom: 10px; }
+.ps-ativ-topo h3 { font-size: 22px; }
+.ps-busca { display: flex; align-items: center; gap: 10px; height: 48px; margin: 6px 0 2px; padding: 0 6px 0 16px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); }
+.ps-busca:focus-within { border-color: color-mix(in srgb, var(--mode) 60%, var(--line)); }
+.ps-busca > svg { width: 18px; height: 18px; flex: none; }
+.ps-busca input { flex: 1; min-width: 0; height: 100%; padding: 0; background: transparent; border: 0; outline: 0; color: var(--fg); font: inherit; font-size: 16px; font-weight: 600; -webkit-appearance: none; appearance: none; }
+.ps-busca input::placeholder { color: var(--muted); font-weight: 600; }
+.ps-busca input::-webkit-search-cancel-button { display: none; }
+.ps-busca button { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 50%; background: none; color: var(--muted); }
+.ps-busca button svg { width: 16px; height: 16px; }
+.ps-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 8px 16px 6px; }
+.ps-chips::-webkit-scrollbar { display: none; }
+.ps-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--fg); font-weight: 700; font-size: 13.5px; white-space: nowrap; transition: background .15s, color .15s, border-color .15s, transform .12s; }
+.ps-chip:active { transform: scale(.96); }
+.ps-chip.on { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+.ps-chip-cor { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--cc); }
+/* no computador, os filtros quebram a linha em vez de rolar de lado */
+@media (min-width: 900px) { .ps-chips { flex-wrap: wrap; overflow: visible; margin: 0; padding: 8px 0 6px; } }
+.ps-chip .ps-selo { position: static; width: 18px; height: 18px; margin-left: -6px; box-shadow: none; }
+.ps-ativ-info { padding: 8px 0 2px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.ps-ativ-mais { display: flex; justify-content: center; padding: 10px 0 2px; }
+.ps-ativ-mais .link { color: var(--mode-text); font-weight: 800; font-size: 13.5px; }
+
+/* cada dia: o título e o total que saiu */
+.ps-grupo { content-visibility: auto; contain-intrinsic-size: auto 180px; }
+.ps-dia { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 18px 0 2px; }
+.ps-dia h4 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 16.5px; letter-spacing: -.01em; }
+.ps-dia small { color: var(--muted); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* uma atividade */
+.ps-at { display: flex; align-items: center; gap: 14px; width: calc(100% + 16px); margin: 0 -8px; padding: 9px 8px; border-radius: 18px; background: none; color: var(--fg); text-align: left; transition: background .15s, transform .12s; }
+button.ps-at:active { transform: scale(.985); }
+@media (hover: hover) { button.ps-at:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); } }
+.ps-at.sel { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.ps-at.marcado { background: color-mix(in srgb, var(--mode) 12%, transparent); }
+.ps-at-av { position: relative; flex: none; width: 46px; height: 46px; }
+.ps-at-av > .txn-av { width: 46px; height: 46px; }
+.ps-at-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ps-at-nm { font-weight: 700; font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-at-sb, .ps-at-bc { color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-at-bc { font-size: 12.5px; opacity: .85; }
+.ps-at-v { flex: none; font-family: var(--f-display); font-weight: 600; font-size: 15.5px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--rose); }
+.ps-at-v.entra { color: var(--mint); }
+
+/* o selo redondo do banco, no canto inferior direito da logo */
+.ps-selo { position: absolute; right: -4px; bottom: -4px; width: 20px; height: 20px; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 2.5px var(--surface); background: var(--surface-2); }
+.ps-selo > .ps-selo-in { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; border: 0; }
+.ps-selo > .logo img { width: 100%; height: 100%; border-radius: 0; object-fit: cover; }
+.ps-selo > .mono b { font-size: 8px; letter-spacing: 0; }
+
+/* no celular, o valor fica menor quando a tela é bem estreita (320 px) */
+@media (max-width: 360px) {
+  .ps-at { gap: 11px; }
+  .ps-at-av, .ps-at-av > .txn-av { width: 42px; height: 42px; }
+  .ps-at-v { font-size: 14.5px; }
+  .ps-fluxo-l { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 8px; }
+}
+
+/* ---------- editar lançamento: o "R$" colado no número, e de que banco veio ---------- */
+.big-amt.ps-valor { align-items: baseline; gap: 6px; }
+/* a cópia escondida do número dá a largura; o campo fica por cima, do mesmo tamanho (posição absoluta: não estica a caixa) */
+.big-amt.ps-valor .ps-valor-campo { position: relative; display: inline-block; max-width: calc(100% - 44px); font-size: 50px; color: inherit; }
+.big-amt.ps-valor .ps-valor-medida, .big-amt.ps-valor input { font-family: var(--f-display); font-size: 50px; font-weight: 700; letter-spacing: -.035em; line-height: 1.2; }
+.big-amt.ps-valor .ps-valor-medida { display: block; visibility: hidden; white-space: pre; padding: 0 .06em; overflow: hidden; }
+.big-amt.ps-valor input { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; min-width: 0; }
+.ps-lanc-banco { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 18px; background: var(--surface-2); }
+.ps-lanc-banco .ps-at-av, .ps-lanc-banco .txn-av { width: 36px; height: 36px; }
+.ps-lanc-banco > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.ps-lanc-banco b { font-size: 14.5px; }
+.ps-lanc-banco small { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+
+/* ---------- painel do banco: saldo em contas, faturas e investimentos ---------- */
+.ps-bk { border-radius: 28px; padding: 4px 18px 14px; background: linear-gradient(180deg, var(--bg-glow), var(--surface) 40%); }
+.ps-bk .panel-head .ps-bk-at { font-size: 12.5px; color: var(--muted); font-weight: 700; }
+.ps-bk-abas { display: flex; gap: 6px; margin: 2px -18px 8px; padding: 0 18px; overflow-x: auto; scrollbar-width: none; }
+.ps-bk-abas::-webkit-scrollbar { display: none; }
+.ps-bk-abas button { flex: none; height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--fg); font-weight: 700; font-size: 13.5px; }
+.ps-bk-abas button.on { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+.ps-bk-corpo { display: flex; flex-direction: column; padding-top: 6px; animation: ps-aparece .3s ease both; }
+@keyframes ps-aparece { from { opacity: 0; transform: translateY(4px); } }
+.ps-bk-rot { color: var(--muted); font-size: 14px; font-weight: 600; }
+.ps-bk-total { display: block; font-family: var(--f-display); font-size: 32px; font-weight: 700; letter-spacing: -.03em; line-height: 1.15; margin-top: 2px; }
+.ps-bk-total.neg { color: var(--rose); }
+.ps-bk-total .mny .cur { font-size: .5em; }
+.ps-bk-barra { display: flex; gap: 3px; height: 8px; margin: 14px 0 6px; }
+.ps-bk-barra i { display: block; min-width: 6px; border-radius: 999px; transform-origin: left center; animation: ps-cresce .7s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 80ms + .1s); }
+.ps-bk-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ps-bk-topo > span { min-width: 0; }
+.ps-bk-anel .vz-anel-in > b { font-size: 13px; font-weight: 800; }
+.ps-bk-anel.mini .vz-anel-in > b { font-size: 10.5px; }
+.ps-bk-rendeu { margin-top: 2px; color: var(--mint); font-size: 13.5px; font-weight: 700; }
+.ps-bk-rendeu.neg { color: var(--rose); }
+.ps-bk-linha { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.ps-bk-barra + .ps-bk-linha, .ps-bk-sb + .ps-bk-linha, .ps-bk-rendeu + .ps-bk-linha, .ps-bk-total + .ps-bk-linha { border-top: 0; margin-top: 4px; }
+.ps-bk-linha > .txn-av, .ps-bk-linha > .ps-at-av { width: 44px; height: 44px; flex: none; }
+.ps-bk-linha .ps-at-av > .txn-av { width: 44px; height: 44px; }
+.ps-bk-cx { font-size: 22px; }
+.ps-bk-mid { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ps-bk-nm { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ps-bk-nm small { color: var(--muted); font-weight: 600; font-size: 13px; }
+.ps-bk-sb { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.ps-bk-sb.perto, .ps-bk-sb em.perto { color: var(--rose); font-weight: 800; }
+/* cartão: a logo dentro do anel do limite usado */
+.ps-bk-anel.logo { flex: none; }
+.ps-bk-anel.logo .txn-av { width: 38px; height: 38px; }
+.ps-bk-linha { flex-wrap: wrap; }
+.ps-bk-ligar { flex: 0 0 100%; padding-left: 56px; margin-top: -4px; }
+.ps-bk-ligar .bk-ligar { margin: 0; }
+.ps-bk-sb em { font-style: normal; }
+.ps-bk-sb em.sobe { color: var(--mint); } .ps-bk-sb em.neg { color: var(--rose); }
+.ps-bk-corpo > .ps-bk-sb { margin-top: 2px; }
+.ps-bk-dir { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.ps-bk-dir b { font-family: var(--f-display); font-weight: 600; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ps-bk-dir b.neg { color: var(--rose); }
+.ps-bk-dir small { color: var(--muted); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ps-bk .bk-trazer { margin-top: 12px; }
+@media (max-width: 360px) {
+  .ps-bk { padding-left: 14px; padding-right: 14px; }
+  .ps-bk-abas { margin-left: -14px; margin-right: -14px; padding: 0 14px; }
+  .ps-bk-linha { gap: 10px; }
+  .ps-bk-linha > .txn-av, .ps-bk-linha > .ps-at-av, .ps-bk-linha .ps-at-av > .txn-av { width: 38px; height: 38px; }
+  .ps-bk-ligar { padding-left: 48px; }
+}
+
+/* ---------- "Seu resumo" do Início pessoal: os balões com a mesma largura (a margem da direita fica reta) ---------- */
+.shell[data-mode="pessoal"] .talk .bub { align-self: stretch; max-width: none; }
+
+/* ---------- contas fixas: a régua do mês com uma logo por pilha (e "+2" quando há mais contas perto) ---------- */
+.g4-regua-c.varias .txn-av { box-shadow: 0 0 0 2.5px var(--surface), 5px -4px 0 0 color-mix(in srgb, var(--fg) 14%, var(--surface)); }
+.g4-regua-c.atrasada.varias .txn-av { box-shadow: 0 0 0 2.5px var(--rose), 5px -4px 0 1px color-mix(in srgb, var(--rose) 30%, var(--surface)); }
+.g4-regua-c > em { right: -14px; top: -10px; box-shadow: 0 0 0 2px var(--surface); }

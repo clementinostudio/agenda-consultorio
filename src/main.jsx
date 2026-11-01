@@ -15,6 +15,7 @@ import "@fontsource/sora/700.css";
 
 import "./styles.css";
 import "./modais.css"; // modais: topo e botão à vista, sem rolar de lado
+import "./chat.css"; // a conversa com a Bolinha (chat) e o botão dela no computador
 import App from "./App.jsx";
 import AvisosSistema, { avisarNovaVersao } from "./avisos.jsx";
 import { noApp, chamarApp } from "./app-nativo.js";
