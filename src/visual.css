@@ -93,20 +93,6 @@
 .c2-filtro .ci svg { width: 14px; height: 14px; }
 .c2-filtro > svg { width: 14px; height: 14px; color: var(--muted); }
 
-/* ---------- barras dos últimos meses, dentro do topo (transporte) ---------- */
-.vz-barras { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; height: 130px; margin: 16px 16px 0; align-items: end; }
-.vz-barras button { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; background: none; color: var(--muted); padding: 0; }
-.vz-barras i { display: block; width: min(34px, 76%); border-radius: 8px; background: color-mix(in srgb, var(--mode) 30%, transparent); transform-origin: bottom; animation: vz-cresce .7s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 60ms + .2s); }
-.vz-barras .on i { background: var(--mode); }
-.vz-barras small { font-size: 10.5px; font-weight: 800; }
-.vz-barras .on small { color: var(--fg); }
-.vz-barras span { font-size: 12px; font-weight: 700; text-transform: capitalize; }
-.vz-barras .on span { color: var(--fg); }
-.vz-barras button:disabled { opacity: 1; }
-@keyframes vz-cresce { from { transform: scaleY(0); } }
-/* itens do transporte: o tipo de gasto numa bolinha cheia da cor dele */
-.transp-item .ic { border-radius: 50% !important; background: var(--c) !important; color: #fff !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
-.transp .day-sep { padding-top: 12px; }
 
 /* ---------- Gastos ---------- */
 .g4-resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 14px 0; padding: 12px 6px; border-radius: 20px; background: color-mix(in srgb, var(--fg) 5%, transparent); }

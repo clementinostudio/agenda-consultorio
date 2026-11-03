@@ -1,12 +1,16 @@
 // Parte do app carregada sob demanda: aba "Transporte" do modo Pessoal (também abre ao tocar em Transporte, em Gastos).
+// A tela segue a ordem do Transporte nativo do app (app-celular/src/app/transporte.tsx): o veículo com os números dele,
+// as ações rápidas, o gasto do mês, os próximos cuidados, o combustível, quanto o veículo custa de verdade, a viagem,
+// os gastos do mês e os ajustes. No celular, uma coluna só; no computador, duas (src/transporte.css).
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar, ProximaConquista } from "../App.jsx";
+import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar, ProximaConquista, ESCONDER } from "../App.jsx";
 import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, postos, carroOuApp, precosCombustivel, etanolOuGasolina, fipe, ufDaCidade, montarGastoTransp, fipeDoMes } from "../transporte.js";
-import { IconeAnel, Topo, Comparacao } from "./visual.jsx";
+import { useContagem } from "./visual.jsx";
 import { PostoBaratoSheet } from "./postos.jsx";
 import { combDoVeiculo } from "../postos.js";
 import { noApp, chamarApp } from "../app-nativo.js";
 import { createPortal } from "react-dom";
+import "../transporte.css";
 
 /* ---------- ícones ---------- */
 const Svg = ({ children }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
@@ -20,6 +24,10 @@ const Ic = {
   documentos: () => <Svg><path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9.5A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z" /><path d="M14 3.5V8h4M8.5 12h7M8.5 15.5h5" /></Svg>,
   outros: () => <Svg><circle cx="6" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="18" cy="12" r="1.2" /></Svg>,
   rota: () => <Svg><circle cx="6" cy="18" r="2.2" /><circle cx="18" cy="6" r="2.2" /><path d="M8.2 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.8" /></Svg>,
+  oleo: () => <Svg><path d="M12 3.5s-5.5 6.1-5.5 10.2a5.5 5.5 0 0 0 11 0C17.5 9.6 12 3.5 12 3.5z" /><path d="M9.6 14.2a2.5 2.5 0 0 0 2.4 2.3" /></Svg>,
+  pneu: () => <Svg><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><path d="M12 3.5V9M12 15v5.5M3.5 12H9M15 12h5.5" /></Svg>,
+  local: () => <Svg><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z" /><circle cx="12" cy="10" r="2.3" /></Svg>,
+  desce: () => <Svg><path d="M4 7l6.5 6.5 3.5-3.5L20 16" /><path d="M20 11v5h-5" /></Svg>,
 };
 const IconeSub = ({ id }) => { const C = Ic[id] || Ic.outros; return <C />; };
 const EMOJI = { moto: "🏍️", bike: "🚲", nenhum: "🚌" };
@@ -29,6 +37,20 @@ const kml = c => (Math.round(c * 10) / 10).toLocaleString("pt-BR");
 // data com o ano quando não é o ano de agora ("27/10/2027")
 const dataCurta = iso => iso.slice(0, 4) === todayISO().slice(0, 4) ? dm(iso) : `${dm(iso)}/${iso.slice(0, 4)}`;
 const mesDe = off => { const d = new Date(); const m = new Date(d.getFullYear(), d.getMonth() + off, 1); return { chave: `${m.getFullYear()}-${pad(m.getMonth() + 1)}`, nome: MES_LONGO[m.getMonth()], ano: m.getFullYear() }; };
+// valores que somem com o olho fechado (como o brl, mas com os centavos de "por km")
+const real = v => (ESCONDER ? "R$ ••" : brlReal(v));
+const inteiro = v => (ESCONDER ? "R$ •••" : `R$ ${Math.round(v).toLocaleString("pt-BR")}`);
+const litrosTx = l => `${(Math.round(l * 10) / 10).toLocaleString("pt-BR")} L`;
+const fmtKm = k => Math.round(Math.abs(k)).toLocaleString("pt-BR");
+const nDias = n => `${n} ${n === 1 ? "dia" : "dias"}`;
+const pct = (a, b) => Math.round(a / (b || 1) * 100);
+const temMotor = v => !v || v.tipo === "carro" || v.tipo === "moto";
+const nomeDo = v => (v && v.nome) || (v && v.fipe && v.fipe.modelo) || (v && v.tipo === "nenhum" ? "Apps e transporte público" : "Seu veículo");
+const nomeChip = v => (v.tipo === "nenhum" && (!v.nome || v.nome === "Apps e transporte público") ? "Apps e ônibus" : v.nome || "Veículo");
+const TIPO_NOME = { carro: "Carro", moto: "Moto", bike: "Bike" };
+// os tipos de gasto com um nome que cabe num filtro ou numa legenda
+const CURTO = { app: "Apps", estacionamento: "Estacionamento", documentos: "Documentos", melhorias: "Peças" };
+const nomeCurto = id => CURTO[id] || subInfo(id).nome;
 
 function FotoVeiculo({ v, grande }) {
   const cls = "transp-foto" + (grande ? " grande" : "");
@@ -38,6 +60,274 @@ function FotoVeiculo({ v, grande }) {
   return <span className={cls + " emoji"} aria-hidden="true">{EMOJI[v.tipo] || "🚗"}</span>;
 }
 
+/* ---------- O veículo: os chips para trocar, o desenho (arrastar para o lado troca), o nome e os números ---------- */
+function Veiculo({ vs, v, comb, km, doMes, noAno, onTrocar, act }) {
+  const toque = useRef(null);
+  if (!v) return (
+    <section className="tr-veic">
+      <div className="transp-palco tr-palco"><i className="transp-luz" aria-hidden="true" /><FotoVeiculo v={null} grande /><i className="transp-chao" aria-hidden="true" /></div>
+      <h2>Escolha o seu veículo</h2>
+      <p className="tr-veic-tx">Carro, moto, bike ou só apps e ônibus: eu acompanho o consumo, lembro da troca de óleo e do IPVA e mostro quanto ele custa de verdade.</p>
+      <button className="btn mode tr-escolher" onClick={() => act.abrirVeiculo("novo")}><I.car /> Escolher o meu veículo</button>
+    </section>
+  );
+  const i = vs.findIndex(x => x.id === v.id);
+  const ir = d => { const n = vs[i + d]; if (n) { vibrar("toque"); onTrocar(n.id); } };
+  const motor = v.tipo === "carro" || v.tipo === "moto";
+  const f = v.fipe;
+  const sub = v.tipo === "nenhum" ? "Sem veículo próprio" : [TIPO_NOME[v.tipo], motor && v.combustivel && (COMBUSTIVEIS.find(c => c[0] === v.combustivel) || [, ""])[1], f && f.ano].filter(Boolean).join(" · ");
+  let nums = [];
+  if (motor) nums = [
+    km ? { v: fmtKm(km), u: "km", r: "no painel" } : { v: "—", r: "km no painel" },
+    comb.consumo ? { v: kml(comb.consumo), u: "km/l", r: comb.consumoReal ? "consumo real" : "consumo informado" } : { v: "—", r: "consumo" },
+    comb.custoKm ? { v: real(comb.custoKm), r: "combustível/km" } : null,
+  ];
+  else if (v.tipo === "nenhum") {
+    const corr = doMes.itens.filter(x => x.sub === "app"), bus = doMes.itens.filter(x => x.sub === "publico");
+    nums = [
+      { v: String(corr.length), r: corr.length === 1 ? "corrida no mês" : "corridas no mês" },
+      corr.length ? { v: real(corr.reduce((s, x) => s + x.valor, 0) / corr.length), r: "por corrida" } : null,
+      { v: String(bus.length), r: bus.length === 1 ? "ônibus ou metrô" : "ônibus e metrô" },
+    ];
+  } else nums = [{ v: brl(doMes.total), r: "no mês" }, { v: brl(noAno), r: `em ${todayISO().slice(0, 4)}` }];
+  nums = nums.filter(Boolean);
+  return (
+    <section className="tr-veic">
+      {vs.length > 1 && (
+        <div className="tr-chips" role="tablist" aria-label="Seus veículos">
+          {vs.map(x => (
+            <button key={x.id} type="button" role="tab" aria-selected={x.id === v.id} className={"tr-chip" + (x.id === v.id ? " on" : "")} onClick={() => { if (x.id !== v.id) { vibrar("toque"); onTrocar(x.id); } }}>
+              <FotoVeiculo v={x} />{nomeChip(x)}
+            </button>
+          ))}
+          <button type="button" className="tr-chip mais" onClick={() => act.abrirVeiculo("novo")}><I.plus />Adicionar</button>
+        </div>
+      )}
+      <div key={v.id} className="transp-palco tr-palco"
+        onTouchStart={e => { const t = e.touches[0]; toque.current = [t.clientX, t.clientY]; }}
+        onTouchEnd={e => {
+          const s = toque.current; toque.current = null;
+          if (!s || vs.length < 2) return;
+          const t = e.changedTouches[0], dx = t.clientX - s[0], dy = t.clientY - s[1];
+          if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) ir(dx < 0 ? 1 : -1);
+        }}>
+        <i className="transp-luz" aria-hidden="true" /><FotoVeiculo v={v} grande /><i className="transp-chao" aria-hidden="true" />
+      </div>
+      <h2 className={nomeDo(v).length > 18 ? "longo" : ""}>{nomeDo(v)}</h2>
+      {(sub || (f && f.valor)) && (
+        <div className="tr-veic-sub">
+          {sub && <span>{sub}</span>}
+          {f && f.valor && <span className="tr-fipe">{ESCONDER ? "FIPE R$ •••" : `FIPE ${f.valor.replace(/,00$/, "")}`}</span>}
+        </div>
+      )}
+      {nums.length > 0 && (
+        <div className="tr-nums">
+          {nums.map(n => <div key={n.r}><b>{n.v}{n.u && <small>{n.u}</small>}</b><small>{n.r}</small></div>)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ---------- As ações rápidas, em botões redondos como os atalhos dos apps de banco ---------- */
+function Acoes({ v, act, onPosto }) {
+  const id = v && v.id, tipo = v ? v.tipo : "carro";
+  const gasto = sub => () => act.abrirGastoTransp({ sub, veiculoId: id });
+  const lista = tipo === "nenhum" ? [
+    ["Corrida", "#6366F1", <Ic.app />, gasto("app")],
+    ["Ônibus e metrô", "#06B6D4", <Ic.publico />, gasto("publico")],
+    ["Outro gasto", null, <I.plus />, gasto("outros")],
+  ] : tipo === "bike" ? [
+    ["Manutenção", "#EF4444", <Ic.manutencao />, gasto("manutencao")],
+    ["Outro gasto", null, <I.plus />, gasto("outros")],
+  ] : [
+    ["Abastecer", "#F59E0B", <Ic.combustivel />, gasto("combustivel")],
+    ["Manutenção", "#EF4444", <Ic.manutencao />, gasto("manutencao")],
+    ["Outro gasto", null, <I.plus />, gasto("estacionamento")],
+    ["Posto barato", "var(--mint)", <Ic.local />, onPosto],
+  ];
+  return (
+    <div className="tr-acoes" role="group" aria-label="Anotar">
+      {lista.map(([t, cor, ic, f]) => (
+        <button key={t} type="button" className={"tr-acao" + (cor ? "" : " modo")} style={cor ? { "--c": cor } : undefined} onClick={f}>
+          <i aria-hidden="true">{ic}</i>{t}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- O gasto do mês: o número grande, a comparação, os 6 meses e a divisão por tipo ---------- */
+function CartaoMes({ g, antes, antTotal, mes, off, mudarMes, seis, hojeDia }) {
+  const val = useContagem(g.total);
+  const atual = off === 0, nomeAnt = mesDe(off - 1).nome;
+  const ate = atual ? ` até o dia ${hojeDia}` : "";
+  const d = g.total - antes;
+  const maior = Math.max(...seis.map(s => s.total), 1);
+  const partes = SUBS.filter(s => g.porSub[s.id]).sort((a, b) => g.porSub[b.id].total - g.porSub[a.id].total);
+  return (
+    <section className="tr-cartao tr-mes">
+      <div className="tr-cab">
+        <span>{atual ? "Gasto no mês" : `Gasto em ${mes.nome}`}{mes.ano !== new Date().getFullYear() ? ` de ${mes.ano}` : ""}</span>
+        <span className="tr-nav">
+          <button type="button" onClick={() => mudarMes(off - 1)} aria-label="Mês anterior"><I.chevL /></button>
+          <button type="button" onClick={() => mudarMes(off + 1)} aria-label="Próximo mês" disabled={atual}><I.chev /></button>
+        </span>
+      </div>
+      <div className="tr-valor"><Money v={val} /></div>
+      {!(antTotal > 0)
+        ? <p className="tr-comp">{g.total > 0 ? `Nada em ${nomeAnt} para comparar` : atual ? "Nada anotado neste mês ainda" : `Nada anotado em ${mes.nome}`}</p>
+        : !(antes > 0) ? <p className="tr-comp">Em {nomeAnt}, nada até o dia {hojeDia}</p>
+        : Math.abs(d) < 1 ? <p className="tr-comp">Igual a {nomeAnt}{ate}</p>
+          : <p className={"tr-comp " + (d > 0 ? "sobe" : "desce")}><i aria-hidden="true">{d > 0 ? "↑" : "↓"}</i><span>{brl(Math.abs(d))} {d > 0 ? "a mais" : "a menos"} que {nomeAnt}{ate}</span></p>}
+      {seis.some(s => s.total > 0) && <div className="tr-barras" role="group" aria-label="Últimos 6 meses">
+        {seis.map((s, i) => (
+          <button key={s.chave} type="button" className={i === 5 ? "on" : ""} onClick={() => { if (i < 5) { mudarMes(off - (5 - i)); vibrar("toque"); } }} aria-pressed={i === 5} aria-label={`${s.nome}: ${brl(s.total)}`} style={{ "--i": i }}>
+            {i === 5 && s.total > 0 && <small>{inteiro(s.total)}</small>}
+            <i style={{ height: Math.max(4, Math.round(s.total / maior * 84)) }} />
+            <span>{s.nome.slice(0, 3)}</span>
+          </button>
+        ))}
+      </div>}
+      {partes.length > 0 && <>
+        <div className="tr-seg" aria-hidden="true">{partes.map(s => <i key={s.id} style={{ flex: `${g.porSub[s.id].total} 1 0px`, background: s.cor }} />)}</div>
+        <div className="tr-leg">
+          {partes.map(s => { const x = g.porSub[s.id]; return (
+            <div key={s.id} className="tr-leg-l" style={{ "--c": s.cor }}>
+              <i aria-hidden="true" /><span>{s.nome}</span><small>{pct(x.total, g.total)}%</small><b>{brl(x.total)}</b>
+            </div>
+          ); })}
+        </div>
+      </>}
+    </section>
+  );
+}
+
+/* ---------- Próximos cuidados: troca de óleo, rodízio e documentos, do mais urgente ao mais longe ---------- */
+function Cuidados({ v, oleo, rodizio, docs, act, pagarDoc }) {
+  const itens = [];
+  const ORDEM = { atrasado: 0, perto: 1, ok: 2, sem: 3 };
+  const lembrete = (x, id, nome, cor, ic, cadaKm, cadaMeses, manut) => {
+    const st = (x.faltamKm != null && x.faltamKm < 0) || x.faltamDias < 0 ? "atrasado" : x.urgente ? "perto" : "ok";
+    const prazo = x.faltamKm != null ? (x.faltamKm >= 0 ? `em ${fmtKm(x.faltamKm)} km` : `passou ${fmtKm(x.faltamKm)} km`)
+      : x.faltamDias < 0 ? "atrasado" : x.faltamDias <= 60 ? `em ${nDias(x.faltamDias)}` : `até ${dataCurta(x.ate)}`;
+    const detalhe = x.faltamDias < 0 ? `O prazo era ${dataCurta(x.ate)}` : x.proxKm ? `Aos ${fmtKm(x.proxKm)} km ou até ${dataCurta(x.ate)}` : `Até ${dataCurta(x.ate)}`;
+    const pk = x.faltamKm != null ? 1 - x.faltamKm / cadaKm : 0, pd = 1 - x.faltamDias / (cadaMeses * 30.4);
+    itens.push({
+      id, nome, ic, st, prazo, detalhe, cor: st === "atrasado" ? "var(--rose)" : st === "perto" ? "var(--amber)" : cor,
+      ultima: `Última: ${dataCurta(x.ultima.data)}${x.ultima.km ? ` · ${fmtKm(x.ultima.km)} km` : ""}`,
+      prog: Math.max(0, Math.min(1, Math.max(pk, pd))), dias: x.faltamDias,
+      acao: st !== "ok" ? { t: "Anotar", forte: true, f: () => act.abrirGastoTransp({ sub: "manutencao", manut, veiculoId: v.id }) } : null,
+    });
+  };
+  if (oleo) lembrete(oleo, "oleo", "Troca de óleo", "#F59E0B", <Ic.oleo />, v.oleoKm || 10000, v.oleoMeses || 12, "oleo");
+  if (rodizio) lembrete(rodizio, "rodizio", "Rodízio e alinhamento", "#8B5CF6", <Ic.pneu />, 10000, 12, "alinhamento");
+  docs.forEach(d => {
+    const st = d.dias < 0 ? "atrasado" : d.dias <= 15 ? "perto" : "ok";
+    itens.push({
+      id: d.k, nome: d.nome, ic: <Ic.documentos />, st, dias: d.dias, cor: st === "atrasado" ? "var(--rose)" : st === "perto" ? "var(--amber)" : "#64748B",
+      prazo: d.dias < 0 ? `venceu há ${nDias(-d.dias)}` : d.dias === 0 ? "vence hoje" : d.dias <= 60 ? `em ${nDias(d.dias)}` : dataCurta(d.data),
+      detalhe: `Vence em ${dataCurta(d.data)}${d.valor ? ` · ${brl(d.valor)}` : ""}`,
+      acao: d.dias <= 60 ? { t: "Paguei", forte: st !== "ok", f: () => { vibrar("ok"); pagarDoc(d); } } : null,
+    });
+  });
+  if (!oleo) itens.push({ id: "sem-oleo", nome: "Troca de óleo", ic: <Ic.oleo />, st: "sem", dias: 1e9, cor: "var(--muted)", detalhe: "Anote a última troca e eu aviso quando chegar a próxima.", acao: { t: "Anotar a última", f: () => act.abrirGastoTransp({ sub: "manutencao", manut: "oleo", veiculoId: v.id }) } });
+  if (!rodizio) itens.push({ id: "sem-rodizio", nome: "Rodízio e alinhamento", ic: <Ic.pneu />, st: "sem", dias: 1e9, cor: "var(--muted)", detalhe: "A cada 10.000 km ou 12 meses (e calibre os pneus a cada 15 dias). Anote o último e eu lembro.", acao: { t: "Anotar o último", f: () => act.abrirGastoTransp({ sub: "manutencao", manut: "alinhamento", veiculoId: v.id }) } });
+  itens.sort((a, b) => ORDEM[a.st] - ORDEM[b.st] || a.dias - b.dias);
+  const alerta = itens.filter(k => k.st === "atrasado" || k.st === "perto").length;
+  const faltam = DOCS_VEICULO.filter(([k]) => !docs.some(d => d.k === k)).map(x => x[1]);
+  return (
+    <section className="tr-cartao tr-cuidados">
+      <div className="tr-cab"><span>Próximos cuidados</span>{alerta > 0 && <small className="tr-alerta">{alerta} {alerta === 1 ? "pede atenção" : "pedem atenção"}</small>}</div>
+      <div className="tr-linhas">
+        {itens.map(k => (
+          <div key={k.id} className="tr-cuid">
+            <span className="tr-ic" style={{ "--c": k.cor }}>{k.ic}</span>
+            <div className="tr-cuid-tx">
+              <div className="tr-cuid-topo"><b>{k.nome}</b>{k.prazo && <span className={"tr-pill " + k.st}>{k.st === "atrasado" && <I.alert />}{k.prazo}</span>}</div>
+              <small>{k.detalhe}</small>
+              {k.ultima && <small className="fraco">{k.ultima}</small>}
+              {k.prog != null && <span className={"tr-prog " + k.st} aria-hidden="true"><i style={{ width: `${Math.max(4, k.prog * 100)}%` }} /></span>}
+              {k.acao && <button type="button" className={"tr-btn" + (k.acao.forte ? " forte" : "")} onClick={k.acao.f}>{k.acao.t === "Paguei" && <I.check />}{k.acao.t}</button>}
+            </div>
+          </div>
+        ))}
+        {faltam.length > 0 && (
+          <button type="button" className="tr-cuid tr-cuid-link" onClick={() => act.abrirVeiculo(v.id)}>
+            <span className="tr-ic" style={{ "--c": "var(--muted)" }}><Ic.documentos /></span>
+            <span className="tr-cuid-tx">
+              <b>{docs.length ? `Colocar ${faltam.join(" e ")}` : "IPVA, licenciamento e seguro"}</b>
+              <small>{docs.length ? "Coloque a data de vencimento e eu aviso antes." : "Coloque as datas de vencimento e eu aviso uma semana antes e no dia."}</small>
+            </span>
+            <I.chev />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Combustível: o preço da semana na cidade (ANP), o que compensa, o último abastecimento e os postos ---------- */
+function Combustivel({ anp, fonte: ref, perfil, v, comb, lista }) {
+  const flex = !v || !v.combustivel || v.combustivel === "flex";
+  const veredito = ref && flex ? etanolOuGasolina(ref.p) : null;
+  const tipos = ref ? [["gasolina", "Gasolina"], ["etanol", "Etanol"], ["diesel", "Diesel S10"], ["gnv", "GNV (m³)"]]
+    .filter(([k]) => ref.p[k] && (k !== "diesel" || (v && v.combustivel === "diesel")) && (k !== "gnv" || (v && v.combustivel === "gnv"))) : [];
+  const ult = comb.ultimo, media = ult && ref ? ref.p[ult.combustivel || "gasolina"] : null;
+  const dif = ult && media ? comb.precoPago - media : null;
+  const ref0 = ref && ref.p[(v && v.combustivel !== "flex" && v.combustivel) || "gasolina"];
+  const comPreco = lista.filter(p => p.preco), barato = comPreco.length > 1 ? comPreco.reduce((m, p) => (p.preco < m.preco ? p : m)) : null;
+  return (
+    <section className="tr-cartao tr-comb">
+      <div className="tr-cab"><span>{ref ? (ref.onde === perfil.cidade ? `Combustível em ${ref.onde}` : `Combustível ${ref.onde}`) : "Combustível"}</span></div>
+      {anp.st === "carregando" && <p className="tr-tx">Buscando o preço da semana na ANP…</p>}
+      {anp.st === "sem-cidade" && <p className="tr-tx">Coloque a sua cidade em Perfil → Dados pessoais para ver o preço da semana.</p>}
+      {anp.st === "erro" && <p className="tr-tx">Não consegui buscar o preço da ANP agora.</p>}
+      {ref && <>
+        <div className="tr-precos">
+          {tipos.map(([k, n]) => { const melhor = veredito && k === veredito.veredito; return (
+            <div key={k} className={"tr-preco" + (melhor ? " melhor" : "")}><small>{n}</small><b>{preco(ref.p[k])}</b>{melhor && <em>compensa</em>}</div>
+          ); })}
+        </div>
+        <p className="tr-fonte">Preço médio da semana de {dm(anp.d.ini)} a {dm(anp.d.fim)}, pela ANP{anp.d.velho ? " · sem internet agora" : ""}</p>
+        {veredito && (
+          <div className={"tr-dica" + (veredito.veredito !== "tanto-faz" ? " bom" : "")}>
+            <I.check />
+            <span><b>{veredito.veredito === "etanol" ? "Etanol compensa." : veredito.veredito === "gasolina" ? "Gasolina compensa." : "Tanto faz."}</b> O etanol está custando {Math.round(veredito.razao * 100)}% da gasolina. Ele compensa abaixo de 70%, porque rende menos.</span>
+          </div>
+        )}
+      </>}
+      {(ult || lista.length > 0) && <div className="tr-div" />}
+      {ult && (
+        <div className="tr-item">
+          <span className="tr-ic cheio" style={{ "--c": "#F59E0B" }}><Ic.combustivel /></span>
+          <span className="mid">
+            <b>Último abastecimento</b><small>{dataCurta(ult.data)} · {litrosTx(ult.litros)}{ult.km ? ` · ${fmtKm(ult.km)} km` : ""}</small>
+            {dif != null && <small className={Math.abs(dif) < .02 ? "" : dif > 0 ? "ruim" : "bom"}>{Math.abs(dif) < .02 ? "Na média da semana" : `${dif > 0 ? "↑" : "↓"} ${preco(Math.abs(dif))} ${dif > 0 ? "acima" : "abaixo"} da média`}</small>}
+          </span>
+          <span className="dir"><b>{preco(comb.precoPago)}<small>/l</small></b></span>
+        </div>
+      )}
+      {lista.length > 0 && <>
+        <h4 className="tr-sub">Onde você abastece</h4>
+        <div className="tr-linhas">
+          {lista.slice(0, 3).map(p => (
+            <div key={p.nome} className={"tr-item" + (barato === p ? " barato" : "")}>
+              <span className="tr-ic" style={{ "--c": barato === p ? "var(--mint)" : "var(--muted)" }}><Ic.local /></span>
+              <span className="mid"><b>{p.nome}</b><small>{p.n} {p.n === 1 ? "vez" : "vezes"} · {barato === p ? "o mais barato" : inteiro(p.gasto)}</small></span>
+              {p.preco && <span className="dir"><b>{preco(p.preco)}<small>/l</small></b>{ref0 && <small className={p.preco <= ref0 ? "bom" : "ruim"}>{preco(Math.abs(ref0 - p.preco))} {p.preco <= ref0 ? "abaixo" : "acima"}</small>}</span>}
+            </div>
+          ))}
+        </div>
+      </>}
+      {!comb.consumoReal
+        ? <p className="tr-tx">Ao abastecer, anote os litros e a km do painel: com dois abastecimentos eu calculo o seu consumo real.</p>
+        : !lista.length && <p className="tr-tx">Escreva o nome do posto ao abastecer e eu mostro onde sai mais barato.</p>}
+    </section>
+  );
+}
+
+/* ---------- Quanto o veículo custa de verdade, com o "carro ou app?" ---------- */
 // Carro ou app? O custo de verdade do carro por km contra o preço de uma corrida que a pessoa faz
 function CarroOuApp({ custo, v, act }) {
   const a0 = (v && v.appRef) || {};
@@ -48,95 +338,129 @@ function CarroOuApp({ custo, v, act }) {
     return () => clearTimeout(t);
   }, [valor, km]);
   const c = carroOuApp(custo, { valor: num(valor), km: num(km) });
+  const seu = v && v.tipo === "moto" ? "Sua moto" : "Seu carro";
   return (
-    <div className="carro-app">
-      <b>Carro ou app?</b>
-      <div className="carro-app-in">
-        <span>Uma corrida de</span>
-        <label><input inputMode="decimal" value={km} onChange={e => setKm(soNumero(e.target.value))} placeholder="10" aria-label="Distância da corrida em km" /><small>km</small></label>
-        <span>sai por</span>
-        <label><small>R$</small><input inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="25,00" aria-label="Preço da corrida" /></label>
+    <div className="tr-bloco">
+      <b className="tr-bloco-t">{v && v.tipo === "moto" ? "Moto ou app?" : "Carro ou app?"}</b>
+      <p className="tr-tx">Uma corrida que você costuma fazer:</p>
+      <div className="tr-app-in">
+        <label className="tr-campo"><input inputMode="decimal" value={km} onChange={e => setKm(soNumero(e.target.value))} placeholder="10" aria-label="Distância da corrida em km" /><span>km</span></label>
+        <label className="tr-campo"><span>R$</span><input inputMode="decimal" value={valor} onChange={e => setValor(soNumero(e.target.value))} placeholder="25,00" aria-label="Preço da corrida" /></label>
       </div>
       {c ? <>
-        <div className="carro-app-cmp">
-          <div className={c.carroKm <= c.appKm ? "ganha" : ""}><small>Seu carro</small><b>{brlReal(c.carroKm)}</b><small>por km{c.comDesvalor ? ", com a desvalorização" : ""}</small></div>
-          <div className={c.appKm < c.carroKm ? "ganha" : ""}><small>App</small><b>{brlReal(c.appKm)}</b><small>por km</small></div>
+        <div className="tr-vs">
+          <div className={c.carroKm <= c.appKm ? "ganha" : ""}><small>{seu}</small><b>{real(c.carroKm)}</b><small>por km{c.comDesvalor ? ", com a desvalorização" : ""}</small></div>
+          <div className={c.appKm < c.carroKm ? "ganha" : ""}><small>App</small><b>{real(c.appKm)}</b><small>por km</small></div>
         </div>
-        <p className="hint">{c.diferenca >= 0
-          ? <>Rodando uns {Math.round(c.kmMes).toLocaleString("pt-BR")} km por mês, de app sairia <b>{brl(c.appMes)}</b>: {brl(c.diferenca)} a mais que o carro.</>
-          : <>Rodando uns {Math.round(c.kmMes).toLocaleString("pt-BR")} km por mês, de app sairia <b>{brl(c.appMes)}</b>: <b>{brl(-c.diferenca)} a menos</b> que o carro. Vale pensar!</>}</p>
-      </> : <p className="hint">Coloque uma corrida que você costuma fazer (veja o preço no app de corrida) e eu comparo.</p>}
+        <p className="tr-tx">{c.diferenca >= 0
+          ? <>Rodando uns {Math.round(c.kmMes).toLocaleString("pt-BR")} km por mês, de app sairia <b>{brl(c.appMes)}</b>: {brl(c.diferenca)} a mais.</>
+          : <>Rodando uns {Math.round(c.kmMes).toLocaleString("pt-BR")} km por mês, de app sairia <b>{brl(c.appMes)}</b>: <b>{brl(-c.diferenca)} a menos</b>. Vale pensar!</>}</p>
+      </> : <p className="tr-tx">Coloque uma corrida que você costuma fazer (veja o preço no app de corrida) e eu comparo.</p>}
     </div>
+  );
+}
+function CustoReal({ custo, v, act }) {
+  const partes = SUBS.filter(s => custo.porSub[s.id]);
+  const periodo = custo.nMeses === 1 ? "nos últimos 30 dias" : `nos últimos ${custo.nMeses} meses`;
+  return (
+    <section className="tr-cartao tr-custo">
+      <div className="tr-cab"><span>Quanto {v.tipo === "moto" ? "a moto" : "o carro"} custa de verdade</span></div>
+      <div className="tr-custo-v"><span className="tr-valor"><Money v={custo.porMes} /></span><span>por mês, {periodo}</span></div>
+      <div className="tr-trio">
+        <div><b>{real(custo.porDia)}</b><small>por dia</small></div>
+        <div><b>{custo.porKm ? real(custo.porKm) : "—"}</b><small>por km</small></div>
+        <div><b>{inteiro(custo.total)}</b><small>no total</small></div>
+      </div>
+      <div className="tr-seg" aria-hidden="true">{partes.map(s => <i key={s.id} style={{ flex: `${custo.porSub[s.id]} 1 0px`, background: s.cor }} />)}</div>
+      <div className="tr-leg-mini">{partes.map(s => <span key={s.id}><i style={{ background: s.cor }} />{nomeCurto(s.id)} {pct(custo.porSub[s.id], custo.total)}%</span>)}</div>
+      {custo.perdeu && (
+        <div className="tr-dica">
+          <Ic.desce />
+          <span>Pela FIPE, perdeu <b>{brl(custo.perdeu.valor)}</b> de valor desde {MES_LONGO[Number(custo.perdeu.desde.slice(5)) - 1]} de {custo.perdeu.desde.slice(0, 4)}. Isso também é custo, só que invisível.</span>
+        </div>
+      )}
+      {custo.porKm
+        ? <CarroOuApp custo={custo} v={v} act={act} />
+        : <p className="tr-tx">Anotando a km do painel ao abastecer, eu mostro o custo de cada km rodado (e comparo com uma corrida de app).</p>}
+    </section>
   );
 }
 
-// Onde você abastece: preço médio do litro em cada posto anotado (o mais barato em destaque)
-function Postos({ lista, ref0 }) {
-  if (!lista.length) return <p className="hint">Escreva o nome do posto ao abastecer e eu mostro onde sai mais barato.</p>;
-  const comPreco = lista.filter(p => p.preco), barato = comPreco.length > 1 ? comPreco.reduce((m, p) => (p.preco < m.preco ? p : m)) : null;
+/* ---------- Quanto custa a viagem ---------- */
+function Viagem({ comb, precoRef }) {
+  const [kmViagem, setKmViagem] = useState("");
+  const [idaVolta, setIdaVolta] = useState(true);
+  const kmTotal = num(kmViagem) * (idaVolta ? 2 : 1), litros = comb.consumo ? kmTotal / comb.consumo : 0;
   return (
-    <div className="postos">
-      <b>Onde você abastece</b>
-      {lista.slice(0, 4).map(p => (
-        <div key={p.nome} className={"posto" + (barato && p === barato ? " barato" : "")}>
-          <span className="mid"><b>{p.nome}</b><small>{p.n} {p.n === 1 ? "vez" : "vezes"} · {brl(p.gasto)}{barato && p === barato ? " · o mais barato" : ""}</small></span>
-          {p.preco && <span className="preco"><b>{preco(p.preco)}</b><small>{ref0 ? (p.preco <= ref0 ? `${preco(ref0 - p.preco)} abaixo` : `${preco(p.preco - ref0)} acima`) : "o litro"}</small></span>}
-        </div>
-      ))}
-    </div>
+    <section className="tr-cartao tr-viagem">
+      <div className="tr-cab"><span>Quanto custa a viagem?</span></div>
+      <div className="tr-viagem-in">
+        <label className="tr-campo"><input inputMode="decimal" value={kmViagem} onChange={e => setKmViagem(soNumero(e.target.value))} placeholder="Distância" aria-label="Distância da viagem em km" /><span>km</span></label>
+        <Toggle on={idaVolta} onClick={() => setIdaVolta(!idaVolta)}>Ida e volta</Toggle>
+      </div>
+      {kmTotal > 0 ? (comb.consumo && precoRef
+        ? <div className="tr-res"><b>{real(litros * precoRef)}</b><span>{fmtNum(Math.round(litros * 10) / 10)} litros para {kmTotal.toLocaleString("pt-BR")} km · {kml(comb.consumo)} km/l a {preco(precoRef)}</span></div>
+        : <p className="tr-tx">Para calcular, informe o consumo do veículo (no lápis, lá em cima) ou anote dois abastecimentos.</p>)
+        : <p className="tr-tx">Coloque a distância e eu calculo quanto vai de combustível.</p>}
+    </section>
   );
 }
 
-// Um cartão por veículo: foto, nome e os números dele; o último cartão adiciona outro veículo
-function SlideVeiculo({ db, v }) {
-  const comb = estatisticasCombustivel(db, v), km = kmAtual(db, v), motor = v.tipo === "carro" || v.tipo === "moto";
-  const nome = v.nome || (v.fipe && v.fipe.modelo) || (v.tipo === "nenhum" ? "Apps e transporte público" : "Seu veículo");
+/* ---------- Os gastos do mês, com o filtro por tipo ---------- */
+function GastosDoMes({ g, mes, off, filtro, setFiltro, act }) {
+  const subs = SUBS.filter(s => g.porSub[s.id]).sort((a, b) => g.porSub[b.id].total - g.porSub[a.id].total);
+  const lista = g.itens.filter(i => !filtro || i.sub === filtro);
+  const n = g.itens.length;
   return (
-    <div className="transp-slide">
-      <div className="transp-palco"><i className="transp-luz" aria-hidden="true" /><FotoVeiculo v={v} grande /><i className="transp-chao" aria-hidden="true" /></div>
-      <h2>{nome}</h2>
-      <div className="transp-chips">
-        {v.combustivel && motor && <span>{(COMBUSTIVEIS.find(c => c[0] === v.combustivel) || [, ""])[1]}</span>}
-        {motor && comb.consumo && <span>{kml(comb.consumo)} km/l{comb.consumoReal ? "" : " (informado)"}</span>}
-        {motor && km && <span>{km.toLocaleString("pt-BR")} km</span>}
-        {v.fipe && v.fipe.valor && <span>FIPE {v.fipe.valor}</span>}
-      </div>
-    </div>
+    <section className="tr-cartao tr-gastos">
+      <div className="tr-cab"><span>{off === 0 ? "Gastos do mês" : `Gastos de ${mes.nome}`}</span>{n > 0 && <small>{n} {n === 1 ? "gasto" : "gastos"}</small>}</div>
+      {subs.length > 1 && (
+        <div className="tr-filtros" role="group" aria-label="Filtrar por tipo">
+          <button type="button" className={"tr-filtro" + (!filtro ? " on" : "")} aria-pressed={!filtro} onClick={() => setFiltro(null)}>Tudo</button>
+          {subs.map(s => (
+            <button key={s.id} type="button" className={"tr-filtro" + (filtro === s.id ? " on" : "")} aria-pressed={filtro === s.id} style={{ "--c": s.cor }} onClick={() => { setFiltro(filtro === s.id ? null : s.id); vibrar("toque"); }}>
+              <i aria-hidden="true" />{nomeCurto(s.id)}
+            </button>
+          ))}
+        </div>
+      )}
+      {lista.length === 0 && <p className="tr-vazio">{filtro ? "Nada deste tipo no mês." : off === 0 ? "Nenhum gasto com transporte neste mês ainda." : `Nenhum gasto com transporte em ${mes.nome}.`}</p>}
+      {lista.length > 0 && (
+        <div className="tr-linhas">
+          {lista.map((l, i) => (
+            <React.Fragment key={l.id}>
+              {(i === 0 || lista[i - 1].data !== l.data) && <div className="day-sep">{relativo(l.data)}</div>}
+              <button type="button" className="tr-item" disabled={l.conta} onClick={() => !l.conta && act.abrirGastoTransp({ inicial: l })}>
+                <span className="tr-ic cheio" style={{ "--c": subInfo(l.sub).cor }}><IconeSub id={l.sub} /></span>
+                <span className="mid"><b>{l.desc || subInfo(l.sub).nome}</b><small>{subInfo(l.sub).nome}{l.litros ? ` · ${litrosTx(l.litros)}` : ""}{l.conta ? " · conta fixa" : ""}</small></span>
+                <span className="dir"><b>−<Money v={l.valor} /></b></span>
+              </button>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
-function Carrossel({ db, vs, v, onTrocar, act }) {
-  const ref = useRef(null), espera = useRef(0);
-  const idx = Math.max(0, vs.findIndex(x => v && x.id === v.id));
-  // trocou por fora (veículo novo, toque na bolinha): rola até ele
-  useEffect(() => {
-    const el = ref.current; if (!el) return;
-    const alvo = idx * el.clientWidth;
-    if (Math.abs(el.scrollLeft - alvo) > 4) el.scrollTo({ left: alvo, behavior: el.dataset.pronto ? "smooth" : "auto" });
-    el.dataset.pronto = "1";
-  }, [idx, vs.length]);
-  const rolou = () => {
-    clearTimeout(espera.current);
-    espera.current = setTimeout(() => {
-      const el = ref.current; if (!el) return;
-      const i = Math.round(el.scrollLeft / el.clientWidth);
-      if (i < vs.length && vs[i].id !== (v && v.id)) { vibrar("toque"); onTrocar(vs[i].id); }
-    }, 80);
-  };
+
+/* ---------- Ajustes: o veículo, outro veículo e o teto do mês ---------- */
+function Ajustes({ v, act }) {
   return (
-    <section className="transp-hero" aria-roledescription="carrossel" aria-label="Seus veículos">
-      <div className="transp-carrossel" ref={ref} onScroll={rolou}>
-        {vs.map(x => <SlideVeiculo key={x.id} db={db} v={x} />)}
-        <div className="transp-slide">
-          <button className="transp-novo" onClick={() => act.abrirVeiculo("novo")}>
-            <span className="transp-novo-ic"><I.plus /></span>
-            <b>Adicionar veículo</b>
-          </button>
-        </div>
-      </div>
-      <div className="transp-pontos" role="tablist">
-        {vs.map((x, i) => <button key={x.id} role="tab" aria-selected={i === idx} className={i === idx ? "on" : ""} onClick={() => onTrocar(x.id)} aria-label={x.nome || `Veículo ${i + 1}`} />)}
-        <button className="mais" onClick={() => act.abrirVeiculo("novo")} aria-label="Adicionar veículo"><I.plus /></button>
-      </div>
+    <section className="tr-cartao tr-ajustes" aria-label="Ajustes do transporte">
+      {v && (
+        <button type="button" className="tr-ajuste" onClick={() => act.abrirVeiculo(v.id)}>
+          <i aria-hidden="true"><I.pencil /></i>
+          <span className="mid"><b>Editar {nomeChip(v)}</b><small>{v.tipo === "nenhum" ? "Nome e tipo" : "Foto, consumo, Tabela FIPE e vencimentos"}</small></span><I.chev />
+        </button>
+      )}
+      <button type="button" className="tr-ajuste" onClick={() => act.abrirVeiculo("novo")}>
+        <i aria-hidden="true"><I.plus /></i>
+        <span className="mid"><b>{v ? "Adicionar outro veículo" : "Escolher o meu veículo"}</b><small>Carro, moto, bike ou apps e ônibus</small></span><I.chev />
+      </button>
+      <button type="button" className="tr-ajuste" onClick={() => act.abrirTeto("transporte")}>
+        <i aria-hidden="true"><I.gauge /></i>
+        <span className="mid"><b>Teto de gastos com transporte</b><small>Um limite para o mês</small></span><I.chev />
+      </button>
     </section>
   );
 }
@@ -146,14 +470,18 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
   const v = vs.find(x => x.id === atual) || vs[0] || null;
   const [off, setOff] = useState(0);
   const [filtro, setFiltro] = useState(null);
-  const hoje = todayISO();
+  const hoje = todayISO(), hojeDia = Number(hoje.slice(8, 10));
   const mes = mesDe(off), g = useMemo(() => gastosTransporte(db, mes.chave, v), [db, mes.chave, v]);
   const ant = useMemo(() => gastosTransporte(db, mesDe(off - 1).chave, v), [db, off, v]);
+  // no mês de agora, compara com o mês passado até o mesmo dia (o mês inteiro contra 3 dias não diz nada)
+  const antes = off === 0 ? ant.itens.filter(i => Number(i.data.slice(8, 10)) <= hojeDia).reduce((s, i) => s + i.valor, 0) : ant.total;
+  const doMes = useMemo(() => (off === 0 ? g : gastosTransporte(db, mesDe(0).chave, v)), [db, off, g, v]);
   const seis = useMemo(() => [5, 4, 3, 2, 1, 0].map(k => { const m = mesDe(off - k); return { ...m, total: gastosTransporte(db, m.chave, v).total }; }), [db, off, v]);
-  const maior = Math.max(...seis.map(s => s.total), 1);
+  const noAno = useMemo(() => lancTransp(db, v).filter(l => l.tipo === "saida" && l.data.startsWith(hoje.slice(0, 4))).reduce((s, l) => s + l.valor, 0), [db, v, hoje]);
   const comb = useMemo(() => estatisticasCombustivel(db, v), [db, v]);
-  const oleo = proximaTrocaOleo(db, v, hoje);
   const km = kmAtual(db, v);
+  const oleo = proximaTrocaOleo(db, v, hoje), rodizio = proximoRodizio(db, v, hoje), docs = docsVeiculo(v, hoje);
+  const temCarro = temMotor(v);
   // Preço médio da semana (ANP) na sua cidade
   const [anp, setAnp] = useState({ st: "carregando" });
   useEffect(() => {
@@ -164,25 +492,11 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
     return () => { vivo = false; };
   }, [perfil && perfil.cidade]);
   const ref = anp.d ? (Object.keys(anp.d.cidade || {}).length ? { p: anp.d.cidade, onde: perfil.cidade } : Object.keys(anp.d.estado || {}).length ? { p: anp.d.estado, onde: "no seu estado" } : { p: anp.d.brasil, onde: "no Brasil" }) : null;
-  const veredito = ref ? etanolOuGasolina(ref.p) : null;
   const flex = !v || !v.combustivel || v.combustivel === "flex";
-  const temCarro = !v || v.tipo === "carro" || v.tipo === "moto";
-  const [postosAberto, setPostosAberto] = useState(false);
-  // calculadora de viagem
-  const [kmViagem, setKmViagem] = useState("");
-  const [idaVolta, setIdaVolta] = useState(true);
+  const veredito = ref && flex ? etanolOuGasolina(ref.p) : null;
   const precoRef = comb.precoPago || (ref && (v && v.combustivel === "etanol" ? ref.p.etanol : v && v.combustivel === "diesel" ? ref.p.diesel : ref.p.gasolina)) || null;
-  const kmTotal = num(kmViagem) * (idaVolta ? 2 : 1), litros = comb.consumo ? kmTotal / comb.consumo : 0;
-  const manut = lancTransp(db, v).filter(l => ["manutencao", "melhorias"].includes(subDe(l))).sort((a, b) => b.data.localeCompare(a.data));
-  const manutAno = manut.filter(l => l.data.startsWith(hoje.slice(0, 4))).reduce((s, l) => s + l.valor, 0);
-  const subsMes = SUBS.filter(s => g.porSub[s.id]).sort((a, b) => g.porSub[b.id].total - g.porSub[a.id].total);
-  const lista = g.itens.filter(i => !filtro || i.sub === filtro);
-  // a porcentagem só faz sentido quando o mês anterior teve gasto de verdade
-  const delta = ant.total >= 50 ? (g.total - ant.total) / ant.total : null;
-  const nome = (v && v.nome) || (v && v.fipe && v.fipe.modelo) || (v && v.tipo === "nenhum" ? "Apps e transporte público" : "Seu veículo");
-  const rodizio = proximoRodizio(db, v, hoje);
-  const docs = docsVeiculo(v, hoje);
-  const custo = useMemo(() => temCarro && v ? custoReal(db, v, hoje) : null, [db, v, hoje]);
+  const custo = useMemo(() => (temCarro && v ? custoReal(db, v, hoje) : null), [db, v, hoje]);
+  const listaPostos = useMemo(() => (temCarro ? postos(db, v) : []), [db, v]);
   // FIPE do mês: uma vez por mês busca o valor de novo e guarda o histórico (mostra quanto o carro desvalorizou)
   useEffect(() => {
     fipeDoMes(v, hoje.slice(0, 7)).then(mud => { if (mud) act.atualizarVeiculo(v.id, mud); }).catch(() => {});
@@ -191,188 +505,38 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
     act.salvarLanc({ id: uid(), veiculoId: v.id, tipo: "saida", cat: "transporte", sub: "documentos", valor: d.valor, data: hoje, desc: `${d.nome} ${d.data.slice(0, 4)}` });
     act.atualizarVeiculo(v.id, { docs: { ...(v.docs || {}), [d.k]: { ...(v.docs || {})[d.k], data: umAnoDepois(d.data) } } });
   };
+  const mudarMes = n => { setOff(n); setFiltro(null); vibrar("toque"); };
+  const trocar = id => { onTrocar(id); setOff(0); setFiltro(null); };
+  const [postosAberto, setPostosAberto] = useState(false);
+  const abrirPostos = () => {
+    vibrar("toque");
+    // no app de celular, abre a tela nativa do posto mais barato (app-celular/src/app/postos.tsx)
+    if (!noApp) return setPostosAberto(true);
+    const etanol = veredito && veredito.veredito === "etanol";
+    chamarApp("abrir", { tela: "postos", comb: etanol ? "etanol" : combDoVeiculo(v), consumo: comb.consumo || 0 }).catch(() => setPostosAberto(true));
+  };
 
   return (
-    <div className="page transp">
-      <TopBar eyebrow={nome} title="Transporte" act={act} tema={tema}
-        extra={<button className="icon-btn" onClick={() => act.abrirVeiculo(v ? v.id : "novo")} aria-label="Editar o veículo"><I.pencil /></button>} />
+    <div className="page transp tr">
+      <TopBar eyebrow={vs.length > 1 ? `${vs.length} veículos` : "Pessoal"} title="Transporte" act={act} tema={tema}
+        extra={<button className="icon-btn" onClick={() => act.abrirVeiculo(v ? v.id : "novo")} aria-label={v ? "Editar o veículo" : "Escolher o veículo"}><I.pencil /></button>} />
       <div className="cols">
         <div className="col">
-
-        {vs.length ? <Carrossel db={db} vs={vs} v={v} onTrocar={id => { onTrocar(id); setOff(0); setFiltro(null); }} act={act} /> : (
-          <section className="transp-hero">
-            <div className="transp-palco"><i className="transp-luz" aria-hidden="true" /><FotoVeiculo v={null} grande /><i className="transp-chao" aria-hidden="true" /></div>
-            <h2>Seu veículo</h2>
-            <button className="btn ghost transp-escolher" onClick={() => act.abrirVeiculo("novo")}><I.car /> Escolher o meu veículo</button>
-          </section>
-        )}
-
-        <Topo rotulo={<>Transporte em <b>{mes.nome}</b>{mes.ano !== new Date().getFullYear() ? ` de ${mes.ano}` : ""}</>} valor={g.total}
-          nav={{ ant: () => { setOff(off - 1); setFiltro(null); vibrar("toque"); }, prox: () => { setOff(off + 1); setFiltro(null); vibrar("toque"); }, podeProx: off < 0 }}
-          apoio={<Comparacao agora={g.total} antes={ant.total} nomeAnt={mesDe(off - 1).nome} />}>
-          <div className="vz-barras" role="group" aria-label="Últimos 6 meses">
-            {seis.map((s, i) => (
-              <button key={s.chave} type="button" className={i === 5 ? "on" : ""} onClick={() => { setOff(off - (5 - i)); setFiltro(null); }} disabled={i === 5} style={{ "--i": i }} aria-label={`${s.nome}: ${brlReal(s.total)}`}>
-                <small>{s.total > 0 ? brl(s.total).replace(/,d+$/, "") : ""}</small>
-                <i style={{ height: `${Math.max(4, s.total / maior * 100)}%` }} />
-                <span>{s.nome.slice(0, 3)}</span>
-              </button>
-            ))}
-          </div>
-        </Topo>
-
-        <div className="transp-acoes">
-          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "combustivel", veiculoId: v && v.id })}><span className="ic ilu"><Ilustra n="bomba" /></span>Abastecer</button>}
-          {temCarro && <button onClick={() => act.abrirGastoTransp({ sub: "manutencao", veiculoId: v && v.id })}><span className="ic ilu"><Ilustra n="ferramentas" /></span>Manutenção</button>}
-          <button onClick={() => act.abrirGastoTransp({ sub: temCarro ? "estacionamento" : "app", veiculoId: v && v.id })}><span className="ic" style={{ "--c": "var(--mode)" }}><I.plus /></span>Outro gasto</button>
-        </div>
-
-        {subsMes.length > 0 && (
-          <section aria-label="Para onde foi o dinheiro">
-            <div className="vz-head"><h3>Para onde foi</h3>{filtro && <button className="link" onClick={() => setFiltro(null)}>Ver tudo</button>}</div>
-            <div className="vz-trilho">
-              {subsMes.map(s => { const x = g.porSub[s.id]; return (
-                <button key={s.id} type="button" className={"vz-card" + (filtro === s.id ? " on" : filtro ? " apaga" : "")} aria-pressed={filtro === s.id} style={{ "--gc": s.cor }} onClick={() => { setFiltro(filtro === s.id ? null : s.id); vibrar("toque"); }}>
-                  <IconeAnel cor={s.cor} tinta={s.id === "combustivel" ? "#2A1A00" : "#fff"} p={x.total / (g.total || 1)}><IconeSub id={s.id} /></IconeAnel>
-                  <span className="vz-card-n">{s.nome}</span>
-                  <b className="num vz-card-v"><Money v={x.total} /></b>
-                  <small>{x.n} {x.n === 1 ? "gasto" : "gastos"} · {Math.round(x.total / (g.total || 1) * 100)}%</small>
-                </button>
-              ); })}
-            </div>
-          </section>
-        )}
-
-        {custo && (
-          <section className="transp-card transp-custo">
-            <div className="transp-card-cab"><h3>Quanto o carro custa de verdade</h3><small>últimos {custo.nMeses === 1 ? "30 dias" : `${custo.nMeses} meses`}</small></div>
-            <div className="transp-custo-nums">
-              <div><b><Money v={custo.porMes} /></b><small>por mês</small></div>
-              <div><b>{brlReal(custo.porDia)}</b><small>por dia</small></div>
-              <div><b>{custo.porKm ? brlReal(custo.porKm) : "—"}</b><small>por km rodado</small></div>
-            </div>
-            <div className="transp-custo-barra" aria-hidden="true">{SUBS.filter(s => custo.porSub[s.id]).map(s => <i key={s.id} style={{ width: `${custo.porSub[s.id] / custo.total * 100}%`, background: s.cor }} />)}</div>
-            <div className="transp-custo-leg">{SUBS.filter(s => custo.porSub[s.id]).map(s => <span key={s.id}><i style={{ background: s.cor }} />{s.nome} {Math.round(custo.porSub[s.id] / custo.total * 100)}%</span>)}</div>
-            {custo.perdeu && <p className="hint">Pela FIPE, o carro perdeu <b>{brl(custo.perdeu.valor)}</b> de valor desde {MES_LONGO[Number(custo.perdeu.desde.slice(5)) - 1]} de {custo.perdeu.desde.slice(0, 4)}. Isso também é custo, só que invisível.</p>}
-            {!custo.porKm && <p className="hint">Anotando a km do painel ao abastecer, eu mostro o custo de cada km rodado (dá para comparar com uma corrida de app).</p>}
-            {custo.porKm && <CarroOuApp custo={custo} v={v} act={act} />}
-          </section>
-        )}
-
-        <ProximaConquista act={act} trilhas={["estrada"]} />
-
+          <Veiculo vs={vs} v={v} comb={comb} km={km} doMes={doMes} noAno={noAno} onTrocar={trocar} act={act} />
+          <Acoes v={v} act={act} onPosto={abrirPostos} />
+          <CartaoMes g={g} antes={antes} antTotal={ant.total} mes={mes} off={off} mudarMes={mudarMes} seis={seis} hojeDia={hojeDia} />
+          <GastosDoMes g={g} mes={mes} off={off} filtro={filtro} setFiltro={setFiltro} act={act} />
+          <Ajustes v={v} act={act} />
         </div>
         <div className="col">
-        {temCarro && (
-          <section className="transp-card com-ilu">
-            <Ilustra n="bomba" className="transp-sai bomba" />
-            <div className="transp-card-cab"><h3>Combustível</h3></div>
-            {anp.st === "carregando" && <p className="hint">Buscando o preço da semana na ANP…</p>}
-            {anp.st === "sem-cidade" && <p className="hint">Coloque a sua cidade em Perfil → Dados pessoais para ver o preço da semana.</p>}
-            {anp.st === "erro" && <p className="hint">Não consegui buscar o preço da ANP agora.</p>}
-            {ref && <>
-              <div className="transp-precos">
-                {[["gasolina", "Gasolina"], ["etanol", "Etanol"], ["diesel", "Diesel S10"], ["gnv", "GNV (m³)"]].filter(([k]) => ref.p[k] && (k !== "diesel" || (v && v.combustivel === "diesel")) && (k !== "gnv" || (v && v.combustivel === "gnv"))).map(([k, n]) => (
-                  <span key={k} className={veredito && flex && k === veredito.veredito ? "melhor" : ""}><small>{n}</small><b>{preco(ref.p[k])}</b></span>
-                ))}
-              </div>
-              <p className="transp-fonte">Preço médio {ref.onde === perfil.cidade ? `em ${ref.onde}` : ref.onde} · ANP, semana de {dm(anp.d.ini)} a {dm(anp.d.fim)}{anp.d.velho ? " · sem internet agora" : ""}</p>
-              {veredito && flex && <div className={"transp-veredito " + veredito.veredito}><b>{veredito.veredito === "etanol" ? "Etanol compensa" : veredito.veredito === "gasolina" ? "Gasolina compensa" : "Tanto faz"}</b><span>O etanol está custando {Math.round(veredito.razao * 100)}% da gasolina. Ele compensa abaixo de 70%, porque rende menos.</span></div>}
-            </>}
-            <button type="button" className="postos-abrir" onClick={() => {
-              vibrar("toque");
-              // no app de celular, abre a tela nativa do posto mais barato (app-celular/src/app/postos.tsx)
-              if (!noApp) return setPostosAberto(true);
-              const etanol = veredito && flex && veredito.veredito === "etanol";
-              chamarApp("abrir", { tela: "postos", comb: etanol ? "etanol" : combDoVeiculo(v), consumo: comb.consumo || 0 }).catch(() => setPostosAberto(true));
-            }}>
-              <span className="ic" aria-hidden="true"><I.target /></span>
-              <span className="mid"><b>Posto mais barato perto</b><small>O preço do litro em cada posto, agora</small></span>
-              <I.chev />
-            </button>
-            {postosAberto && createPortal(<PostoBaratoSheet veiculo={v} consumo={comb.consumo} sugerido={veredito && flex && veredito.veredito === "etanol" ? "etanol" : undefined} onClose={() => setPostosAberto(false)} />, document.querySelector(".shell") || document.body)}
-            <div className="transp-linhas">
-              <div><span>Seu consumo</span><b>{comb.consumo ? `${kml(comb.consumo)} km/l` : "—"}</b></div>
-              <div><span>Custo por km</span><b>{comb.custoKm ? brlReal(comb.custoKm) : "—"}</b></div>
-              {comb.ultimo && <div><span>Último abastecimento</span><b>{preco(comb.precoPago)}/l · {dm(comb.ultimo.data)}</b></div>}
-            </div>
-            {comb.ultimo && ref && ref.p[comb.ultimo.combustivel || "gasolina"] && (() => { const dif = comb.precoPago - ref.p[comb.ultimo.combustivel || "gasolina"]; return Math.abs(dif) >= .02 && <p className={"hint " + (dif > 0 ? "ruim" : "bom")}>Você pagou {preco(Math.abs(dif))} {dif > 0 ? "acima" : "abaixo"} da média da semana.</p>; })()}
-            {!comb.consumoReal && <p className="hint">Ao abastecer, anote os litros e a km do painel: com dois abastecimentos eu calculo o seu consumo real.</p>}
-            <Postos lista={postos(db, v)} ref0={ref && ref.p[(v && v.combustivel !== "flex" && v.combustivel) || "gasolina"]} />
-          </section>
-        )}
-
-        {temCarro && (
-          <section className="transp-card com-ilu">
-            <Ilustra n="ferramentas" className="transp-sai ferramentas" />
-            <div className="transp-card-cab"><h3>Manutenção</h3>{manutAno > 0 && <small>{brl(manutAno)} em {hoje.slice(0, 4)}</small>}</div>
-            {oleo ? (
-              <div className={"transp-oleo" + (oleo.urgente ? " urgente" : "")}>
-                <b>Próxima troca de óleo</b>
-                <span>{oleo.faltamKm != null ? (oleo.faltamKm > 0 ? `em ${oleo.faltamKm.toLocaleString("pt-BR")} km` : `passou ${Math.abs(oleo.faltamKm).toLocaleString("pt-BR")} km`) + " ou " : ""}{oleo.faltamDias >= 0 ? `até ${dataCurta(oleo.ate)}` : `venceu em ${dataCurta(oleo.ate)}`}</span>
-              </div>
-            ) : <p className="hint">Anote a última troca de óleo (em Manutenção) e eu aviso quando chegar a próxima.</p>}
-            <div className={"transp-pneu" + (rodizio && rodizio.urgente ? " urgente" : "")}>
-              <Ilustra n="pneu" />
-              <span><b>Pneus</b>{rodizio
-                ? <small>Rodízio e alinhamento {rodizio.faltamKm != null ? (rodizio.faltamKm > 0 ? `em ${rodizio.faltamKm.toLocaleString("pt-BR")} km ou ` : `atrasado ${Math.abs(rodizio.faltamKm).toLocaleString("pt-BR")} km · `) : ""}{rodizio.faltamDias >= 0 ? `até ${dataCurta(rodizio.ate)}` : `venceu em ${dataCurta(rodizio.ate)}`}</small>
-                : <small>Calibre a cada 15 dias. Rodízio e alinhamento a cada 10.000 km: anote e eu lembro.</small>}</span>
-              <button className="bub-act" onClick={() => act.abrirGastoTransp({ sub: "manutencao", manut: "alinhamento", veiculoId: v && v.id })}>Anotar rodízio</button>
-            </div>
-            {manut.slice(0, 4).map(l => (
-              <button key={l.id} className="transp-item" onClick={() => act.abrirGastoTransp({ inicial: l })}>
-                <span className="ic" style={{ "--c": subInfo(subDe(l)).cor }}><IconeSub id={subDe(l)} /></span>
-                <span className="mid"><b>{l.desc || subInfo(subDe(l)).nome}</b><small>{relativo(l.data)}{l.km ? ` · ${l.km.toLocaleString("pt-BR")} km` : ""}</small></span>
-                <span className="amt">−<Money v={l.valor} /></span>
-              </button>
-            ))}
-          </section>
-        )}
-
-        {temCarro && v && (
-          <section className="transp-card">
-            <div className="transp-card-cab"><span className="ic" style={{ "--c": subInfo("documentos").cor }}><Ic.documentos /></span><h3>IPVA, licenciamento e seguro</h3></div>
-            {docs.length === 0 ? <p className="hint">Coloque as datas de vencimento (no lápis, lá em cima) e eu aviso uma semana antes e no dia.</p> : docs.map(d => (
-              <div key={d.k} className={"transp-doc" + (d.dias < 0 ? " atrasado" : d.dias <= 15 ? " perto" : "")}>
-                <span className="mid"><b>{d.nome}</b><small>{d.dias < 0 ? `Venceu há ${-d.dias} ${d.dias === -1 ? "dia" : "dias"}` : d.dias === 0 ? "Vence hoje" : d.dias <= 60 ? `Vence em ${d.dias} ${d.dias === 1 ? "dia" : "dias"} · ${dataCurta(d.data)}` : `Vence em ${dataCurta(d.data)}`}{d.valor ? ` · ${brl(d.valor)}` : ""}</small></span>
-                {d.dias <= 60 && <button className="bub-act" onClick={() => pagarDoc(d)}>Paguei</button>}
-              </div>
-            ))}
-            {docs.length > 0 && docs.length < 3 && <button className="link" onClick={() => act.abrirVeiculo(v.id)}>+ Colocar {DOCS_VEICULO.filter(([k]) => !docs.some(d => d.k === k)).map(x => x[1]).join(" ou ")}</button>}
-          </section>
-        )}
-
-        {temCarro && (
-          <section className="transp-card com-ilu">
-            <Ilustra n="malas" className="transp-sai malas" />
-            <div className="transp-card-cab"><h3>Quanto custa a viagem?</h3></div>
-            <div className="transp-calc">
-              <Field label="Distância (km)" htmlFor="t-km"><input id="t-km" inputMode="decimal" value={kmViagem} onChange={e => setKmViagem(soNumero(e.target.value))} placeholder="Ex.: 120" /></Field>
-              <Toggle on={idaVolta} onClick={() => setIdaVolta(!idaVolta)}>Ida e volta</Toggle>
-            </div>
-            {kmTotal > 0 && (comb.consumo && precoRef
-              ? <div className="transp-calc-res"><b>{brlReal(litros * precoRef)}</b><span>{fmtNum(Math.round(litros * 10) / 10)} litros para {kmTotal.toLocaleString("pt-BR")} km · {kml(comb.consumo)} km/l a {preco(precoRef)}</span></div>
-              : <p className="hint">Para calcular, informe o consumo do veículo (no lápis, lá em cima) ou anote dois abastecimentos.</p>)}
-          </section>
-        )}
-
-        <section className="transp-card">
-          <div className="transp-card-cab"><h3>{filtro ? subInfo(filtro).nome : "Gastos do mês"}</h3>{filtro && <button className="link" onClick={() => setFiltro(null)}>Ver todos</button>}</div>
-          {lista.length === 0 && <div className="empty">{filtro ? "Nada nesta categoria no mês." : "Nenhum gasto com transporte neste mês."}</div>}
-          {lista.map((l, i) => (
-            <React.Fragment key={l.id}>
-            {(i === 0 || lista[i - 1].data !== l.data) && <div className="day-sep">{relativo(l.data)}</div>}
-            <button className="transp-item" disabled={l.conta} onClick={() => !l.conta && act.abrirGastoTransp({ inicial: l })}>
-              <span className="ic" style={{ "--c": subInfo(l.sub).cor }}><IconeSub id={l.sub} /></span>
-              <span className="mid"><b>{l.desc || subInfo(l.sub).nome}</b><small>{subInfo(l.sub).nome} · {relativo(l.data).toLowerCase()}{l.litros ? ` · ${fmtNum(l.litros)} L` : ""}{l.conta ? " · conta fixa" : ""}</small></span>
-              <span className="amt">−<Money v={l.valor} /></span>
-            </button>
-            </React.Fragment>
-          ))}
-          <button className="link transp-teto" onClick={() => act.abrirTeto("transporte")}><I.gauge /> Teto de gastos com transporte</button>
-        </section>
+          {temCarro && v && <Cuidados v={v} oleo={oleo} rodizio={rodizio} docs={docs} act={act} pagarDoc={pagarDoc} />}
+          {temCarro && <Combustivel anp={anp} fonte={ref} perfil={perfil} v={v} comb={comb} lista={listaPostos} />}
+          {custo && <CustoReal custo={custo} v={v} act={act} />}
+          {temCarro && <Viagem comb={comb} precoRef={precoRef} />}
+          <ProximaConquista act={act} trilhas={["estrada"]} />
         </div>
       </div>
+      {postosAberto && createPortal(<PostoBaratoSheet veiculo={v} consumo={comb.consumo} sugerido={veredito && veredito.veredito === "etanol" ? "etanol" : undefined} onClose={() => setPostosAberto(false)} />, document.querySelector(".shell") || document.body)}
     </div>
   );
 }
