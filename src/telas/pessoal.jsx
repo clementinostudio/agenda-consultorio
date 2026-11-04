@@ -518,7 +518,7 @@ function GastosTab({ db, act, tema }) {
   const catsVer = todasCats || cats.length <= 5 ? cats : cats.filter((c, k) => k < 4 || c[0] === cat);
   return (
     <div className="page g4">
-      <TopBar eyebrow={`${nomeMes} de ${m.getFullYear()}`} title="Gastos" act={act} tema={tema} />
+      <TopBar eyebrow={`${nomeMes} de ${m.getFullYear()}`} title="Gastos" act={act} tema={tema} mais={{ l: "Anotar gasto ou entrada", f: () => act.novoLanc("saida") }} />
       <div className="cols">
         <div className="col">
           <Topo rotulo={<>Saiu em <b>{nomeMes}</b>{ano}</>} valor={r.saiu} nav={{ ant: () => mudarMes(off - 1), prox: () => mudarMes(off + 1), podeProx: true }}
@@ -682,8 +682,8 @@ function ContasTab({ db, act, tema }) {
   );
   return (
     <div className="page g4" style={{ maxWidth: 820 }}>
-      <TopBar eyebrow={`${MES_LONGO[fromISO(t).getMonth()]} · ${pagas.length} de ${contas.length} pagas`} title="Contas fixas" act={act} tema={tema}
-        extra={<><button className="icon-btn" onClick={act.lerBoleto} aria-label="Ler boleto"><I.scan /></button><button className="icon-btn" onClick={() => act.novaConta()} aria-label="Nova conta"><I.plus /></button></>} />
+      <TopBar eyebrow={`${MES_LONGO[fromISO(t).getMonth()]} · ${pagas.length} de ${contas.length} pagas`} title="Contas fixas" act={act} tema={tema} mais={{ l: "Nova conta", f: () => act.novaConta() }}
+        extra={<button className="icon-btn" onClick={act.lerBoleto} aria-label="Ler boleto"><I.scan /></button>} />
       <div className="stack">
         <Topo rotulo={<>Falta pagar em <b>{MES_LONGO[fromISO(t).getMonth()]}</b></>} valor={falta}
           apoio={contas.length ? <span>{brl(pago)} de {brl(total)} já pagos</span> : <span>Nenhuma conta fixa ainda</span>}>

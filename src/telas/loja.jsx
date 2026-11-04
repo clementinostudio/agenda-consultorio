@@ -236,7 +236,7 @@ export function LojaGastos({ loja: L, conta, act, tema }) {
   const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
   return (
     <div className="page lj-pg">
-      <TopBar eyebrow={L.loja.nome} title="Gastos da loja" act={act} tema={tema} />
+      <TopBar eyebrow={L.loja.nome} title="Gastos da loja" act={act} tema={tema} mais={{ l: "Anotar gasto", f: () => act.abrirLoja("gasto", {}) }} />
       <AvisoEquipe L={L} act={act} />
       <div className="cols">
         <div className="col">

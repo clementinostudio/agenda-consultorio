@@ -1880,21 +1880,50 @@ function VoltarAoApp({ className = "icon-btn" }) {
 let ABA_DO_APP = null;
 const voltarDaTela = voltar => { if (nativoV2 && ABA_DO_APP) chamarApp("nativo:voltar").catch(() => voltar()); else voltar(); };
 
-function TopBar({ eyebrow, title, act, tema, extra, voltar }) {
+// A página passou do título grande? (um setState por mudança, não a cada pixel rolado)
+function useRolouTitulo(limite = 92) {
+  const [rolou, setRolou] = useState(false);
+  useEffect(() => {
+    let r = null, raf = 0;
+    const f = () => { raf = 0; const v = window.scrollY > limite; if (v !== r) { r = v; setRolou(v); } };
+    const agendar = () => { if (!raf) raf = requestAnimationFrame(f); };
+    f(); window.addEventListener("scroll", agendar, { passive: true });
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", agendar); };
+  }, [limite]);
+  return rolou;
+}
+// O topo das abas. No celular: olho (ou voltar) e a ação principal numa linha, o título grande embaixo. Ao rolar, o título
+// sobe para o centro de uma barra fina, com o olho e a ação no mesmo lugar: nada pula e o "+" continua a um toque.
+// (o Início tem a barra dele, com a foto e o nome.) mais: { l, f }, a ação principal da aba
+function TopBar({ eyebrow, title, act, tema, extra, voltar, mais }) {
+  const rolou = useRolouTitulo();
+  const esquerda = voltar
+    ? <button className="icon-btn redondo top-voltar" onClick={() => voltarDaTela(voltar)} aria-label="Voltar"><I.chevL /></button>
+    : nativoV2 ? <VoltarAoApp className="icon-btn redondo top-voltar" />
+      : <button className="icon-btn redondo top-olho" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button>;
+  const botaoMais = mais && <button className="icon-btn redondo top-mais" onClick={mais.f} aria-label={mais.l}><I.plus /></button>;
   return (
-    <header className={"top" + (voltar || nativoV2 ? " com-voltar" : "")}>
-      {/* no app, a tela com voltar próprio fica só com ele (dois botões de voltar lado a lado confundem) */}
-      {voltar
-        ? <button className="icon-btn top-voltar" onClick={() => voltarDaTela(voltar)} aria-label="Voltar"><I.chevL /></button>
-        : nativoV2 && <span className="top-voltar" style={{ display: "flex", gap: 8 }}><VoltarAoApp /></span>}
-      <div style={{ minWidth: 0 }}><div className="eyebrow">{eyebrow}</div><h1>{title}</h1></div>
-      <div className="top-actions">
-        {extra}
-        <span className="nc">
-          <button className="icon-btn" onClick={act.trocarTema} aria-label={tema.escuro ? "Usar modo claro" : "Usar modo escuro"}>{tema.escuro ? <I.sun /> : <I.moon />}</button>
-        </span>
+    <>
+      <div className={"aba-barra" + (rolou ? " on" : "")} aria-hidden={!rolou} inert={rolou ? undefined : ""}>
+        <div className="aba-barra-in">
+          {esquerda}
+          <button className="aba-barra-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{title}</button>
+          {botaoMais || <span className="aba-barra-vazio" />}
+        </div>
       </div>
-    </header>
+      <header className={"top" + (voltar || nativoV2 ? " com-voltar" : "")}>
+        {/* no app, a tela com voltar próprio fica só com ele (dois botões de voltar lado a lado confundem) */}
+        <span className="top-esq">{esquerda}</span>
+        <div className="top-titulo"><div className="eyebrow">{eyebrow}</div><h1>{title}</h1></div>
+        <div className="top-actions">
+          {extra}
+          {botaoMais}
+          <span className="nc">
+            <button className="icon-btn" onClick={act.trocarTema} aria-label={tema.escuro ? "Usar modo claro" : "Usar modo escuro"}>{tema.escuro ? <I.sun /> : <I.moon />}</button>
+          </span>
+        </div>
+      </header>
+    </>
   );
 }
 
@@ -2625,8 +2654,8 @@ function AgendaTab({ db, now, act, tema }) {
   const n = itensDoDia(db, sel).filter(i => i.kind !== "log" || i.session.status === "done").length;
   return (
     <div className="page">
-      <TopBar eyebrow={`${n ? `${n} ${n === 1 ? "sessão" : "sessões"}` : "Sem sessões"} ${sel === todayISO() ? "hoje" : "neste dia"}`} title="Agenda" act={act} tema={tema}
-        extra={<><button className="icon-btn" onClick={act.livres} aria-label="Horários livres para divulgar"><I.share /></button><button className="icon-btn" onClick={act.novoPaciente} aria-label={`Novo ${TERMO.s}`}><I.plus /></button></>} />
+      <TopBar eyebrow={`${n ? `${n} ${n === 1 ? "sessão" : "sessões"}` : "Sem sessões"} ${sel === todayISO() ? "hoje" : "neste dia"}`} title="Agenda" act={act} tema={tema} mais={{ l: `Novo ${TERMO.s}`, f: act.novoPaciente }}
+        extra={<button className="icon-btn" onClick={act.livres} aria-label="Horários livres para divulgar"><I.share /></button>} />
       <div className="cols">
         <div className="col"><WeekBar db={db} sel={sel} setSel={setSel} vista={vista} setVista={setVista} now={now} /></div>
         <div className="col">
@@ -2765,8 +2794,8 @@ function PatientsTab({ db, act, tema, vista = "ativos", setVista }) {
   const ativos = db.patients.filter(p => p.active && p.name.toLowerCase().includes(busca.toLowerCase())).sort((a, b) => (a.nextDate || "").localeCompare(b.nextDate || ""));
   return (
     <div className="page" style={{ maxWidth: 820 }}>
-      <TopBar eyebrow={`${db.patients.length} ${db.patients.length === 1 ? TERMO.s : TERMO.p}`} title={TERMO.P} act={act} tema={tema}
-        extra={<><button className="icon-btn" onClick={act.importarAgenda} aria-label="Trazer da agenda antiga"><I.upload /></button><button className="icon-btn" onClick={act.novoPaciente} aria-label={`Novo ${TERMO.s}`}><I.plus /></button></>} />
+      <TopBar eyebrow={`${db.patients.length} ${db.patients.length === 1 ? TERMO.s : TERMO.p}`} title={TERMO.P} act={act} tema={tema} mais={{ l: `Novo ${TERMO.s}`, f: act.novoPaciente }}
+        extra={<button className="icon-btn" onClick={act.importarAgenda} aria-label="Trazer da agenda antiga"><I.upload /></button>} />
       <div className="stack">
         <Seg big value={vista} onChange={setVista} options={[{ v: "ativos", l: TERMO.P }, { v: "espera", l: `Lista de espera${db.espera.length ? ` (${db.espera.length})` : ""}` }]} />
         {vista === "espera" && <>
@@ -5551,6 +5580,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   );
   if (!saindo) paineisCong.current = paineis;
 
+  const barraInicio = rolou && !sheet && tabEf === inicioDo(modoEf); // nas outras abas, quem cuida é o TopBar
   // o que pede atenção logo que a pessoa entra (fica abaixo da saudação)
   const avisosInicio = <><AvisoNotificacoes conta={conta} modo={modoEf} act={act} />{avisoPlano0 && <AvisoCortesia fase={avisoPlano0} conta={conta} db={db} modo={modoEf} onPlanos={() => act.openSettings("assinatura")} />}</>;
   return (
@@ -5580,7 +5610,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         {tabEf === "p-transp" && <Suspense fallback={null}><TransporteTab db={db} act={act} tema={tema} perfil={perfil} atual={veicAtual} onTrocar={setVeicAtual} /></Suspense>}
       </main>
 
-      <div className={"topo-fixo" + (rolou && !sheet ? " on" : "")} aria-hidden={!(rolou && !sheet)} inert={rolou && !sheet ? undefined : ""}>
+      <div className={"topo-fixo" + (barraInicio ? " on" : "")} aria-hidden={!barraInicio} inert={barraInicio ? undefined : ""}>
         <div className="topo-fixo-in">
           <VoltarAoApp className="icon-btn redondo" />
           <Avatar conta={conta} onClick={act.openSettings} label="Sua conta" />

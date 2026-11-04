@@ -2599,3 +2599,32 @@ a.perfil-row { text-decoration: none; }
 .ficha-campo textarea{min-height:96px}
 .link-inline{padding:0;border:0;background:none;color:inherit;font:inherit;font-weight:800;text-decoration:underline;cursor:pointer}
 .nota-item{grid-template-columns:minmax(0,1fr);text-align:left}
+
+/* Topo das abas (TopBar) */
+.top-esq{display:none}
+.top-titulo{min-width:0}
+.top.com-voltar .top-esq{display:flex;flex:none;align-self:center}
+.top.com-voltar .top-titulo{flex:1}
+.icon-btn.top-mais{background:var(--mode);color:var(--mode-ink);border-color:transparent}
+.aba-barra{position:fixed;left:0;right:0;top:0;z-index:28;opacity:0;transform:translateY(-6px);pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+.aba-barra::before{content:"";position:absolute;left:0;right:0;top:0;bottom:-14px;background:linear-gradient(to bottom,color-mix(in srgb,var(--bg) 94%,transparent) 72%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(to bottom,#000 74%,transparent);mask-image:linear-gradient(to bottom,#000 74%,transparent)}
+.aba-barra.on{opacity:1;transform:none}
+.aba-barra.on .aba-barra-in{pointer-events:auto}
+.aba-barra-in{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:10px;max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 8px}
+.aba-barra-t{min-width:0;padding:0;border:0;background:none;color:var(--fg);font-family:var(--f-display);font-weight:700;font-size:18px;letter-spacing:-.01em;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:899px){
+  .top,.top.com-voltar{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"esq acoes" "titulo titulo";align-items:center;gap:16px 8px;padding-top:8px;margin-bottom:18px}
+  .top-esq,.top.com-voltar .top-esq{display:flex;grid-area:esq;gap:8px}
+  .top-titulo{grid-area:titulo}
+  .top-actions{grid-area:acoes;align-items:center}
+  .top .nc{display:none}
+  .top .icon-btn,.aba-barra .icon-btn{width:44px;height:44px;border-radius:50%}
+  .top h1{font-size:34px;margin-top:0}
+  .top .eyebrow{order:2;margin-top:2px}
+  .top-titulo{display:flex;flex-direction:column}
+  /* a busca fica presa embaixo da barra: procurar não obriga a voltar para o topo */
+  .search,.ps-busca{position:sticky;top:calc(env(safe-area-inset-top,0px) + 62px);z-index:6}
+  .search{box-shadow:0 -10px 0 var(--bg)}
+}
+@media (min-width:900px){.aba-barra{display:none}}
+@media (prefers-reduced-motion:reduce){.aba-barra{transition:none}}
