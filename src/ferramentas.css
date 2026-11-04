@@ -1,0 +1,36 @@
+/* Ferramentas grátis do site: usa as cores e os botões de landing.css */
+.ferr-topo { padding: calc(64px + clamp(40px, 7vw, 72px)) 20px clamp(36px, 6vw, 60px); background: var(--marca); color: #fff; text-align: center; }
+.ferr-topo h1 { max-width: 15em; margin: 0 auto; font-size: clamp(32px, 6vw, 52px); line-height: 1.08; }
+.ferr-topo p { max-width: 36em; margin: 16px auto 0; color: rgba(255, 255, 255, .86); font-size: clamp(17px, 2vw, 19px); }
+.ferr-corpo { max-width: 680px; margin: 0 auto; padding: clamp(28px, 5vw, 48px) 20px 16px; }
+.ferr-form { display: grid; gap: 14px; }
+.ferr-form fieldset { display: grid; gap: 14px; margin: 0; padding: 0; border: 0; }
+.ferr-form legend { padding: 0 0 2px; font-weight: 700; font-size: 18px; }
+.ferr-form label { display: grid; gap: 6px; font-size: 15px; font-weight: 600; }
+.ferr-form label small { color: var(--muted); font-weight: 500; }
+.ferr-form input { width: 100%; height: 50px; padding: 0 14px; border: 1.5px solid #D5D9E6; border-radius: 14px; background: #fff; color: var(--fg); font: 500 16px var(--f-body); box-sizing: border-box; }
+.ferr-form input:focus-visible { outline: 2px solid var(--marca); outline-offset: 1px; border-color: var(--marca); }
+.ferr-duas { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.ferr-erro { margin: 0; padding: 11px 14px; border-radius: 12px; background: #FDECEC; color: #B3261E; font-weight: 600; font-size: 15px; }
+.ferr-seguro { margin: 0; color: var(--muted); font-size: 14.5px; }
+.ferr-saida { display: grid; gap: 12px; justify-items: center; margin-top: 24px; padding: 22px; border-radius: 20px; background: #F1F3FF; text-align: center; }
+.ferr-saida[hidden], .ferr-depois[hidden], .ferr-erro[hidden] { display: none; }
+.ferr-saida svg { display: block; width: min(260px, 100%); height: auto; }
+.ferr-saida textarea { width: 100%; min-height: 84px; padding: 10px 12px; border: 1.5px solid #D5D9E6; border-radius: 12px; font: 500 13px ui-monospace, Menlo, Consolas, monospace; word-break: break-all; resize: vertical; box-sizing: border-box; }
+.ferr-qr { padding: 10px; border-radius: 14px; background: #fff; }
+.ferr-preco { color: var(--marca); font-size: clamp(40px, 9vw, 60px); font-weight: 700; line-height: 1.1; }
+.ferr-saida p { margin: 0; color: var(--muted); }
+.ferr-depois { display: grid; gap: 10px; justify-items: start; margin-top: 24px; padding: 22px; border-radius: 20px; background: var(--marca); color: #fff; }
+.ferr-depois b { font-size: 21px; line-height: 1.2; }
+.ferr-depois p { margin: 0; color: rgba(255, 255, 255, .86); }
+.ferr-depois .botao-branco { height: 46px; }
+.ferr-texto { max-width: 680px; margin: 0 auto; padding: 16px 20px clamp(40px, 7vw, 72px); }
+.ferr-texto h2 { margin: 28px 0 12px; font-size: clamp(24px, 4vw, 30px); }
+.ferr-texto details { padding: 13px 0; border-bottom: 1px solid #E4E7F1; }
+.ferr-texto summary { font-weight: 600; cursor: pointer; }
+.ferr-texto details p { margin: 10px 0 2px; color: var(--muted); }
+.ferr-lista { display: grid; gap: 14px; max-width: 760px; margin: 0 auto; padding: clamp(28px, 5vw, 48px) 20px clamp(40px, 7vw, 72px); }
+.ferr-item { display: grid; gap: 6px; padding: 20px 22px; border-radius: 20px; background: #F1F3FF; color: inherit; text-decoration: none; transition: transform .15s; }
+.ferr-item:hover { transform: translateY(-2px); }
+.ferr-item b { font-size: 20px; }
+.ferr-item span { color: var(--muted); }

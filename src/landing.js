@@ -3,9 +3,23 @@ import "@fontsource-variable/comfortaa/wght.css";
 import "@fontsource-variable/inter/wght.css";
 import "./landing.css";
 import { PLANOS, LANCAMENTO_ATE, emLancamento } from "./plano.js";
+import { fonteDaVisita, limparOrigem } from "./origem.js";
 
 // Endereço do app (fica num subdomínio só dele)
 const APP = import.meta.env.VITE_APP_URL || "https://app.avina.com.br/";
+
+// De onde a pessoa veio e por qual página entrou: fica só nesta visita e segue nos links para o app, para o cadastro guardar
+function origemDaVisita() {
+  let o = "";
+  try { o = sessionStorage.getItem("avina-origem") || ""; } catch (e) {}
+  if (o) return o;
+  const pagina = (document.querySelector('meta[name="avina-pagina"]') || {}).content || location.pathname.split("/").filter(Boolean)[0] || "inicio";
+  o = limparOrigem(`${fonteDaVisita(location.search, document.referrer, location.hostname) || "direto"}:${pagina}`);
+  try { sessionStorage.setItem("avina-origem", o); } catch (e) {}
+  return o;
+}
+const ORIGEM = origemDaVisita();
+document.querySelectorAll(`a[href^="${APP}"]`).forEach(a => { const u = new URL(a.href); u.searchParams.set("origem", ORIGEM); a.href = u.href; });
 
 const calmo = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -47,7 +61,7 @@ if (matchMedia("(hover: hover) and (pointer: fine)").matches && !calmo) {
 document.querySelectorAll("[data-cadastro]").forEach(f => f.addEventListener("submit", e => {
   e.preventDefault();
   const email = (f.querySelector("input").value || "").trim();
-  location.href = `${APP}${email ? `?email=${encodeURIComponent(email)}` : ""}#criar`;
+  location.href = `${APP}?${email ? `email=${encodeURIComponent(email)}&` : ""}origem=${encodeURIComponent(ORIGEM)}#criar`;
 }));
 
 // 5. Demonstração da fala: escreve a frase, mostra o que o app entendeu e passa para a próxima

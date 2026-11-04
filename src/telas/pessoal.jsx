@@ -363,7 +363,7 @@ function BillRow({ c, chave, act }) {
 
 /* ---------- tela inicial: o topo, o carrossel e os cartões que a pessoa escolhe (src/telas/inicio-cartoes.jsx) ---------- */
 // O que pede atenção (o resumo, a viagem, a casa) fica antes dos cartões; a previsão e a próxima conquista, depois.
-function PessoalHome({ db, conta, now, act, tema }) {
+function PessoalHome({ db, conta, now, act, tema, avisos }) {
   const falas = conversaPessoal(db, act);
   const agora = (
     <div className="ini-agora">
@@ -382,6 +382,7 @@ function PessoalHome({ db, conta, now, act, tema }) {
   return (
     <div className="page ini">
       <TopoInicio conta={conta} act={act} tema={tema} modo="pessoal" now={now} />
+      {avisos}
       <WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} />
       <Carrossel db={db} modo="pessoal" act={act} extras={[grandeHoje(db, act)]} />
       <CartoesInicio db={db} modo="pessoal" act={act} now={now}

@@ -301,6 +301,13 @@ async function enviarPerfilPendente(uid) {
   } catch (e) { console.warn("Nuvem: perfil fica para depois", e); }
 }
 
+// O WhatsApp pode já ter sido informado em outro aparelho (a tela que pede confere aqui antes de perguntar)
+export async function whatsappDaNuvem(uid) {
+  const sb = await cliente();
+  const { data } = await sb.from("perfis").select("dados").eq("id", uid).maybeSingle();
+  return (data && data.dados && data.dados.whatsapp) || null;
+}
+
 // Depois do login: junta o perfil da nuvem com o que já existia neste aparelho
 export async function contaDaNuvem(user, local) {
   const sb = await cliente();

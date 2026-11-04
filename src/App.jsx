@@ -11,7 +11,7 @@ import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "rea
 import PORQUINHO from "./assets/porquinho.webp";
 import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monograma, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
-import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro, registrarAcesso } from "./nuvem.js";
+import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, whatsappDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro, registrarAcesso } from "./nuvem.js";
 import { lerBoleto, acharBoleto } from "./boleto.js";
 import { lerInflacao, atualizarInflacao, useInflacao, acumulado, valorSugerido, nomeMesCurto } from "./inflacao.js";
 import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
@@ -22,7 +22,9 @@ import { useLoja, K_CONVITE_LOJA, CORES_PRODUTO } from "./loja.js";
 // a loja respondida no cadastro, esperando a nuvem para ser criada
 const K_LOJA_INICIAL = e => `agenda-loja-inicial:${e}`;
 import { janelasDoDia } from "./horarios.js";
-import { LIMITE_GRATIS, liberadoDe, ehPro, produtoDoUso } from "./plano.js";
+import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCortesia, emLancamento } from "./plano.js";
+import { lerWhatsapp, mascaraWhatsapp } from "./whatsapp.js";
+import { K_ORIGEM } from "./origem.js";
 import { useLinkAgendamento, linkDo } from "./link.js";
 import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
@@ -202,6 +204,7 @@ const catVars = cat => { const c = CORES.find(x => x.id === (cat && cat.cor)) ||
 const lerJSON = (k, f) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch (e) { return f; } };
 const gravar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 const apagar = k => { try { localStorage.removeItem(k); } catch (e) {} };
+const lerTexto = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
 const hash = s => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) | 0; return String(h); }; // só nas contas sem nuvem (ficam no aparelho)
 
 function useWide() {
@@ -2209,7 +2212,8 @@ function Auth({ onLogin, emailInicial, aviso }) {
         return setOk(`Se ${em} tiver conta, chegou um link para criar uma senha nova. Abra o e-mail neste aparelho.`);
       }
       const local = lerJSON(K.contas, {})[em];
-      const novaConta = n => sb.auth.signUp({ email: em, password: senha, options: { data: { nome: n }, emailRedirectTo: ENDERECO_APP } });
+      const origem = lerTexto(K_ORIGEM); // de onde a pessoa veio (o painel do dono conta)
+      const novaConta = n => sb.auth.signUp({ email: em, password: senha, options: { data: { nome: n, ...(origem ? { origem } : {}) }, emailRedirectTo: ENDERECO_APP } });
       let r = criar ? await novaConta(nome.trim()) : await sb.auth.signInWithPassword({ email: em, password: senha });
       // Conta de antes da nuvem (só neste aparelho): com a senha certa, cria a conta na nuvem e leva os dados junto
       if (!criar && r.error && /invalid login credentials/i.test(r.error.message) && local && !local.uid && local.hash === hash(senha)) r = await novaConta(local.nome);
@@ -2268,6 +2272,47 @@ function Auth({ onLogin, emailInicial, aviso }) {
         {criar ? <>Já tem conta? <button onClick={() => trocar("entrar")}>Entrar</button></> : !esqueci && <>Primeira vez aqui? <button onClick={() => trocar("criar")}>Criar conta</button>{NUVEM && <> · <button onClick={() => trocar("esqueci")}>Esqueci a senha</button></>}</>}
       </div>
       <div className="demo-note">{NUVEM ? "Seus dados ficam protegidos na nuvem, só a sua conta vê, e o app funciona até sem internet." : "Sem a nuvem ligada: tudo fica salvo só neste aparelho."}</div>
+    </main>
+  );
+}
+
+// WhatsApp obrigatório no PWA: aparece antes de abrir o app para quem ainda não informou, em conta nova ou antiga.
+// Fora do app de celular: a Apple não aceita exigir dado pessoal que o app não precisa para funcionar.
+function PedirWhatsapp({ conta, onPronto, onAchou, onSair }) {
+  const [valor, setValor] = useState("");
+  const [erro, setErro] = useState(null);
+  const [vendo, setVendo] = useState(true); // pode já ter informado em outro aparelho: confere na nuvem antes de perguntar
+  useEffect(() => {
+    let vivo = true;
+    const perguntar = () => { if (vivo) setVendo(false); };
+    const t = setTimeout(perguntar, 2500);
+    whatsappDaNuvem(conta.uid).then(w => { if (vivo && w) onAchou(w); else perguntar(); }).catch(perguntar);
+    return () => { vivo = false; clearTimeout(t); };
+  }, []);
+  const enviar = e => {
+    e.preventDefault();
+    const r = lerWhatsapp(valor);
+    if (!r.ok) { setErro(r.erro); vibrar("erro"); return; }
+    setErro(null); vibrar("ok"); onPronto(r.numero);
+  };
+  if (vendo) return <main className="auth"><div className="brand"><i><Marca /></i>Avina</div></main>;
+  return (
+    <main className="auth">
+      <div className="brand"><i><Marca /></i>Avina</div>
+      <div className="auth-h">
+        <div className="hi">Falta só isso!</div>
+        <h1>Seu WhatsApp</h1>
+        <p>É por ele que a gente fala com você sobre a sua conta, ajuda quando precisar e conta as novidades do Avina. Seu número não vai para mais ninguém.</p>
+      </div>
+      <form className="stack" onSubmit={enviar} noValidate>
+        <div className="fields">
+          <Field label="Número com DDD" icon={<I.phone />} htmlFor="w-num"><input id="w-num" type="tel" inputMode="tel" autoComplete="tel-national" autoFocus value={valor} onChange={e => { setValor(mascaraWhatsapp(e.target.value)); setErro(null); }} placeholder="(43) 98888-7777" aria-invalid={!!erro} /></Field>
+        </div>
+        {erro && <div className="error" role="alert">{erro}</div>}
+        <button className="btn" type="submit">Continuar</button>
+        <div className="hint auth-termos">Você pode trocar o número no Perfil. Para não receber mensagens, é só pedir. Veja a <a href={`${BASE}privacidade/`} target="_blank" rel="noopener">Política de privacidade</a>.</div>
+      </form>
+      <div className="auth-foot"><button onClick={() => onSair()}>Sair da conta</button></div>
     </main>
   );
 }
@@ -2394,7 +2439,7 @@ const CarrosselInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m =
 const CartoesInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.CartoesInicio })));
 const PersonalizarInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.PersonalizarInicio })));
 
-function HomeTab({ db, conta, now, act, tema }) {
+function HomeTab({ db, conta, now, act, tema, avisos }) {
   const t = todayISO(), nm = agoraMin(now);
   const falas = conversa(db, now, act, conta.perfil);
   const atrasados = db.patients.filter(p => p.active && p.nextDate < t).sort((a, b) => a.nextDate.localeCompare(b.nextDate));
@@ -2434,6 +2479,7 @@ function HomeTab({ db, conta, now, act, tema }) {
   return (
     <div className="page ini">
       <TopoInicio conta={conta} act={act} tema={tema} modo="consultorio" now={now} />
+      {avisos}
       <WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} sessao={prox} />
       <Suspense fallback={<div className="ini-car-espera" />}><CarrosselInicio db={db} modo="consultorio" act={act} meta={conta.perfil && conta.perfil.meta} /></Suspense>
       <Suspense fallback={agora}>
@@ -2627,7 +2673,7 @@ function SessionSheet({ db, item, onClose, act }) {
           {charge && <div className="rc-row"><span className="l">Pagamento</span><span className="v">{charge.paid ? <span className="chip mint">Pago em {dm(charge.paidAt)}</span> : <span className="chip amber">Em aberto</span>}</span></div>}
         </div>
         {s.status === "done" && PERFIL.registro !== false && <Toggle on={!!s.registro} onClick={() => act.toggleRegistro(s.id)}>Registro da sessão feito</Toggle>}
-        {s.status === "done" && <button className="btn ghost" onClick={() => act.abrirNotas(s.patientId, s.id)}><I.key /> {(db.notas || []).some(n => n.sid === s.id) ? "Ver a anotação da sessão" : "Anotar sobre a sessão"}</button>}
+        {s.status === "done" && <button className="btn ghost" onClick={() => act.abrirNotas(s.patientId, s.id)}><I.key /> {(db.notas || []).some(n => n.sid === s.id) ? "Ver a evolução da sessão" : "Registrar a evolução"}</button>}
         {charge && <button className="btn ghost" onClick={() => act.openCharge(charge.id)}><I.receipt /> Ver cobrança</button>}
         {ultima && <ConfirmButton icon={<I.undo />} label="Desfazer registro" titulo="Desfazer este registro?" texto="A sessão volta a ficar como antes de você marcar, e o que foi lançado junto com ela sai." acao="Desfazer" onConfirm={() => act.desfazer(s.id)} />}
         <button className="btn text" onClick={onClose}>Fechar</button>
@@ -2801,7 +2847,7 @@ function PatientSheet({ db, pid, onClose, act }) {
   const feitas = hist.filter(s => s.status === "done");
   const ab = sessoesAbertas(db, pid).length;
   const recebido = soma(db.charges.filter(c => c.patientId === pid && c.paid), c => c.amount);
-  const nNotas = (db.notas || []).filter(n => n.pid === pid).length;
+  const nNotas = (db.notas || []).filter(n => n.pid === pid && !n.tipo).length;
   return (
     <Sheet title={p.name} sub={`${freqNome(p.freq)} · ${DIA_LONGO[fromISO(p.nextDate).getDay()]} às ${p.time}`} onClose={onClose}>
       <div className="kv">
@@ -2830,7 +2876,7 @@ function PatientSheet({ db, pid, onClose, act }) {
         </span></div>
       )}
       <div className="pac-acoes">
-        <button className="pac-acao" onClick={() => act.abrirNotas(p.id)}><Ilustra n="cadeados" /><span><b>Anotações</b><small>{nNotas ? `${nNotas} ${nNotas === 1 ? "anotação" : "anotações"} · trancadas` : "Só você lê"}</small></span></button>
+        <button className="pac-acao" onClick={() => act.abrirNotas(p.id)}><Ilustra n="cadeados" /><span><b>Prontuário</b><small>{nNotas ? `${nNotas} ${nNotas === 1 ? "registro" : "registros"} · trancado` : "Só você lê"}</small></span></button>
         <button className="pac-acao" onClick={() => act.abrirRecibo(p.id)}><Ilustra n="arquivo" /><span><b>Recibo</b><small>{recebido > 0 ? "PDF para o reembolso" : "Depois do 1º pagamento"}</small></span></button>
       </div>
       <button className="btn" onClick={() => act.editPatient(p.id)}>Editar cadastro</button>
@@ -4330,6 +4376,63 @@ const ABAS_NOMES = {
   loja: { inicio: "l-caixa", caixa: "l-caixa", gastos: "l-gastos", lista: "l-lista", falta: "l-lista", resumo: "l-resumo" },
 };
 
+// Quem ainda não ativou as notificações: um toque e o navegador já pergunta (ele só deixa pedir dentro de um toque).
+// Não aparece quando não dá para ligar: bloqueadas no aparelho, navegador sem suporte ou iPhone sem o app instalado
+// (nesse caso, a dica de instalar vem antes).
+function AvisoNotificacoes({ conta, modo, act }) {
+  const hoje = todayISO(), chave = `avina-aviso-notificacoes:${conta.email}`;
+  const [fechado, setFechado] = useState(() => lerTexto(chave) > hoje);
+  const [indo, setIndo] = useState(false), [erro, setErro] = useState("");
+  if (noApp || fechado || act.pushLigado() || motivoSemPush()) return null;
+  const ativar = async () => {
+    setIndo(true); setErro("");
+    const r = await act.ligarPush();
+    setIndo(false);
+    if (r === "ok") act.toast("Notificações ativadas");
+    else if (r !== "negado") setErro("Não deu certo agora. Tente de novo ou ative em Perfil, na parte de Avisos.");
+  };
+  const fechar = () => { try { localStorage.setItem(chave, addDays(hoje, 7)); } catch (e) {} setFechado(true); };
+  return (
+    <section className="aviso-linha" aria-label="Notificações">
+      <i><I.bell /></i>
+      <span><b>Você ainda não ativou as notificações</b><small>{erro || (modo === "consultorio" ? "Saiba da sessão chegando e das contas vencendo." : modo === "loja" ? "Receba os lembretes da loja." : "Saiba das contas vencendo, mesmo com o app fechado.")}</small></span>
+      <button className="pill-btn forte" disabled={indo} onClick={ativar}>{indo ? "Ativando…" : "Ativar"}</button>
+      <button className="aviso-x" onClick={fechar} aria-label="Agora não"><I.x /></button>
+    </section>
+  );
+}
+
+// O Pro de presente está acabando (ou acabou, e o preço de lançamento ainda vale): mostra o que a pessoa já fez aqui,
+// o que muda e o preço. Só no PWA: o app de celular não fala de assinatura.
+function AvisoCortesia({ fase, conta, db, modo, onPlanos }) {
+  const hoje = todayISO(), chave = `avina-aviso-cortesia:${conta.email}`;
+  const [fechado, setFechado] = useState(() => lerTexto(chave) > hoje);
+  if (fechado) return null;
+  const ini = addDays(hoje, -30);
+  let feito = "", limite = "";
+  if (modo === "consultorio") {
+    const sessoes = db.sessions.filter(s => s.status === "done" && s.date >= ini).length;
+    const recebido = db.charges.filter(c => c.paid && c.paidAt && !c.hidden && c.paidAt.slice(0, 10) >= ini).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    if (sessoes) feito = `Nos últimos 30 dias você registrou ${sessoes} ${sessoes === 1 ? "sessão" : "sessões"}${recebido > 0 ? ` e recebeu ${brl(recebido)}` : ""} por aqui.`;
+    limite = `No plano grátis, são até ${LIMITE_GRATIS.pacientes} ${TERMO.p} ativos.`;
+  } else if (modo === "pessoal") {
+    const n = db.pessoal.lanc.filter(l => l.data && l.data >= ini).length;
+    if (n) feito = `Nos últimos 30 dias você fez ${n} ${n === 1 ? "anotação" : "anotações"} de dinheiro por aqui.`;
+    limite = `No plano grátis, são até ${LIMITE_GRATIS.lancMes} lançamentos por mês.`;
+  } else limite = `No plano grátis, só você anota na loja e o resumo mostra os últimos ${LIMITE_GRATIS.lojaDias} dias.`;
+  const quando = fase.dias === 1 ? "amanhã" : `em ${fase.dias} dias`;
+  const preco = emLancamento(hoje) ? ` Assinando até ${LANCAMENTO_ATE.slice(8)}/${LANCAMENTO_ATE.slice(5, 7)}, o preço de lançamento fica garantido enquanto a assinatura estiver ativa.` : "";
+  const fechar = () => { try { localStorage.setItem(chave, addDays(hoje, fase.dias > 0 && fase.dias <= 3 ? 1 : 3)); } catch (e) {} setFechado(true); };
+  return (
+    <section className="aviso-linha cheio" aria-label="Sua assinatura">
+      <i><I.star /></i>
+      <span><b>{fase.fase === "acabou" ? "Seu Pro de presente acabou" : `Seu Pro de presente acaba ${quando}`}</b><small>{feito && <>{feito} </>}Seus dados continuam guardados. {limite}{preco}</small>
+        <button className="pill-btn forte" onClick={onPlanos}>Ver os planos</button></span>
+      <button className="aviso-x" onClick={fechar} aria-label="Agora não"><I.x /></button>
+    </section>
+  );
+}
+
 function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem }) {
   const perfil = conta.perfil || PERFIL_PADRAO;
   DURACAO_SESSAO = perfil.duracao || 50;
@@ -4392,6 +4495,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   // null = sem limite (sem login, ou cobrança ainda não ligada); senão, as áreas liberadas: { consultorio, pessoal }
   const libera = plano ? liberadoDe(plano.estado, plano.cortesiaAte, hojePlano) : null;
   const souPro = !!plano && ehPro(plano.estado, hojePlano);
+  const avisoPlano0 = !noApp && plano && !souPro && (!plano.estado || plano.estado.status === "sem") ? faseCortesia(plano.cortesiaAte, hojePlano) : null;
   // Versão grátis: até 3 pacientes ativos e 30 lançamentos por mês. Passou: mostra o Avina Pro e não salva.
   const limite = (tipo, n = 1) => {
     if (!libera) return false;
@@ -4800,6 +4904,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     abrirNotas: (pid, sid) => setSheet({ type: "notas", pid, sid }),
     atualizarPaciente: (pid, campos) => setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, ...campos } : p) })),
     salvarDocProf: doc => onAtualizar({ perfil: { ...(conta.perfil || {}), doc } }),
+    salvarWhatsapp: whatsapp => onAtualizar({ whatsapp }),
+    contaAtual: () => conta,
     marcarRecibo: ids => { const s = new Set(ids), h = todayISO(); setDb(d => ({ ...d, charges: d.charges.map(c => s.has(c.id) ? { ...c, reciboEm: h } : c) })); },
     marcarReceitaSaude: cid => { vibrar("toque"); setDb(d => ({ ...d, charges: d.charges.map(c => c.id === cid ? { ...c, rsaude: !c.rsaude } : c) })); },
     salvarCofre: cofre => setDb(d => ({ ...d, cofre })),
@@ -5445,6 +5551,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   );
   if (!saindo) paineisCong.current = paineis;
 
+  // o que pede atenção logo que a pessoa entra (fica abaixo da saudação)
+  const avisosInicio = <><AvisoNotificacoes conta={conta} modo={modoEf} act={act} />{avisoPlano0 && <AvisoCortesia fase={avisoPlano0} conta={conta} db={db} modo={modoEf} onPlanos={() => act.openSettings("assinatura")} />}</>;
   return (
     <div className={"shell" + (conta.fundo && imagemFundo(conta.fundo, meusFundos) ? " com-foto" + (conta.vidro !== false ? " glass" : "") : "") + (conta.vidro === false ? " solido" : "") + (conta.barra === "botoes" ? " barra-botoes" : "")} data-mode={modoEf}>
       {conta.fundo && imagemFundo(conta.fundo, meusFundos) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo, meusFundos)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
@@ -5456,11 +5564,12 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       </div>
       <main className={"app" + (puxar ? " puxando" : "")} style={puxar || recarregando ? { transform: `translateY(${recarregando ? 46 : puxar * .5}px)` } : undefined}>
         <DicaInstalar />
-        {tabEf === "home" && <HomeTab db={db} conta={conta} now={now} act={act} tema={tema} />}
+        {tabEf === "l-caixa" && avisosInicio}
+        {tabEf === "home" && <HomeTab db={db} conta={conta} now={now} act={act} tema={tema} avisos={avisosInicio} />}
         {tabEf === "agenda" && <AgendaTab db={db} now={now} act={act} tema={tema} />}
         {tabEf === "pac" && <PatientsTab db={db} act={act} tema={tema} vista={pacVista} setVista={setPacVista} />}
         {tabEf === "fin" && <FinanceTab db={db} act={act} tema={tema} meta={perfil.meta} />}
-        {tabEf === "p-home" && <Suspense fallback={null}><PessoalHome db={db} conta={conta} now={now} act={act} tema={tema} /></Suspense>}
+        {tabEf === "p-home" && <Suspense fallback={null}><PessoalHome db={db} conta={conta} now={now} act={act} tema={tema} avisos={avisosInicio} /></Suspense>}
         {tabEf === "p-gastos" && <Suspense fallback={null}><GastosTab db={db} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-contas" && <Suspense fallback={null}><ContasTab db={db} act={act} tema={tema} /></Suspense>}
         {tabEf === "p-casa" && <Suspense fallback={null}><CasaPagina casa={casa} conta={conta} pix={db.settings.pix} act={act} tema={tema} foco={casaFoco} /></Suspense>}
@@ -5552,7 +5661,7 @@ function App() {
   // Veio da página de apresentação (#entrar, #criar; o #demo dos links antigos abre o criar conta): limpa o endereço
   useEffect(() => {
     const h = location.hash;
-    if (h === "#demo" || h === "#entrar" || h === "#criar") { const q = new URLSearchParams(location.search); q.delete("email"); history.replaceState(null, "", location.pathname + (q.size ? `?${q}` : "")); }
+    if (h === "#demo" || h === "#entrar" || h === "#criar") { const q = new URLSearchParams(location.search); q.delete("email"); q.delete("origem"); history.replaceState(null, "", location.pathname + (q.size ? `?${q}` : "")); }
   }, []);
   // Nuvem: confere se o login ainda vale e escuta os links dos e-mails (confirmar conta, senha nova)
   const daNuvem = !!(sessao && sessao.conta && sessao.conta.uid);
@@ -5607,6 +5716,7 @@ function App() {
   }} />;
   if (!sessao || sessao.legado) return <Auth onLogin={entrar} emailInicial={sessao && sessao.legado} aviso={sessao && sessao.legado ? "Agora seus dados ficam guardados na nuvem. Entre com a sua senha de sempre e eu levo tudo para lá." : null} />;
   if (!sessao.conta.perfil || sessao.conta.perfil.refazer) return <Suspense fallback={null}><Onboarding conta={sessao.conta} onSair={sair} onDone={({ inicial, ...d }) => { const e = sessao.conta.email; if (inicial) gravar(K.inicial(e), inicial); gravar(K.modo(e), modoInicial(d.perfil)); atualizar(d, { pronto: true }); window.scrollTo(0, 0); }} /></Suspense>;
+  if (NUVEM && !noApp && sessao.conta.uid && !sessao.conta.whatsapp) return <PedirWhatsapp key={sessao.conta.uid} conta={sessao.conta} onSair={sair} onPronto={whatsapp => atualizar({ whatsapp })} onAchou={whatsapp => perfilNuvem({ whatsapp })} />;
   return <Painel key={sessao.conta.email} conta={sessao.conta} novo={sessao.novo} pronto={sessao.pronto} tema={tema} onSair={sair} onAtualizar={atualizar} onPerfilNuvem={perfilNuvem} />;
 }
 

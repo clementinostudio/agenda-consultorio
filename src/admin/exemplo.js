@@ -27,6 +27,7 @@ const usuarios = nomes.map((nome, i) => {
     sessoes: Math.ceil(rnd() * 3), perfil_feito: feito, profissao: consult ? "Psicóloga" : null, cidade_perfil: cidade, m_consultorio: consult ? "true" : "false", m_pessoal: "true", m_loja: loja ? "true" : null,
     ultimo_acesso: atras(uso), ip: i === 4 || i === 7 ? "177.37.10.200" : `200.${Math.floor(rnd() * 255)}.${Math.floor(rnd() * 255)}.${Math.floor(rnd() * 255)}`, rede: pega(redes), cidade, regiao, pais: "BR", aparelho: pega(uas),
     ips_30d: Math.ceil(rnd() * 3), acessos_30d: Math.round(rnd() * 60), primeiro_acesso: atras(criado - .01),
+    whatsapp: i % 5 === 4 ? null : `55439${String(88000000 + i * 137).slice(0, 8)}`, origem: ["google:consultorio", "instagram:inicio", "direto:inicio", "google:ferramenta-recibo", null][i % 5],
     ultima_mudanca: atras(uso + .01), contagem, casa: rnd() < .2 ? "Nossa casa" : null, loja: loja ? { nome: "Doces da Vera", papel: "dono" } : null,
   };
 });

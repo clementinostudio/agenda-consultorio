@@ -67,3 +67,13 @@ export const linkSuporte = (texto = "Oi! Vim pelo app Avina e queria uma ajuda."
 // É uma promessa de verdade: num reajuste futuro, essas assinaturas não mudam de valor. Depois da data, a faixa some sozinha.
 export const LANCAMENTO_ATE = "2026-11-30";
 export const emLancamento = hoje => hoje <= LANCAMENTO_ATE;
+// O aviso de que o Pro de presente acaba: começa 14 dias antes e segue depois de acabar enquanto o preço de lançamento valer.
+// (o Pro vale até o dia anterior a cortesiaAte, como em liberadoDe: no próprio dia, já acabou)
+export const AVISO_CORTESIA_DIAS = 14;
+export function faseCortesia(cortesiaAte, hoje) {
+  if (!cortesiaAte) return null;
+  const dias = Math.round((Date.parse(cortesiaAte) - Date.parse(hoje)) / 864e5);
+  if (dias > AVISO_CORTESIA_DIAS) return null;
+  if (dias > 0) return { fase: "acabando", dias };
+  return emLancamento(hoje) ? { fase: "acabou", dias } : null;
+}

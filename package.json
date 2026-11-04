@@ -8,6 +8,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
+    "test": "node --test src/regras.test.js",
     "dev:site": "vite --config vite.site.config.js --host",
     "build:site": "vite build --config vite.site.config.js",
     "publicar:site": "npm run build:site && cd site && npx wrangler deploy",

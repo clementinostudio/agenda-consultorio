@@ -1,6 +1,6 @@
 // Painel do dono: visão geral (números, gráficos, funil, planos, uso)
 import React from "react";
-import { Barras, Numero, NOME_MODO, TEM_PRO, fNum, fPct, fReais, fData, relativo, nomeLista, planoDe, ultimoUsoIso } from "./util.jsx";
+import { fonteDe, Barras, Numero, NOME_MODO, TEM_PRO, fNum, fPct, fReais, fData, relativo, nomeLista, planoDe, ultimoUsoIso } from "./util.jsx";
 
 export default function Geral({ resumo: r, usuarios, kv, funil, abrir, irPara }) {
   const planos = usuarios.map(u => ({ u, p: planoDe(u, kv) }));
@@ -8,6 +8,12 @@ export default function Geral({ resumo: r, usuarios, kv, funil, abrir, irPara })
   const comPro = planos.filter(x => TEM_PRO.includes(x.p.tipo) && !x.p.teste).length;
   const mrr = planos.reduce((s, x) => s + (x.p.tipo === "pago" ? x.p.mensal || 0 : 0), 0);
   const semKv = !!kv.erro;
+  // cada fonte com quantas contas trouxe, quantas deixaram o WhatsApp e quantas pagam
+  const origens = Object.values(planos.reduce((m, { u, p }) => {
+    const f = fonteDe(u) || "sem registro", o = m[f] || (m[f] = { fonte: f, contas: 0, zap: 0, pagando: 0 });
+    o.contas++; if (u.whatsapp) o.zap++; if (p.tipo === "pago" && !p.teste) o.pagando++;
+    return m;
+  }, {})).sort((a, b) => b.pagando - a.pagando || b.contas - a.contas);
   // cadastros acumulados: o total de hoje menos o que entrou depois de cada dia
   let acum = r.contas.total;
   const total = r.cadastros_dia.slice().reverse().map(d => { const n = acum; acum -= d.n; return { dia: d.dia, n }; }).reverse();
@@ -46,6 +52,16 @@ export default function Geral({ resumo: r, usuarios, kv, funil, abrir, irPara })
             <p className="nota-bloco">"Voltaram outro dia" conta só quem tem mais de 1 dia de conta.</p>
           </div>
         )}
+        <div className="bloco">
+          <h3>De onde vieram</h3>
+          <table>
+            <thead><tr><th>Fonte</th><th className="num">Contas</th><th className="num">WhatsApp</th>{!semKv && <th className="num">Pagando</th>}</tr></thead>
+            <tbody>
+              {origens.map(o => <tr key={o.fonte}><td>{o.fonte}</td><td className="num">{fNum(o.contas)}</td><td className="num">{fNum(o.zap)}</td>{!semKv && <td className="num">{fNum(o.pagando)}</td>}</tr>)}
+            </tbody>
+          </table>
+          <p className="nota-bloco">Contas de antes do registro aparecem como "sem registro".</p>
+        </div>
         <div className="bloco">
           <h3>Planos</h3>
           {semKv ? <p className="vazio">Sem resposta do servidor de avisos.</p> : (

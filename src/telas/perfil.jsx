@@ -8,6 +8,7 @@ import { AssinaturaPagina, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaA
 import { GradeHorarios, LinkAgendamento, linkDo } from "./agendamento.jsx";
 import { gradeDo, resumoGrade, periodosIniciais } from "../horarios.js";
 import { linkSuporte } from "../plano.js";
+import { lerWhatsapp, mascaraWhatsapp, mostrarWhatsapp } from "../whatsapp.js";
 import { nivelDe, TRILHAS } from "../conquistas.js";
 import { noApp, appIOS, chamarApp } from "../app-nativo.js";
 
@@ -23,6 +24,26 @@ const TXT_PUSH = {
   "sem-sw": "O app ainda está terminando de instalar. Feche, abra de novo pelo ícone e tente outra vez.",
   tempo: "Demorou demais para responder. Tente de novo.",
 };
+
+// Trocar o WhatsApp da conta
+function WhatsappRow({ conta, act }) {
+  const [valor, setValor] = useState(null), [erro, setErro] = useState(null);
+  const atual = mostrarWhatsapp(conta.whatsapp);
+  if (valor === null) return <button className="perfil-row" onClick={() => setValor(atual)}><i><I.phone /></i><span><b>Seu WhatsApp</b><small>{atual || "Ainda não informado"}</small></span><I.chev /></button>;
+  const salvar = e => {
+    e.preventDefault();
+    const r = lerWhatsapp(valor);
+    if (!r.ok) return setErro(r.erro);
+    act.salvarWhatsapp(r.numero); setValor(null); setErro(null);
+  };
+  return (
+    <form className="perfil-whats stack" onSubmit={salvar} noValidate>
+      <div className="fields"><Field label="Seu WhatsApp" icon={<I.phone />} htmlFor="p-whats"><input id="p-whats" type="tel" inputMode="tel" autoComplete="tel-national" autoFocus value={valor} onChange={e => { setValor(mascaraWhatsapp(e.target.value)); setErro(null); }} placeholder="(43) 98888-7777" /></Field></div>
+      {erro && <div className="error" role="alert">{erro}</div>}
+      <div className="btn-row"><button className="btn" type="submit">Salvar</button><button type="button" className="btn ghost" onClick={() => { setValor(null); setErro(null); }}>Cancelar</button></div>
+    </form>
+  );
+}
 
 const textoNegado = () => ehIOS()
   ? "As notificações estão bloqueadas. Libere em: Ajustes do iPhone → Notificações → Avina → Permitir Notificações. Depois volte aqui."
@@ -261,6 +282,7 @@ function PerfilPage({ db, conta, tema, inicio: pedido, onClose, act, nuvem }) {
                 <small>{conta.uid ? "Login com senha, cópia na nuvem e cada conta só enxerga os próprios dados." : "Crie uma conta com login para ter uma cópia na nuvem e usar em outros aparelhos."}</small></span>
             </div>
             <div className="perfil-lista">
+              {conta.uid && <WhatsappRow conta={conta} act={act} />}
               <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
               <button className="perfil-row" onClick={act.verTour}><i><I.star /></i><span><b>Ver o tour de novo</b><small>Um passeio rápido pelo que tem nesta tela</small></span><I.chev /></button>
               <a className="perfil-row" href={linkSuporte()} target="_blank" rel="noopener"><i><I.chat /></i><span><b>Fale com a gente</b><small>Dúvidas, ideias ou problemas: direto no WhatsApp</small></span><I.chev /></a>

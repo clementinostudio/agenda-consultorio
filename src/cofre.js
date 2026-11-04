@@ -46,6 +46,21 @@ export async function trocarSenha(notas, nova) {
   const novas = await Promise.all(notas.map(async (n, i) => ({ ...n, ...(await trancar(textos[i])) })));
   return { cofre, notas: novas };
 }
+// Código de recuperação: a senha do cofre fica trancada com um código aleatório (100 bits) que só a pessoa guarda.
+// Na nuvem vai só a senha embaralhada; sem o código, continua ninguém conseguindo ler.
+const LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const limparCodigo = c => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+export const novoCodigo = () => [...crypto.getRandomValues(new Uint8Array(20))].map(b => LETRAS[b % 32]).join("").match(/.{4}/g).join("-");
+export async function comRecuperacao(cofre, senha, codigo) {
+  const sal = crypto.getRandomValues(new Uint8Array(16));
+  const k = await derivar(limparCodigo(codigo), sal, ITERACOES);
+  return { ...cofre, rec: { sal: b64(sal), iter: ITERACOES, ...(await trancar(senha, k)) } };
+}
+// O código certo devolve a senha; o errado, null
+export async function senhaDoCodigo(cofre, codigo) {
+  if (!cofre.rec) return null;
+  try { return await abrirTexto(cofre.rec, await derivar(limparCodigo(codigo), deB64(cofre.rec.sal), cofre.rec.iter)); } catch (e) { return null; }
+}
 export const aberto = () => !!chave;
 export function fecharCofre() { chave = null; clearTimeout(timer); avisar(); }
 // Cada uso renova o tempo; parado por 10 minutos, tranca sozinho

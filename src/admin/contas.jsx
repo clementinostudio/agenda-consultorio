@@ -1,8 +1,9 @@
 // Painel do dono: lista de contas e a ficha de cada uma (com as ações)
 import React, { useEffect, useMemo, useState } from "react";
+import { linkWhatsapp, mostrarWhatsapp } from "../whatsapp.js";
 import {
   NOME_MODO, TEM_PRO, addDias, aparelho, baixarCsv, bloqueada, Confirmar, Copiar, dt, fData, fDataHora, fDiaMes, fNum, fReais, fRede, hojeBR,
-  modosDe, nomeLista, ondeDe, planoDe, relativo, totalItens, ultimoUso, ultimoUsoIso,
+  fonteDe, modosDe, nomeLista, ondeDe, planoDe, relativo, totalItens, ultimoUso, ultimoUsoIso,
 } from "./util.jsx";
 
 export const FILTROS = {
@@ -19,6 +20,8 @@ export const FILTROS = {
   paradas: ["Paradas há 30+ dias", u => ultimoUso(u) < Date.now() - 30 * 864e5],
   incompletas: ["Cadastro incompleto", u => !u.perfil_feito],
   bloqueadas: ["Bloqueadas", u => bloqueada(u)],
+  comzap: ["Com WhatsApp", u => !!u.whatsapp],
+  semzap: ["Sem WhatsApp", u => !u.whatsapp],
 };
 const ORDENS = {
   novas: ["Mais novas", (a, b) => String(b.criado_em).localeCompare(String(a.criado_em))],
@@ -27,22 +30,25 @@ const ORDENS = {
   nome: ["Nome", (a, b) => (a.nome || a.email).localeCompare(b.nome || b.email, "pt-BR")],
 };
 
+// Abre a conversa com a saudação pronta
+const zap = u => linkWhatsapp(u.whatsapp, `Oi${u.nome ? `, ${u.nome.split(" ")[0]}` : ""}! Aqui é do Avina.`);
+
 export function Contas({ usuarios, kv, abrir, filtro, setFiltro, fontes, avisar }) {
   const [busca, setBusca] = useState(""), [ordem, setOrdem] = useState("novas"), [avisoTodos, setAvisoTodos] = useState(false);
   const lista = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return usuarios
       .filter(u => FILTROS[filtro][1](u, planoDe(u, kv)))
-      .filter(u => !q || [u.nome, u.email, u.cidade, u.regiao, u.ip, u.rede, u.profissao, u.id, planoDe(u, kv).rotulo].some(v => String(v || "").toLowerCase().includes(q)))
+      .filter(u => !q || [u.nome, u.email, u.whatsapp, mostrarWhatsapp(u.whatsapp), u.origem, u.cidade, u.regiao, u.ip, u.rede, u.profissao, u.id, planoDe(u, kv).rotulo].some(v => String(v || "").toLowerCase().includes(q)))
       .sort(ORDENS[ordem][1]);
   }, [usuarios, kv, busca, filtro, ordem]);
-  const csv = () => baixarCsv("avina-contas", ["id", "email", "nome", "cadastro", "ultimo_uso", "ip", "operadora", "cidade", "uf", "aparelho", "modos", "plano", "itens"],
-    lista.map(u => [u.id, u.email, u.nome, u.criado_em, ultimoUsoIso(u), u.ip, fRede(u.rede), u.cidade, u.regiao, aparelho(u.aparelho),
+  const csv = () => baixarCsv("avina-contas", ["id", "email", "nome", "whatsapp", "origem", "cadastro", "ultimo_uso", "ip", "operadora", "cidade", "uf", "aparelho", "modos", "plano", "itens"],
+    lista.map(u => [u.id, u.email, u.nome, u.whatsapp || "", u.origem || "", u.criado_em, ultimoUsoIso(u), u.ip, fRede(u.rede), u.cidade, u.regiao, aparelho(u.aparelho),
       modosDe(u).map(m => NOME_MODO[m]).join("+"), planoDe(u, kv).rotulo, totalItens(u)]));
   return (
     <section className="contas">
       <div className="filtros">
-        <input type="search" placeholder="Buscar por nome, e-mail, cidade, IP, operadora ou código" value={busca} onChange={e => setBusca(e.target.value)} />
+        <input type="search" placeholder="Buscar por nome, e-mail, WhatsApp, cidade, IP, operadora ou código" value={busca} onChange={e => setBusca(e.target.value)} />
         <select value={ordem} onChange={e => setOrdem(e.target.value)} aria-label="Ordenar">
           {Object.entries(ORDENS).map(([k, [n]]) => <option key={k} value={k}>{n}</option>)}
         </select>
@@ -58,14 +64,15 @@ export function Contas({ usuarios, kv, abrir, filtro, setFiltro, fontes, avisar 
       <p className="contador">{fNum(lista.length)} {lista.length === 1 ? "conta" : "contas"}</p>
       <div className="tabela-rola">
         <table className="tabela-contas">
-          <thead><tr><th>Conta</th><th>Cadastro</th><th>Último uso</th><th>IP e operadora</th><th>Onde</th><th>Aparelho</th><th>Modos</th><th>Plano</th><th className="num">Itens</th></tr></thead>
+          <thead><tr><th>Conta</th><th>WhatsApp</th><th>Cadastro</th><th>Último uso</th><th>IP e operadora</th><th>Onde</th><th>Aparelho</th><th>Modos</th><th>Plano</th><th className="num">Itens</th></tr></thead>
           <tbody>
             {lista.map(u => {
               const p = planoDe(u, kv);
               return (
                 <tr key={u.id} onClick={() => abrir(u)} tabIndex={0} onKeyDown={e => e.key === "Enter" && abrir(u)}>
                   <td><b>{u.nome || "(sem nome)"}</b>{u.admin && <span className="selo">admin</span>}{bloqueada(u) && <span className="selo ruim">bloqueada</span>}<small>{u.email}</small></td>
-                  <td>{fData(u.criado_em)}</td>
+                  <td>{u.whatsapp ? <a href={zap(u)} style={{ whiteSpace: "nowrap" }} target="_blank" rel="noreferrer noopener" onClick={e => e.stopPropagation()}>{mostrarWhatsapp(u.whatsapp)}</a> : <span className="fraco">—</span>}</td>
+                  <td>{fData(u.criado_em)}<small>{fonteDe(u) || ""}</small></td>
                   <td title={fDataHora(ultimoUsoIso(u))}>{relativo(ultimoUsoIso(u))}</td>
                   <td><span className="mono">{u.ip || "—"}</span>{u.ips_30d > 1 && <span className="selo" title="IPs diferentes nos últimos 30 dias">{u.ips_30d} IPs</span>}<small>{fRede(u.rede)}</small></td>
                   <td>{ondeDe(u)}</td>
@@ -140,6 +147,8 @@ export function Ficha({ u, kv, fontes, fechar, recarregar, avisar, eu }) {
           <dt>Último login</dt><dd>{fDataHora(u.ultimo_login)}</dd>
           <dt>Último acesso</dt><dd>{fDataHora(u.ultimo_acesso)} {u.ultimo_acesso && <small>({relativo(u.ultimo_acesso)})</small>}</dd>
           <dt>Última mudança</dt><dd>{fDataHora(u.ultima_mudanca)}</dd>
+          <dt>WhatsApp</dt><dd>{u.whatsapp ? <><a href={zap(u)} target="_blank" rel="noreferrer noopener">{mostrarWhatsapp(u.whatsapp)} ↗</a> <Copiar texto={u.whatsapp} /></> : "ainda não informou"}</dd>
+          <dt>Veio de</dt><dd>{u.origem ? u.origem.replace(":", " · ") : "antes do registro de origem"}</dd>
           <dt>Profissão</dt><dd>{u.profissao || "—"}</dd>
           <dt>Cidade (perfil)</dt><dd>{u.cidade_perfil || "—"}</dd>
           <dt>Modos</dt><dd>{modosDe(u).map(m => NOME_MODO[m]).join(", ") || "cadastro incompleto"}</dd>

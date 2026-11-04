@@ -19,6 +19,7 @@ import "./chat.css"; // a conversa com a Bolinha (chat) e o botão dela no compu
 import App from "./App.jsx";
 import AvisosSistema, { avisarNovaVersao } from "./avisos.jsx";
 import { noApp, chamarApp } from "./app-nativo.js";
+import { K_ORIGEM, limparOrigem } from "./origem.js";
 
 // Quem não está logado e abriu pelo navegador vê primeiro a página de apresentação (avina.com.br, publicada à parte: veja site/).
 // Quem já está logado, ou abriu pelo app instalado, vai direto para o app.
@@ -34,6 +35,9 @@ if (convite) { try { localStorage.setItem("agenda-convite-casa", JSON.stringify(
 // Convite para ajudar numa loja (#loja=...): do mesmo jeito
 const conviteLoja = location.hash.startsWith("#loja=") ? location.hash.slice(6) : "";
 if (conviteLoja) { try { localStorage.setItem("agenda-convite-loja", JSON.stringify(conviteLoja)); } catch (e) {} }
+// De onde veio (a página de apresentação manda no link): vale a primeira vez, e vai junto no cadastro
+const origemDoLink = limparOrigem(new URLSearchParams(location.search).get("origem"));
+if (origemDoLink) { try { if (!localStorage.getItem(K_ORIGEM)) localStorage.setItem(K_ORIGEM, origemDoLink); } catch (e) {} }
 const vemDaApresentacao = ["#entrar", "#criar", "#demo"].includes(location.hash) || !!convite || !!conviteLoja;
 // Links dos e-mails da conta (confirmar cadastro, criar senha nova) também abrem direto no app
 const vemDoEmail = /access_token=|error_description=|type=recovery/.test(location.hash);

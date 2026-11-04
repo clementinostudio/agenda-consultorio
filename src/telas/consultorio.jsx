@@ -1,42 +1,12 @@
 // Parte do app carregada sob demanda: recibo em PDF, relatório para o imposto e anotações de sessão trancadas.
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { I, Sheet, Field, Toggle, ConfirmButton, brl, brlReal, todayISO, MES_LONGO, pad, dm, fromISO, PERFIL, termoDe, vibrar, Ilustra } from "../App.jsx";
-import { aberto, criarCofre, destrancar, trancar, abrirTexto, fecharCofre, mexeu, trocarSenha } from "../cofre.js";
+import { aberto, criarCofre, destrancar, trancar, abrirTexto, fecharCofre, mexeu, trocarSenha, novoCodigo, comRecuperacao, senhaDoCodigo } from "../cofre.js";
+import { porExtenso, fmtCPF, cpfValido, dataLonga, novoPDF, pdfRecibo, pdfProntuario } from "../documentos-pdf.js";
+export { porExtenso, fmtCPF, cpfValido, pdfRecibo };
 
 /* ---------- números e documentos ---------- */
-const UN = ["zero", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
-const DZ = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
-const CT = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos"];
-const ate999 = n => {
-  if (n === 100) return "cem";
-  const c = Math.floor(n / 100), r = n % 100, p = [];
-  if (c) p.push(CT[c]);
-  if (r) p.push(r < 20 ? UN[r] : DZ[Math.floor(r / 10)] + (r % 10 ? " e " + UN[r % 10] : ""));
-  return p.join(" e ");
-};
-const inteiro = n => {
-  if (!n) return "zero";
-  const mi = Math.floor(n / 1e6), mil = Math.floor(n % 1e6 / 1000), r = n % 1000, p = [];
-  if (mi) p.push(mi === 1 ? "um milhão" : `${ate999(mi)} milhões`);
-  if (mil) p.push(mil === 1 ? "mil" : `${ate999(mil)} mil`);
-  if (r) p.push(ate999(r));
-  // "mil e cem", "dois mil e quinhentos", mas "mil duzentos e trinta"
-  return p.length > 1 && r && (r < 100 || r % 100 === 0) ? p.slice(0, -1).join(" ") + " e " + p[p.length - 1] : p.join(" ");
-};
-export function porExtenso(v) {
-  const c = Math.round(v * 100), re = Math.floor(c / 100), ce = c % 100, p = [];
-  if (re) p.push(`${inteiro(re)}${re % 1e6 === 0 ? " de" : ""} ${re === 1 ? "real" : "reais"}`);
-  if (ce) p.push(`${inteiro(ce)} ${ce === 1 ? "centavo" : "centavos"}`);
-  return p.join(" e ") || "zero reais";
-}
 const soDigitos = s => String(s || "").replace(/\D/g, "");
-export const fmtCPF = s => { const d = soDigitos(s).slice(0, 11); return d.replace(/^(\d{3})(\d)/, "$1.$2").replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d{1,2})$/, ".$1-$2"); };
-export function cpfValido(s) {
-  const d = soDigitos(s); if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
-  const dv = n => { let t = 0; for (let i = 0; i < n; i++) t += Number(d[i]) * (n + 1 - i); const r = t * 10 % 11; return r === 10 ? 0 : r; };
-  return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
-}
-const dataLonga = iso => { const d = fromISO(iso); return `${d.getDate()} de ${MES_LONGO[d.getMonth()]} de ${d.getFullYear()}`; };
 const dataBR = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 const lista = xs => xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " e " + xs[xs.length - 1];
 // Nome do conselho para cada profissão (o rótulo do campo; a pessoa escreve o número como quiser)
@@ -59,26 +29,6 @@ async function compartilhar(blob, nome, tipo, texto) {
     try { await navigator.share({ files: [f], title: nome, text: texto }); return "ok"; } catch (e) { if (e.name === "AbortError") return "cancelou"; }
   }
   baixar(blob, nome); return "baixou";
-}
-
-/* ---------- PDF ---------- */
-async function novoPDF() { const { jsPDF } = await import("jspdf"); return new jsPDF({ unit: "mm", format: "a4" }); }
-export async function pdfRecibo(r) {
-  const doc = await novoPDF(), W = 210, M = 22; let y = 30;
-  doc.setDrawColor(210); doc.setLineWidth(.4); doc.roundedRect(M - 6, 14, W - 2 * (M - 6), 190, 4, 4);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.text("RECIBO", M, y);
-  doc.setFontSize(16); doc.text(brlReal(r.valor), W - M, y, { align: "right" });
-  y += 16; doc.setFont("helvetica", "normal"); doc.setFontSize(12.5);
-  const corpo = doc.splitTextToSize(r.texto, W - 2 * M);
-  doc.text(corpo, M, y, { lineHeightFactor: 1.6 }); y += corpo.length * 12.5 * .3528 * 1.6 + 10;
-  doc.text(`${r.cidade ? r.cidade + ", " : ""}${dataLonga(r.data)}.`, W - M, y, { align: "right" }); y += 18;
-  if (r.assinatura) { try { doc.addImage(r.assinatura, "PNG", W / 2 - 35, y - 4, 70, 24); } catch (e) {} }
-  y += 22; doc.setDrawColor(120); doc.line(W / 2 - 45, y, W / 2 + 45, y); y += 6;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text(r.prof.nome || "", W / 2, y, { align: "center" }); y += 6;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10.5);
-  [r.prof.profissao && r.prof.registro ? `${r.prof.profissao} · ${r.prof.conselho} ${r.prof.registro}` : r.prof.registro ? `${r.prof.conselho} ${r.prof.registro}` : r.prof.profissao,
-    r.prof.cpf ? `CPF ${fmtCPF(r.prof.cpf)}` : "", r.prof.endereco || ""].filter(Boolean).forEach(l => { doc.text(doc.splitTextToSize(l, W - 2 * M), W / 2, y, { align: "center" }); y += 5.5; });
-  return doc.output("blob");
 }
 
 /* ---------- assinatura: desenhar com o dedo ---------- */
@@ -356,33 +306,68 @@ export function ImpostoSheet({ db, conta, onClose, act }) {
 /* ---------- anotações de sessão (trancadas com senha) ---------- */
 export function NotasSheet({ db, pid, sid, onClose, act }) {
   const p = db.patients.find(x => x.id === pid);
-  const [, setVer] = useState(0);
+  const [, setVer] = useState(0), [codigo, setCodigo] = useState(null);
   useEffect(() => { const f = () => setVer(v => v + 1); addEventListener("cofre", f); return () => removeEventListener("cofre", f); }, []);
   if (!p) return null;
   const nome = p.name.split(" ")[0];
   return (
-    <Sheet title={`Anotações · ${nome}`} sub="Trancadas com a sua senha" onClose={onClose}>
-      {!db.cofre ? <CriarSenha act={act} /> : !aberto() ? <Destrancar db={db} act={act} /> : <ListaNotas db={db} p={p} sid={sid} act={act} />}
+    <Sheet title={`Prontuário · ${nome}`} sub="Trancado com a sua senha" onClose={onClose}>
+      {codigo ? <MostrarCodigo codigo={codigo} act={act} onPronto={() => setCodigo(null)} />
+        : !db.cofre ? <CriarSenha act={act} onCodigo={setCodigo} /> : !aberto() ? <Destrancar db={db} act={act} /> : <ListaNotas db={db} p={p} sid={sid} act={act} onCodigo={setCodigo} />}
     </Sheet>
   );
 }
-function CriarSenha({ act }) {
+// O código aparece uma vez só: depois de criar a senha, ao trocar ou ao pedir um
+function MostrarCodigo({ codigo, act, onPronto }) {
+  const [ok, setOk] = useState(false);
+  const copiar = async () => { try { await navigator.clipboard.writeText(codigo); act.toast("Código copiado"); } catch (e) { act.toast("Não consegui copiar. Anote o código."); } };
+  return (
+    <div className="stack">
+      <div className="notas-intro"><Ilustra n="cadeados" /><span><b>Guarde este código</b>Se esquecer a senha, é com ele que você abre o prontuário de novo. Ele só aparece agora, e ninguém consegue recuperar por você.</span></div>
+      <div className="codigo-rec">{codigo}</div>
+      <button type="button" className="btn ghost" onClick={copiar}>Copiar o código</button>
+      <Toggle on={ok} onClick={() => setOk(!ok)}>Guardei o código em um lugar seguro</Toggle>
+      <button type="button" className="btn" disabled={!ok} onClick={onPronto}><I.check /> Continuar</button>
+    </div>
+  );
+}
+function CriarCodigo({ db, act, onCodigo, onVoltar }) {
+  const [s, setS] = useState(""), [erro, setErro] = useState(""), [ind, setInd] = useState(false);
+  const criar = async e => {
+    e.preventDefault(); if (!s) return;
+    setInd(true);
+    if (!await destrancar(db.cofre, s)) { setInd(false); setErro("Senha errada."); vibrar("erro"); return; }
+    const codigo = novoCodigo();
+    act.salvarCofre(await comRecuperacao(db.cofre, s, codigo)); vibrar("ok"); onCodigo(codigo);
+  };
+  return (
+    <form className="stack" onSubmit={criar} noValidate>
+      <div className="fields"><Field label="Senha do prontuário" icon={<I.key />} htmlFor="c-s"><input id="c-s" type="password" autoComplete="current-password" autoFocus value={s} onChange={e => { setS(e.target.value); setErro(""); }} /></Field></div>
+      {erro && <div className="error" role="alert">{erro}</div>}
+      <div className="btn-row"><button className="btn" type="submit" disabled={ind}>{ind ? "Criando…" : "Criar o código"}</button><button type="button" className="btn ghost" onClick={onVoltar}>Cancelar</button></div>
+    </form>
+  );
+}
+function CriarSenha({ act, onCodigo }) {
   const [s1, setS1] = useState(""), [s2, setS2] = useState(""), [erro, setErro] = useState(""), [ok, setOk] = useState(false), [ind, setInd] = useState(false);
   const criar = async e => {
     e.preventDefault();
     if (s1.length < 6) return setErro("Use pelo menos 6 letras ou números.");
     if (s1 !== s2) return setErro("As duas senhas não são iguais.");
-    if (!ok) return setErro("Marque que você entendeu que a senha não tem como ser recuperada.");
-    setInd(true); act.salvarCofre(await criarCofre(s1)); vibrar("ok");
+    if (!ok) return setErro("Marque que você entendeu como funciona a senha.");
+    setInd(true);
+    const codigo = novoCodigo();
+    const cofre = await comRecuperacao(await criarCofre(s1), s1, codigo);
+    onCodigo(codigo); act.salvarCofre(cofre); vibrar("ok");
   };
   return (
     <form className="stack" onSubmit={criar} noValidate>
       <div className="notas-intro"><Ilustra n="cadeados" /><span><b>Só você lê</b>O texto é trancado aqui no aparelho antes de ir para a nuvem. Ninguém mais consegue abrir: nem eu, nem o servidor.</span></div>
       <div className="fields">
-        <Field label="Crie uma senha para as anotações" icon={<I.key />} htmlFor="n-s1"><input id="n-s1" type="password" autoComplete="new-password" value={s1} onChange={e => setS1(e.target.value)} /></Field>
+        <Field label="Crie uma senha para o prontuário" icon={<I.key />} htmlFor="n-s1"><input id="n-s1" type="password" autoComplete="new-password" value={s1} onChange={e => setS1(e.target.value)} /></Field>
         <Field label="Repita a senha" icon={<I.key />} htmlFor="n-s2"><input id="n-s2" type="password" autoComplete="new-password" value={s2} onChange={e => setS2(e.target.value)} /></Field>
       </div>
-      <Toggle on={ok} onClick={() => setOk(!ok)}>Entendi: se eu esquecer esta senha, as anotações não podem ser recuperadas</Toggle>
+      <Toggle on={ok} onClick={() => setOk(!ok)}>Entendi: sem esta senha e sem o código de recuperação, o prontuário não pode ser aberto</Toggle>
       {erro && <div className="error" role="alert">{erro}</div>}
       <button className="btn" type="submit" disabled={ind}><I.check /> {ind ? "Criando…" : "Criar senha"}</button>
       <div className="hint">É diferente da senha da conta. O cofre tranca sozinho depois de 10 minutos parado ou quando você sai do app.</div>
@@ -390,7 +375,13 @@ function CriarSenha({ act }) {
   );
 }
 function Destrancar({ db, act }) {
-  const [s, setS] = useState(""), [erro, setErro] = useState(""), [ind, setInd] = useState(false), [esqueci, setEsqueci] = useState(false);
+  const [s, setS] = useState(""), [erro, setErro] = useState(""), [ind, setInd] = useState(false), [esqueci, setEsqueci] = useState(false), [cod, setCod] = useState("");
+  const comCodigo = async () => {
+    setInd(true); const senha = await senhaDoCodigo(db.cofre, cod);
+    const ok = senha != null && await destrancar(db.cofre, senha);
+    setInd(false);
+    if (!ok) { setErro("Código errado."); vibrar("erro"); } else vibrar("ok");
+  };
   const abrir = async e => {
     e.preventDefault(); if (!s) return;
     setInd(true); const ok = await destrancar(db.cofre, s); setInd(false);
@@ -398,21 +389,63 @@ function Destrancar({ db, act }) {
   };
   return (
     <form className="stack" onSubmit={abrir} noValidate>
-      <div className="notas-intro"><Ilustra n="cadeados" /><span><b>Anotações trancadas</b>Digite a senha das anotações para abrir.</span></div>
-      <div className="fields"><Field label="Senha das anotações" icon={<I.key />} htmlFor="n-s"><input id="n-s" type="password" autoComplete="current-password" autoFocus value={s} onChange={e => { setS(e.target.value); setErro(""); }} /></Field></div>
+      <div className="notas-intro"><Ilustra n="cadeados" /><span><b>Prontuário trancado</b>Digite a sua senha para abrir.</span></div>
+      <div className="fields"><Field label="Senha do prontuário" icon={<I.key />} htmlFor="n-s"><input id="n-s" type="password" autoComplete="current-password" autoFocus value={s} onChange={e => { setS(e.target.value); setErro(""); }} /></Field></div>
       {erro && <div className="error" role="alert">{erro}</div>}
       <button className="btn" type="submit" disabled={ind}>{ind ? "Abrindo…" : "Abrir"}</button>
       {!esqueci ? <button type="button" className="btn text" onClick={() => setEsqueci(true)}>Esqueci a senha</button>
+        : db.cofre.rec ? <>
+          <div className="fields"><Field label="Código de recuperação" icon={<I.key />} htmlFor="n-c"><input id="n-c" autoComplete="off" autoCapitalize="characters" value={cod} onChange={e => { setCod(e.target.value); setErro(""); }} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" /></Field></div>
+          <button type="button" className="btn ghost" disabled={ind || !cod.trim()} onClick={comCodigo}>Abrir com o código</button>
+          <ConfirmButton label="Perdi o código: apagar tudo" titulo="Apagar todos os prontuários?" texto={`Sem a senha e sem o código, ninguém consegue abrir os ${(db.notas || []).length} registros guardados. Eles somem de vez e você cria uma senha nova. Isso não dá para desfazer.`} acao="Apagar e recomeçar" onConfirm={() => act.trocarCofre(null, [])} />
+        </>
         : <ConfirmButton label="Apagar as anotações e criar outra senha" titulo="Apagar todas as anotações?" texto={`Sem a senha, ninguém consegue abrir as ${(db.notas || []).length} anotações guardadas. Elas somem de vez e você cria uma senha nova. Isso não dá para desfazer.`} acao="Apagar e recomeçar" onConfirm={() => act.trocarCofre(null, [])} />}
     </form>
   );
 }
-function ListaNotas({ db, p, sid, act }) {
-  const notas = (db.notas || []).filter(n => n.pid === p.id).sort((a, b) => b.data.localeCompare(a.data) || (b.criado || 0) - (a.criado || 0));
+// O que vai na ficha do prontuário (segue o que a Resolução CFP 001/2009 pede que o registro tenha)
+const FICHA = [
+  ["demanda", "Avaliação da demanda", "O que trouxe a pessoa, queixa principal e histórico importante"],
+  ["objetivos", "Objetivos do trabalho", "O que vocês combinaram buscar"],
+  ["procedimentos", "Abordagem e procedimentos", "Abordagem, técnicas e instrumentos usados"],
+  ["encaminhamento", "Encaminhamento ou encerramento", "Para quem foi encaminhado, ou como e por que terminou"],
+  ["documentos", "Documentos produzidos", "Relatórios, laudos, declarações e outros, com a data"],
+];
+const novoId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+function FichaProntuario({ db, p, act, onVoltar }) {
+  const atual = (db.notas || []).find(n => n.pid === p.id && n.tipo === "ficha");
+  const [f, setF] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    (atual ? abrirTexto(atual).then(JSON.parse) : Promise.resolve({})).then(d => { if (vivo) setF(d); }).catch(() => { if (vivo) setF({}); });
+    return () => { vivo = false; };
+  }, []);
+  if (!f) return <div className="empty">Abrindo…</div>;
+  const muda = (k, v) => { setF({ ...f, [k]: v }); mexeu(); };
+  const salvar = async () => {
+    mexeu();
+    act.salvarNota({ ...(atual || {}), id: atual ? atual.id : novoId(), pid: p.id, tipo: "ficha", sid: null, data: todayISO(), criado: atual ? atual.criado : Date.now(), editado: Date.now(), ...(await trancar(JSON.stringify(f))) });
+    vibrar("ok"); onVoltar();
+  };
+  return (
+    <div className="stack">
+      <div className="fields">
+        <Field label="Início do atendimento" htmlFor="f-ini"><input id="f-ini" type="date" value={f.inicio || ""} onChange={e => muda("inicio", e.target.value)} /></Field>
+        <Field label="Data de nascimento" htmlFor="f-nasc"><input id="f-nasc" type="date" value={f.nascimento || ""} onChange={e => muda("nascimento", e.target.value)} /></Field>
+      </div>
+      {FICHA.map(([k, rotulo, dica]) => (
+        <label key={k} className="ficha-campo"><b>{rotulo}</b><textarea className="msg nota-txt" value={f[k] || ""} onChange={e => muda(k, e.target.value)} placeholder={dica} /></label>
+      ))}
+      <div className="btn-row"><button className="btn" onClick={salvar}><I.check /> Salvar</button><button className="btn ghost" onClick={onVoltar}>Cancelar</button></div>
+    </div>
+  );
+}
+function ListaNotas({ db, p, sid, act, onCodigo }) {
+  const notas = (db.notas || []).filter(n => n.pid === p.id && !n.tipo).sort((a, b) => b.data.localeCompare(a.data) || (b.criado || 0) - (a.criado || 0));
   const ses = sid && db.sessions.find(s => s.id === sid);
   const [textos, setTextos] = useState({});
   const [edit, setEdit] = useState(() => ses && !notas.some(n => n.sid === sid) ? { nova: true, data: ses.date, texto: "" } : null);
-  const [trocar, setTrocar] = useState(false);
+  const [trocar, setTrocar] = useState(false), [ficha, setFicha] = useState(false), [pedirCodigo, setPedirCodigo] = useState(false), [gerando, setGerando] = useState(false);
   const chave = notas.map(n => n.id + (n.editado || 0)).join();
   useEffect(() => {
     let vivo = true;
@@ -426,7 +459,27 @@ function ListaNotas({ db, p, sid, act }) {
     act.salvarNota({ ...(velho || {}), id: velho ? velho.id : Math.random().toString(36).slice(2, 10) + Date.now().toString(36), pid: p.id, sid: velho ? velho.sid : sid || null, data: edit.data, criado: velho ? velho.criado : Date.now(), editado: Date.now(), ...(await trancar(t)) });
     setEdit(null); vibrar("ok");
   };
-  if (trocar) return <TrocarSenha db={db} act={act} onPronto={() => setTrocar(false)} />;
+  // o prontuário inteiro em PDF: para guardar fora do app, entregar a quem tem direito ou passar a outro profissional
+  const baixarPdf = async () => {
+    setGerando(true); mexeu();
+    try {
+      const reg = (db.notas || []).find(n => n.pid === p.id && n.tipo === "ficha");
+      const d = reg ? JSON.parse(await abrirTexto(reg)) : {};
+      const conta = act.contaAtual(), pf = conta.perfil || {}, doc = pf.doc || {};
+      const blob = await pdfProntuario({
+        hoje: todayISO(), inicio: d.inicio, sessoes: db.sessions.filter(s => s.patientId === p.id && s.status === "done").length,
+        prof: { nome: doc.nome || conta.nome, profissao: pf.profissao, conselho: conselhoDe(pf.profissao), registro: doc.registro },
+        paciente: { nome: p.name, cpf: p.cpf, telefone: p.phone, nascimento: d.nascimento },
+        secoes: FICHA.map(([k, titulo]) => ({ titulo, texto: d[k] })),
+        evolucoes: notas.slice().reverse().map(n => ({ data: n.data, texto: textos[n.id] || "" })),
+      });
+      baixar(blob, `Prontuário ${p.name}.pdf`); act.toast("PDF do prontuário pronto");
+    } catch (e) { act.toast("Não consegui gerar o PDF. Tente de novo."); }
+    setGerando(false);
+  };
+  if (ficha) return <FichaProntuario db={db} p={p} act={act} onVoltar={() => setFicha(false)} />;
+  if (pedirCodigo) return <CriarCodigo db={db} act={act} onCodigo={onCodigo} onVoltar={() => setPedirCodigo(false)} />;
+  if (trocar) return <TrocarSenha db={db} act={act} onCodigo={onCodigo} onPronto={() => setTrocar(false)} />;
   if (edit) return (
     <div className="stack">
       <div className="fields">
@@ -434,13 +487,15 @@ function ListaNotas({ db, p, sid, act }) {
       </div>
       <textarea className="msg nota-txt" autoFocus value={edit.texto} onChange={e => { setEdit({ ...edit, texto: e.target.value }); mexeu(); }} placeholder="O que foi trabalhado, combinados, pontos para a próxima sessão…" aria-label="Anotação" />
       <div className="btn-row"><button className="btn" onClick={salvar}><I.check /> Salvar</button><button className="btn ghost" onClick={() => setEdit(null)}>Cancelar</button></div>
-      {!edit.nova && <ConfirmButton label="Apagar esta anotação" titulo="Apagar a anotação?" texto="Ela some de vez, deste e de todos os seus aparelhos." acao="Apagar" onConfirm={() => { act.apagarNota(edit.id); setEdit(null); }} />}
+      {!edit.nova && <ConfirmButton label="Apagar esta evolução" titulo="Apagar a evolução?" texto="Ela some de vez, deste e de todos os seus aparelhos." acao="Apagar" onConfirm={() => { act.apagarNota(edit.id); setEdit(null); }} />}
     </div>
   );
   return (
     <div className="stack">
-      <button className="btn" onClick={() => setEdit({ nova: true, data: ses ? ses.date : todayISO(), texto: "" })}><I.plus /> Nova anotação</button>
-      {notas.length === 0 && <div className="empty">Nenhuma anotação ainda. Elas ficam em ordem de data, só para você.</div>}
+      {!db.cofre.rec && <div className="note amber"><I.alert /><span><b>Crie um código de recuperação.</b> Sem ele, quem esquece a senha perde o prontuário. <button type="button" className="link-inline" onClick={() => setPedirCodigo(true)}>Criar agora</button></span></div>}
+      <button className="btn ghost" onClick={() => setFicha(true)}><I.pencil /> Ficha do atendimento</button>
+      <button className="btn" onClick={() => setEdit({ nova: true, data: ses ? ses.date : todayISO(), texto: "" })}><I.plus /> Nova evolução</button>
+      {notas.length === 0 && <div className="empty">Nenhuma evolução ainda. Elas ficam em ordem de data, só para você.</div>}
       <div className="notas-lista">
         {notas.map(n => (
           <button key={n.id} className="nota-item" onClick={() => textos[n.id] != null && setEdit({ id: n.id, data: n.data, texto: textos[n.id] })}>
@@ -449,18 +504,22 @@ function ListaNotas({ db, p, sid, act }) {
           </button>
         ))}
       </div>
+      <button className="btn ghost" disabled={gerando} onClick={baixarPdf}><I.receipt /> {gerando ? "Gerando…" : "Baixar o prontuário em PDF"}</button>
       <div className="btn-row"><button className="btn ghost" onClick={() => { fecharCofre(); vibrar("toque"); }}><I.key /> Trancar agora</button><button className="btn ghost" onClick={() => setTrocar(true)}>Trocar senha</button></div>
     </div>
   );
 }
-function TrocarSenha({ db, act, onPronto }) {
+function TrocarSenha({ db, act, onPronto, onCodigo }) {
   const [s1, setS1] = useState(""), [s2, setS2] = useState(""), [erro, setErro] = useState(""), [ind, setInd] = useState(false);
   const ir = async e => {
     e.preventDefault();
     if (s1.length < 6) return setErro("Use pelo menos 6 letras ou números.");
     if (s1 !== s2) return setErro("As duas senhas não são iguais.");
     setInd(true);
-    try { const r = await trocarSenha(db.notas || [], s1); act.trocarCofre(r.cofre, r.notas); vibrar("ok"); onPronto(); }
+    try {
+      const r = await trocarSenha(db.notas || [], s1), codigo = novoCodigo();
+      act.trocarCofre(await comRecuperacao(r.cofre, s1, codigo), r.notas); vibrar("ok"); onPronto(); onCodigo(codigo);
+    }
     catch (x) { setErro("Não consegui trocar. Nada foi mudado."); setInd(false); }
   };
   return (

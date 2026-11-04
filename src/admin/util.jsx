@@ -38,6 +38,8 @@ export function aparelho(ua) {
 }
 export const ondeDe = x => x && x.cidade ? `${x.cidade}${x.regiao ? "/" + x.regiao : ""}${x.pais && x.pais !== "BR" ? ` (${x.pais})` : ""}` : "—";
 // Operadora sem o "S.A.", "LTDA"... ("Claro S.A." -> "Claro")
+// A fonte da conta (google, instagram...): a origem é "fonte:pagina"
+export const fonteDe = u => String((u && u.origem) || "").split(":")[0];
 export const fRede = r => r ? r.replace(/\s*(S\.?\/?A\.?|LTDA\.?|Ltda\.?|EIRELI|ME|Inc\.?|LLC)\s*$/i, "").replace(/\s{2,}/g, " ").trim() : "";
 
 // Nomes das listas do app (src/nuvem.js, LISTAS)
