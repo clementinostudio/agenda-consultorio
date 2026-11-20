@@ -18,7 +18,7 @@ const incluiDe = produto => {
   return [...AREAS.filter(x => a[x.id]).flatMap(x => INCLUI_AREA[x.id]),
     ...(a.consultorio && a.pessoal ? ["O líquido do consultório entrando no seu dinheiro pessoal"] : []),
     ...(a.loja && a.pessoal ? ["A retirada da loja entrando no seu dinheiro pessoal"] : []),
-    "Avisos no celular, voz e cópia na nuvem"];
+    "Avisos no celular e cópia na nuvem"];
 };
 // o que a versão grátis permite, só nas áreas que a pessoa usa
 const gratisTxt = perfil => { const a = areasDoPerfil(perfil); const t = [a.consultorio && `até ${LIMITE_GRATIS.pacientes} pacientes`, a.pessoal && `${LIMITE_GRATIS.lancMes} lançamentos pessoais por mês`, a.loja && `a loja sem equipe, com o resumo dos últimos ${LIMITE_GRATIS.lojaDias} dias`].filter(Boolean); return `Grátis: ${t.length > 1 ? t.slice(0, -1).join(", ") + " e " + t[t.length - 1] : t[0]}.`; };

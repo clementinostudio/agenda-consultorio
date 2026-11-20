@@ -10,7 +10,7 @@ import { SeloBanco, nomeBanco } from "./bancos.jsx";
 import { resumoPessoal, GraficoLinha, BarraCategorias, LinhaCategoria, MES_ABREV, diaMes, eixoDoMes, marcaDoNome, LancRow, acumuladoMes, diasDoMes } from "./resumo.jsx";
 import "../pessoal.css";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
-import { logoPropria, lerArquivo } from "../App.jsx";
+import { logoPropria, lerArquivo, IA_CONVERSA } from "../App.jsx";
 import { todayISO, addDays, MES_LONGO, TopoInicio, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, contaDinheiro, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos, Confirmar, vibrar } from "../App.jsx";
 import { saldos as saldosCasa } from "../casa.js";
 
@@ -230,8 +230,8 @@ function grandeHoje(db, act) {
     : `Até o dia ${g.ultimo}, ${brl(g.porDia)} por dia, com as contas pagas.`;
   const chat = servidorAvisos();
   return { id: "hoje", el: (
-    <Grande rotulo={rotulo} icone={I.target} cor={ruim ? "var(--rose)" : passou ? "var(--amber)" : "#FF9A4C"} onClick={chat ? act.abrirChat : () => act.setTab("p-gastos")}
-      falar={`${rotulo}: ${brl(v)}. ${texto}${chat ? " Toque para perguntar à Bolinha" : ""}`}>
+    <Grande rotulo={rotulo} icone={I.target} cor={ruim ? "var(--rose)" : passou ? "var(--amber)" : "#FF9A4C"} onClick={chat && IA_CONVERSA ? act.abrirChat : () => act.setTab("p-gastos")}
+      falar={`${rotulo}: ${brl(v)}. ${texto}${chat && IA_CONVERSA ? " Toque para perguntar à Bolinha" : ""}`}>
       <b className={"ini-g-v" + (passou || ruim ? " neg" : "")}><Money v={v} /></b>
       <span className="ini-g-apoio">{texto}</span>
       <span className="ini-g-pe">
@@ -369,13 +369,13 @@ function PessoalHome({ db, conta, now, act, tema, avisos }) {
     <div className="ini-agora">
       <ViagemAviso db={db} act={act} />
       <div className="acts narrow-only">
-        <button className="act" onClick={act.falarGasto}><i><I.mic /></i>Falar</button>
+        {IA_CONVERSA && <button className="act" onClick={act.falarGasto}><i><I.mic /></i>Falar</button>}
         <button className="act" onClick={() => act.novoLanc("saida")}><i><I.minus /></i>Gasto</button>
         <button className="act" onClick={() => act.novoLanc("entrada")}><i><I.plus /></i>Entrada</button>
         <button className="act" onClick={() => act.novaConta()}><i><I.bill /></i>Conta fixa</button>
       </div>
       <Talk falas={falas} />
-      {servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
+      {IA_CONVERSA && servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
       <CasaCartao casa={act.casa} onAbrir={act.abrirCasa} />
     </div>
   );
@@ -794,9 +794,9 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onVoz, onFoto, onS
     <Sheet title={inicial ? "Editar lançamento" : tipo === "entrada" ? "Nova entrada" : "Novo gasto"} onClose={onClose}>
       {!inicial && <>
         <div className="voice">
-          <input id="l-frase" value={frase} onChange={e => aplicar(e.target.value)} placeholder='Fale ou escreva: "gastei 32 na padaria"' enterKeyHint="done" autoComplete="off" aria-label="Descreva o gasto em uma frase" />
+          <input id="l-frase" value={frase} onChange={e => aplicar(e.target.value)} placeholder={IA_CONVERSA ? 'Fale ou escreva: "gastei 32 na padaria"' : 'Escreva: "gastei 32 na padaria"'} enterKeyHint="done" autoComplete="off" aria-label="Descreva o gasto em uma frase" />
           {onFoto && <button type="button" className="mic foto" onClick={() => fotoRef.current && fotoRef.current.click()} aria-label="Foto do comprovante"><I.camera /></button>}
-          <button type="button" className="mic" onClick={onVoz} aria-label="Falar"><I.mic /></button>
+          {IA_CONVERSA && onVoz && <button type="button" className="mic" onClick={onVoz} aria-label="Falar"><I.mic /></button>}
           {onFoto && <input ref={fotoRef} type="file" accept="image/*" hidden onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onFoto(f); }} />}
         </div>
         {pre && pre.daFoto && <div className="voice-ok"><I.check /><span>Li a foto: {pre.tipo === "entrada" ? "entrada" : "gasto"} de {brlReal(pre.valor)}{pre.desc ? ` em ${pre.desc}` : ""}. Confira e salve.</span></div>}

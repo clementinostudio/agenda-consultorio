@@ -10,6 +10,7 @@ import "./modais.css"; // modais: topo e botão à vista, sem rolar de lado
 import "./chat.css"; // a conversa com a Bolinha (chat) e o botão dela no computador
 import "./consultorio-extra.css"; // confirmação pelo paciente, sessão online, semana em grade e o topo do dia
 import "./notion.css"; // visual calmo e limpo (por último: ajusta o resto sem mexer em cada arquivo)
+import "./azul.css"; // a cara do Avina: modo claro em primeiro lugar, barra de cima azul e cartões de destaque azuis
 import App from "./App.jsx";
 import AvisosSistema, { avisarNovaVersao } from "./avisos.jsx";
 import { noApp, chamarApp } from "./app-nativo.js";

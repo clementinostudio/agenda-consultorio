@@ -2,7 +2,7 @@
 import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
-import { todayISO, addDays, PERFIL, itensDoDia, registroPendente, contaDinheiro, Sheet, diaCurto, I, iniciais, corDe, relativo, brl, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, Seg, primeiro, Ilustra } from "../App.jsx";
+import { todayISO, addDays, PERFIL, itensDoDia, registroPendente, contaDinheiro, Sheet, diaCurto, I, iniciais, corDe, relativo, brl, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, Seg, primeiro, Ilustra, IA_CONVERSA } from "../App.jsx";
 import { confirmacaoDe, enderecoConfirmar } from "../link.js";
 
 const waLink = (phone, txt) => { const d = (phone || "").replace(/\D/g, ""); const f = d.length >= 10 && d.length <= 11 ? "55" + d : d; return `https://wa.me/${f}?text=${encodeURIComponent(txt)}`; };
@@ -90,7 +90,8 @@ function FecharDia({ db, conta, onClose, act }) {
           })}</div></>)}
       {e === "gastos" && <>
         <div className="note"><I.wallet /><span>{gastosHoje.length ? `Você anotou ${gastosHoje.length} ${gastosHoje.length === 1 ? "lançamento" : "lançamentos"} hoje.` : "Nenhum gasto anotado hoje. Lembra de algum?"}</span></div>
-        <button className="btn ghost" onClick={() => { onClose(); act.falarGasto(); }}><I.mic /> Anotar falando</button>
+        {IA_CONVERSA ? <button className="btn ghost" onClick={() => { onClose(); act.falarGasto(); }}><I.mic /> Anotar falando</button>
+          : <button className="btn ghost" onClick={() => { onClose(); act.novoLanc("saida"); }}><I.plus /> Anotar um gasto</button>}
       </>}
       {e === "fim" && <>
         <Ilustra n="cafe" className="fim-cafe" />

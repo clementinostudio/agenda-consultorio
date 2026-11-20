@@ -29,6 +29,10 @@ import { useLinkAgendamento, linkDo, confirmacaoDe, confirmado, enderecoConfirma
 import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
 
+// A Bolinha (fala, conversa com a IA e o mascote) está desligada: o código fica guardado, mas nada dela aparece no app.
+// A IA do servidor vai ser usada para outra coisa. Para voltar com ela, é só trocar para true.
+const IA_CONVERSA = false;
+
 // Caminho base do app (no GitHub Pages é /nome-do-repositorio/)
 const BASE = import.meta.env.BASE_URL;
 
@@ -37,7 +41,7 @@ const BASE = import.meta.env.BASE_URL;
    ========================================================= */
 let DURACAO_SESSAO = 50;       // minutos de cada sessão (vem do perfil)
 const INTERVALO_MIN = 45;      // a partir de quantos minutos mostra "intervalo livre"
-const TEMA_PADRAO = "dark";    // "dark", "light" ou "auto"
+const TEMA_PADRAO = "light";   // "dark", "light" ou "auto" (o claro é o principal)
 const FREQUENCIAS = [
   { dias: 7,  nome: "Semanal" },
   { dias: 14, nome: "Quinzenal" },
@@ -1908,7 +1912,6 @@ function useRolouTitulo(limite = 92) {
 // sobe para o centro de uma barra fina, com o olho e a ação no mesmo lugar: nada pula e o "+" continua a um toque.
 // (o Início tem a barra dele, com a foto e o nome.) mais: { l, f }, a ação principal da aba
 function TopBar({ eyebrow, title, act, tema, extra, voltar, mais }) {
-  const rolou = useRolouTitulo();
   const esquerda = voltar
     ? <button className="icon-btn redondo top-voltar" onClick={() => voltarDaTela(voltar)} aria-label="Voltar"><I.chevL /></button>
     : nativoV2 ? <VoltarAoApp className="icon-btn redondo top-voltar" />
@@ -1916,13 +1919,6 @@ function TopBar({ eyebrow, title, act, tema, extra, voltar, mais }) {
   const botaoMais = mais && <button className="icon-btn redondo top-mais" onClick={mais.f} aria-label={mais.l}><I.plus /></button>;
   return (
     <>
-      <div className={"aba-barra" + (rolou ? " on" : "")} aria-hidden={!rolou} inert={rolou ? undefined : ""}>
-        <div className="aba-barra-in">
-          {esquerda}
-          <button className="aba-barra-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{title}</button>
-          {botaoMais || <span className="aba-barra-vazio" />}
-        </div>
-      </div>
       <header className={"top" + (voltar || nativoV2 ? " com-voltar" : "")}>
         {/* no app, a tela com voltar próprio fica só com ele (dois botões de voltar lado a lado confundem) */}
         <span className="top-esq">{esquerda}</span>
@@ -2008,7 +2004,7 @@ function BarraLateral({ conta, tema, modo, doisModos, abas, tab, act }) {
   }, [mini]);
   useEffect(() => () => { clearTimeout(tempo.current.abre); clearTimeout(tempo.current.fecha); }, []);
 
-  const chat = servidorAvisos() ? [{ id: "chat", l: "Perguntar à Bolinha", ic: <I.chat />, f: act.abrirChat }] : [];
+  const chat = IA_CONVERSA && servidorAvisos() ? [{ id: "chat", l: "Perguntar à Bolinha", ic: <I.chat />, f: act.abrirChat }] : [];
   const principal = loja ? { l: "Anotar gasto", f: () => act.abrirLoja("gasto", {}) } : pessoal ? { l: "Anotar gasto", f: () => act.novoLanc("saida") } : { l: `Novo ${TERMO.s}`, f: act.novoPaciente };
   const rapidas = loja
     ? [{ id: "gasto", l: "Anotar gasto da loja", d: "Insumos, embalagem, gás…", ic: <I.minus />, f: () => act.abrirLoja("gasto", {}) },
@@ -2019,7 +2015,7 @@ function BarraLateral({ conta, tema, modo, doisModos, abas, tab, act }) {
     ? [{ id: "gasto", l: "Anotar gasto", d: "Saiu dinheiro", ic: <I.minus />, f: () => act.novoLanc("saida") },
        { id: "entrada", l: "Anotar entrada", d: "Entrou dinheiro", ic: <I.plus />, f: () => act.novoLanc("entrada") },
        { id: "conta", l: "Nova conta fixa", d: "Luz, aluguel, assinaturas", ic: <I.bill />, f: () => act.novaConta() },
-       { id: "falar", l: "Anotar falando", d: "Diga o gasto em voz alta", ic: <I.mic />, f: act.falarGasto }]
+       ...(IA_CONVERSA ? [{ id: "falar", l: "Anotar falando", d: "Diga o gasto em voz alta", ic: <I.mic />, f: act.falarGasto }] : [])]
     : [{ id: "pac", l: `Novo ${TERMO.s}`, d: "Cadastrar e pôr na agenda", ic: <I.users />, f: act.novoPaciente },
        { id: "espera", l: "Lista de espera", d: "Anotar quem quer um horário", ic: <I.clock />, f: act.novaEspera },
        { id: "importar", l: "Importar agenda", d: "Trazer de outra agenda", ic: <I.upload />, f: act.importarAgenda }];
@@ -2540,7 +2536,7 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
     <div className="ini-agora">
       <Talk falas={falas} />
       <div className="small-acts">
-        {servidorAvisos() && <button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
+        {IA_CONVERSA && servidorAvisos() && <button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
         <button className="chip-btn" onClick={act.agora}><I.target />Só o agora</button>
         <button className="chip-btn" onClick={act.fecharDia}><I.moon />{(db.fechados || {})[t] ? "Dia fechado ✓" : "Fechar o dia"}</button>
         <button className="chip-btn" onClick={act.revisao}><I.chart />Revisão da semana</button>
@@ -4786,17 +4782,6 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     const t = setTimeout(() => { try { localStorage.setItem(kTrazer, "1"); } catch (e) {} setSheet({ type: "importar-agenda", primeira: true }); }, 900);
     return () => clearTimeout(t);
   }, [tourVisto, sheet, modoEf, db.patients.length]);
-  // Barra de cima que aparece quando a página rola
-  const [rolou, setRolou] = useState(false);
-  // A barra de baixo fica sempre parada no lugar; só a de cima reage à rolagem
-  // (um único setState por mudança de estado, e não a cada pixel rolado)
-  useEffect(() => {
-    let r = null, raf = 0;
-    const f = () => { raf = 0; const v = window.scrollY > 72; if (v !== r) { r = v; setRolou(v); } };
-    const agendar = () => { if (!raf) raf = requestAnimationFrame(f); };
-    f(); window.addEventListener("scroll", agendar, { passive: true });
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", agendar); };
-  }, []);
   const vozApi = useRef({});
   CLIMA = clima;
   const tRef = useRef(null);
@@ -4826,7 +4811,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   // Atalhos por link: ...#gasto abre o gasto por voz, #agora o "Só o agora", #fechar o "Fechar o dia", #livres os horários livres
   useEffect(() => {
     const h = (location.hash || "").slice(1);
-    if (h === "gasto" && usaPessoal) { act.setModo("pessoal"); setTimeout(() => vozApi.current.comecar && vozApi.current.comecar(), 400); }
+    if (h === "gasto" && usaPessoal) { act.setModo("pessoal"); setTimeout(() => IA_CONVERSA && vozApi.current.comecar ? vozApi.current.comecar() : act.novoLanc("saida"), 400); }
     else if (h === "agora") setFoco(true);
     else if (h === "fechar") setSheet({ type: "fechar" });
     else if (h === "livres") setSheet({ type: "livres" });
@@ -5572,7 +5557,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         }
         const cod = texto && (lerBoleto(texto) ? texto : acharBoleto(texto));
         if (cod) return act.boletoCompartilhado(cod);
-        if (texto && vozApi.current.texto) vozApi.current.texto(texto);
+        if (IA_CONVERSA && texto && vozApi.current.texto) vozApi.current.texto(texto);
       } catch (e) { notify("Não consegui abrir o que foi compartilhado."); }
     },
     // Conta
@@ -5870,7 +5855,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   );
   if (!saindo) paineisCong.current = paineis;
 
-  const barraInicio = rolou && !sheet && tabEf === inicioDo(modoEf); // nas outras abas, quem cuida é o TopBar
+  const rolouCab = useRolouTitulo(6); // a barra de cima ganha uma sombra suave quando o conteúdo passa por baixo dela
   // o que pede atenção logo que a pessoa entra (fica abaixo da saudação)
   const avisosInicio = <><AvisoNotificacoes conta={conta} modo={modoEf} act={act} />{avisoPlano0 && <AvisoCortesia fase={avisoPlano0} conta={conta} db={db} modo={modoEf} onPlanos={() => act.openSettings("assinatura")} />}</>;
   return (
@@ -5882,6 +5867,18 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         style={{ transform: `translate(-50%, ${recarregando ? 46 : puxar * .45 + 2}px) rotate(${puxar * 2}deg)`, opacity: recarregando || puxar > 6 ? 1 : 0, transition: puxar ? "opacity .15s" : undefined }}>
         <svg viewBox="0 0 24 24"><circle className="puxar-trilho" cx="12" cy="12" r="8.5" /><circle className="puxar-arco" cx="12" cy="12" r="8.5" pathLength="100" style={{ strokeDashoffset: recarregando ? 70 : 100 - Math.min(1, puxar / 70) * 92 }} /></svg>
       </div>
+      {/* Barra de cima do celular: fixa e sempre útil (logo, modo, olho e conta). No computador quem faz isso é a barra lateral */}
+      <header className={"cab-app" + (rolouCab ? " rolou" : "")}>
+        <div className="cab-app-in">
+          <VoltarAoApp className="icon-btn cab-ic" />
+          <button className="cab-app-logo" onClick={() => { if (tabEf !== inicioDo(modoEf)) act.setTab(inicioDo(modoEf)); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label="Avina, início"><AvinaNome /></button>
+          <div className="cab-app-a">
+            {doisModos && <ModeSwitch modo={modoEf} setModo={act.setModo} modos={modos} />}
+            <button className="icon-btn cab-ic" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>
+            <Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes" />
+          </div>
+        </div>
+      </header>
       <main className={"app" + (puxar ? " puxando" : "")} style={puxar || recarregando ? { transform: `translateY(${recarregando ? 46 : puxar * .5}px)` } : undefined}>
         <DicaInstalar />
         {tabEf === "l-caixa" && avisosInicio}
@@ -5900,22 +5897,11 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         {tabEf === "p-transp" && <Suspense fallback={null}><TransporteTab db={db} act={act} tema={tema} perfil={perfil} atual={veicAtual} onTrocar={setVeicAtual} /></Suspense>}
       </main>
 
-      <div className={"topo-fixo" + (barraInicio ? " on" : "")} aria-hidden={!barraInicio} inert={barraInicio ? undefined : ""}>
-        <div className="topo-fixo-in">
-          <VoltarAoApp className="icon-btn redondo" />
-          <Avatar conta={conta} onClick={act.openSettings} label="Sua conta" />
-          <button className="topo-fixo-t" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Voltar ao topo">{tabEf === "home" || tabEf === "p-home" ? primeiro(conta.nome) : tabEf === "l-caixa" ? ((loja.loja && loja.loja.nome) || "Loja") : (abas.find(a => a.id === tabEf) || {}).l || (tabEf === "p-casa" ? ((casa.casa && casa.casa.nome) || "Nossa casa") : "")}</button>
-          <button className="icon-btn redondo" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>
-          {doisModos
-            ? <button className="topo-fixo-pill" onClick={act.proximoModo} aria-label={`Trocar de modo: ir para ${NOME_MODO[act.modoSeguinte]}`}>{NOME_MODO[modoEf]}<I.repeat /></button>
-            : <button className="icon-btn redondo" onClick={act.trocarTema} aria-label="Trocar tema">{tema.escuro ? <I.sun /> : <I.moon />}</button>}
-        </div>
-      </div>
       {festa.length > 0 && !sheet && !vozAtiva && !foco && (() => {
         const c = conquistas.find(x => x.id === festa[0]);
         return c && <Celebra key={c.id} c={c} total={conquistas.filter(x => x.feito).length} onFim={() => setFesta(f => f.slice(1))} onVer={() => { setFesta([]); act.openSettings("conquistas"); }} />;
       })()}
-      <VozBarra api={vozApi} db={db} usaPessoal={usaPessoal} nome={conta.nome} onNovo={act.novoLanc} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onComando={act.comandoVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />
+      {IA_CONVERSA && <VozBarra api={vozApi} db={db} usaPessoal={usaPessoal} nome={conta.nome} onNovo={act.novoLanc} onAtivo={setVozAtiva} onSalvar={act.salvarVoz} onComando={act.comandoVoz} onEditar={it => setSheet({ type: "lanc", tipo: it.tipo, pre: it })} />}
       <nav className="nav" aria-label="Seções">
         <div className="nav-in">
           {abas.map(a => (
@@ -5923,9 +5909,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
               <span className="nv-ic">{tabEf === a.id ? a.on : a.ic}{a.n > 0 && <span className="badge">{a.n > 99 ? "99+" : a.n}</span>}</span><span className="lb">{a.l}</span>
             </button>
           ))}
-          <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Terminar" : "Falar"}>
+          {IA_CONVERSA && <button className={"nav-mic" + (vozAtiva ? " on" : "")} onClick={() => vozApi.current.tocar && vozApi.current.tocar()} aria-label={vozAtiva === "contando" ? "Salvar" : vozAtiva ? "Terminar" : "Falar"}>
             <Bolinha estado={vozAtiva} /><span className="lb">{vozAtiva === "contando" ? "Salvar" : vozAtiva === "resposta" || !vozAtiva ? "Falar" : "Parar"}</span>
-          </button>
+          </button>}
         </div>
       </nav>
 
@@ -6042,7 +6028,7 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar, voltarDaTela, pagarContaP, despagarContaP, limiteDoApp, TopoInicio, situacao, liquido, useWide, TERMO,
+export { IA_CONVERSA, AvinaA, AvinaNome, Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar, voltarDaTela, pagarContaP, despagarContaP, limiteDoApp, TopoInicio, situacao, liquido, useWide, TERMO,
   // o app de celular (src/app-nativo-trabalho.js): as regras do consultório sem tela
   registrar, desfazer, sublocacao, sessoesAbertas, cobrancasDoPix, freqNome, reajusteDe, periodoDe, mins, hhmm, INTERVALO_MIN, limitePacApp, csvDoMes };
 

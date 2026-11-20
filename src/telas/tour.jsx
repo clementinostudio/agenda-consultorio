@@ -1,19 +1,18 @@
 // Parte do app carregada sob demanda: o tour da primeira vez. Quatro passos curtinhos por modo,
-// cada um acendendo uma parte de verdade da tela, com a Bolinha explicando. Dá pra pular a qualquer hora.
+// cada um acendendo uma parte de verdade da tela. Dá pra pular a qualquer hora.
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Bolinha, vibrar } from "../App.jsx";
+import { AvinaA, vibrar } from "../App.jsx";
 
 // Cada passo: um ou mais jeitos de mostrar (celular e computador). Vale o primeiro cujo lugar está visível na tela
 const PASSOS = {
   consultorio: ({ termo, doisModos }) => [
     { sel: [".acts.narrow-only .act", ".lt-split", ".lt-mais"], t: `Comece pelo primeiro ${termo.s}`, d: "Cadastre com o dia e o horário, e ele já entra na agenda toda semana." },
-    { sel: [".nav-mic"], t: "Fale em vez de digitar", d: "Toque na Bolinha e diga “Ana veio”, “Ana pagou” ou “remarca a Ana pra sexta às 15h”." },
+    { sel: [".hoje"], t: "O seu dia num cartão", d: "Quantas sessões, quanto entra hoje e a próxima, com o botão de entrar na sala quando for online." },
     { sel: [".lt-lista", ".nav-in"], t: "Tudo à mão", d: `Agenda, ${termo.p} e finanças ficam aqui. O número em cima mostra o que está esperando você.` },
     fotoEModos(doisModos),
   ],
   pessoal: ({ doisModos }) => [
     { sel: [".ini-car .ini-g", ".c3-saldo"], t: "Seu mês num olhar", d: "Quanto entrou, quanto saiu e quanto ainda sobra até o fim do mês." },
-    { sel: [".nav-mic"], t: "Anote um gasto falando", d: "Toque na Bolinha e diga “gastei 32 no mercado”. Eu coloco na categoria certa." },
     { sel: [".lt-lista", ".nav-in"], t: "Gastos, contas e carro", d: "Ficam aqui. Eu aviso um dia antes de cada conta vencer." },
     fotoEModos(doisModos),
   ],
@@ -27,8 +26,8 @@ const PASSOS = {
 function fotoEModos(doisModos) {
   return doisModos
     ? [{ sel: [".lt-pe"], t: "Sua conta e seus modos", d: "Aqui ficam o perfil, os avisos e o plano. Em “Trocar”, você muda de modo." },
-       { sel: [".ini-topo-l:has(.mode-pill)", ".hello-l:has(.mode-pill)"], t: "Sua foto e seus modos", d: "Na foto ficam o perfil, os avisos e o plano. Ao lado, você troca de modo." }]
-    : { sel: [".lt-conta", ".ini-topo-l .me", ".hello-l .me"], t: "Sua conta", d: "Toque aqui para ver o perfil, os avisos e o seu plano." };
+       { sel: [".cab-app-a"], t: "Sua foto e seus modos", d: "Na foto ficam o perfil, os avisos e o plano. Ao lado, você troca de modo." }]
+    : { sel: [".lt-conta", ".cab-app .me"], t: "Sua conta", d: "Toque aqui para ver o perfil, os avisos e o seu plano." };
 }
 
 const visivel = el => { if (!el) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -99,7 +98,7 @@ export function Tour({ modo, termo, doisModos, onFim }) {
     <div className="tour" role="dialog" aria-modal="true" aria-label="Conhecendo o app">
       {luz && <div className="tour-luz" style={luz} aria-hidden="true" />}
       <div ref={balRef} className={"tour-bal" + (bal ? (bal.baixo ? " baixo" : " cima") : "")} style={bal ? { top: bal.top, left: bal.left, "--seta": bal.seta + "px" } : { visibility: "hidden" }} key={i}>
-        <div className="tour-cab"><Bolinha estado={ultimo ? "resposta" : ""} /><b>{P.t}</b></div>
+        <div className="tour-cab"><span className="tour-marca"><AvinaA /></span><b>{P.t}</b></div>
         <p>{P.d}</p>
         <div className="tour-pe">
           <span className="tour-pontos" aria-label={`Passo ${i + 1} de ${passos.length}`}>{passos.map((_, k) => <i key={k} className={k === i ? "on" : ""} />)}</span>

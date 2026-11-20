@@ -266,9 +266,9 @@ export function Carrossel({ db, modo, act, meta, extras = [] }) {
         </span>
       </Grande> });
     } else {
-      // conta nova: a Bolinha chama para o primeiro gasto
+      // conta nova: o convite para o primeiro gasto
       cartoes.push({ id: "boas-vindas", el: <div className="ini-g ini-g-oi" style={{ "--gc": "var(--mode)" }}>
-        <span className="ini-g-oi-b"><Bolinha estado="feliz" /></span>
+        <span className="ini-g-oi-b ini-g-oi-ic"><I.wallet /></span>
         <b>Anote o primeiro gasto</b>
         <span className="ini-g-apoio">E o Início ganha vida: quanto sobrou no mês, para onde foi o dinheiro e o que vence logo.</span>
         <button type="button" className="ini-botao" onClick={() => act.novoLanc("saida")}><I.plus />Anotar gasto</button>

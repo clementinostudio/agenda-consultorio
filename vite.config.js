@@ -64,7 +64,7 @@ export default defineConfig({
         ],
         // Segurar o ícone do app no Android mostra estes atalhos
         shortcuts: [
-          { name: "Anotar gasto falando", short_name: "Gasto", url: "./#gasto", icons: [{ src: "icons/icon-192.png", sizes: "192x192" }] },
+          { name: "Anotar gasto", short_name: "Gasto", url: "./#gasto", icons: [{ src: "icons/icon-192.png", sizes: "192x192" }] },
           { name: "Só o agora", short_name: "Agora", url: "./#agora", icons: [{ src: "icons/icon-192.png", sizes: "192x192" }] },
           { name: "Fechar o dia", short_name: "Fechar", url: "./#fechar", icons: [{ src: "icons/icon-192.png", sizes: "192x192" }] },
         ],

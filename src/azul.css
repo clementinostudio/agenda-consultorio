@@ -1,0 +1,186 @@
+/* A cara do Avina: modo claro em primeiro lugar, no jeito dos apps de banco (Asaas): fundo cinza-azulado bem claro,
+   cartões brancos bem arredondados com sombra macia, a barra de cima azul da marca com o "avina" por extenso e os
+   cartões de destaque em azul. Carregado por último (src/main.jsx). Os arquivos que abrem sob demanda (inicio.css,
+   pessoal.css...) entram depois deste, então as regras deles que precisam mudar usam ".shell" na frente. */
+
+/* =========================================================
+   1. Cantos e cores
+   ========================================================= */
+:root {
+  --r-xl: 26px; --r-card: 20px; --r-tile: 16px; --r-ctl: 12px; --r-chip: 10px;
+  --azul: #2B46FF; --azul-forte: #1F3BEF; --azul-fundo: #1830C8;
+  --azul-cartao: linear-gradient(140deg, #3550FF 0%, #2440F2 45%, #1A33CF 100%);
+  --cab-bg: #191919; --cab-ic: rgba(255, 255, 255, .86); --cab-h: 58px;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]):not([data-app-theme="dark"]) {
+    --bg: #F3F5F9; --bg-glow: #F3F5F9; --surface: #FFFFFF; --card: #FFFFFF; --surface-2: #F2F4F8; --surface-3: #E6EAF2;
+    --line: rgba(16, 24, 40, .07); --line-forte: rgba(16, 24, 40, .12);
+    --fg: #101828; --muted: #5B6476; --faint: #8891A4;
+    --hover: rgba(16, 24, 40, .045); --hover-2: rgba(16, 24, 40, .075);
+    --card-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .05);
+    --sombra-flutua: 0 0 0 1px rgba(16, 24, 40, .05), 0 6px 16px rgba(16, 24, 40, .08), 0 18px 44px rgba(16, 24, 40, .12);
+    --accent: #2B46FF; --accent-hi: #2B46FF; --accent-soft: #EBEEFF; --accent-ink: #1F3BEF;
+    --side-bg: #FFFFFF; --nav-bg: #FFFFFF;
+    --topo-nevoa: #1F3BEF; --cab-bg: #1F3BEF;
+  }
+}
+:root[data-theme="light"]:not([data-app-theme="dark"]), :root[data-app-theme="light"] {
+  --bg: #F3F5F9; --bg-glow: #F3F5F9; --surface: #FFFFFF; --card: #FFFFFF; --surface-2: #F2F4F8; --surface-3: #E6EAF2;
+  --line: rgba(16, 24, 40, .07); --line-forte: rgba(16, 24, 40, .12);
+  --fg: #101828; --muted: #5B6476; --faint: #8891A4;
+  --hover: rgba(16, 24, 40, .045); --hover-2: rgba(16, 24, 40, .075);
+  --card-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .05);
+  --sombra-flutua: 0 0 0 1px rgba(16, 24, 40, .05), 0 6px 16px rgba(16, 24, 40, .08), 0 18px 44px rgba(16, 24, 40, .12);
+  --accent: #2B46FF; --accent-hi: #2B46FF; --accent-soft: #EBEEFF; --accent-ink: #1F3BEF;
+  --side-bg: #FFFFFF; --nav-bg: #FFFFFF;
+  --topo-nevoa: #1F3BEF; --cab-bg: #1F3BEF;
+}
+
+/* cartões: mais redondos, sem borda dura no claro (a sombra macia separa do fundo) */
+.shell :is(.panel, .next, .rhythm, .week, .bal, .goal, .tile, .reserve, .perfil-lista, .perfil-hero, .conq-card, .perfil-seguro, .casa-cartao, .assin-card,
+  .link-card, .pedido, .conq-prox, .assin-area, .bub, .pend, .ini-g, .ini-cartao, .hoje, .sg, .conf-item, .pac-acao, .kv > div, .note, .search, .seg, .field, .fields) {
+  border-radius: var(--r-card);
+}
+.shell :is(.btn, .chip-btn, .bub-act, .pill, .icon-btn, input, select, textarea) { border-radius: var(--r-ctl); }
+.shell .bub { border-radius: 20px 20px 20px 8px; }
+:root:not([data-app-theme="dark"]) .shell :is(.panel, .ini-g, .ini-cartao, .hoje, .sg, .perfil-lista, .assin-card, .bub, .week, .tile, .bal, .goal) { border-color: transparent; }
+@media (prefers-color-scheme: dark) { :root:not([data-app-theme="light"]) .shell :is(.panel, .ini-g, .ini-cartao, .hoje, .sg, .perfil-lista, .assin-card, .bub, .week, .tile, .bal, .goal) { border-color: var(--line); } }
+
+/* botão principal: o azul da marca, cheio */
+.shell .btn:not(.ghost):not(.text):not(.danger) { box-shadow: 0 6px 16px color-mix(in srgb, var(--mode) 22%, transparent); }
+
+/* =========================================================
+   2. Barra de cima do celular: azul, fixa, com o "avina" por extenso
+   ========================================================= */
+.cab-app { display: none; }
+@media (max-width: 899px) {
+  .cab-app { display: block; position: fixed; z-index: 28; left: 0; right: 0; top: 0; padding-top: env(safe-area-inset-top, 0px); background: var(--cab-bg); color: #fff;
+    transition: box-shadow .25s ease; }
+  .cab-app.rolou { box-shadow: 0 6px 22px rgba(16, 32, 140, .22); }
+  .cab-app-in { max-width: 480px; margin: 0 auto; height: var(--cab-h); display: flex; align-items: center; gap: 6px; padding: 0 max(12px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); }
+  .cab-app-logo { display: flex; align-items: center; height: 40px; margin-right: auto; padding: 0 4px 0 0; border-radius: 10px; color: #fff; }
+  .cab-app-logo .lt-nome { display: block; height: 23px; width: auto; color: #fff; }
+  .cab-app-logo .lt-nome stop { stop-color: #fff; stop-opacity: 1; }
+  .cab-app-a { display: flex; align-items: center; gap: 4px; }
+  .cab-app .icon-btn.cab-ic { width: 40px; height: 40px; border-radius: 12px; color: var(--cab-ic); background: transparent; border: 0; }
+  .cab-app .icon-btn.cab-ic svg { width: 21px; height: 21px; }
+  .cab-app .icon-btn.cab-ic:active { background: rgba(255, 255, 255, .14); }
+  .cab-app .me { width: 36px; height: 36px; margin-left: 4px; background: #fff; color: var(--azul-forte); box-shadow: 0 0 0 2px rgba(255, 255, 255, .3); font-size: 13px; }
+  /* seletor de modo dentro da barra azul */
+  .cab-app .mode-pill { height: 34px; padding: 0 10px; gap: 7px; border-radius: 999px; background: rgba(255, 255, 255, .14); border: 0; color: #fff; font-size: 13.5px; font-weight: 600; }
+  .cab-app .mode-pill svg { color: rgba(255, 255, 255, .8); }
+  .cab-app .mode-dot { background: #fff; }
+  .cab-app .menu { left: auto; right: 0; color: var(--fg); }
+  /* o conteúdo começa abaixo da barra */
+  .app { padding-top: calc(var(--cab-h) + 6px); }
+  /* o que a barra de cima já faz sai do topo das telas: olho, foto, modo e tema */
+  .ini-topo .ini-topo-l, .ini-topo .ini-topo-a > :not(.ini-mais), .top .top-esq, .top .nc { display: none !important; }
+  .top.com-voltar .top-esq { display: flex !important; }
+  .ini-topo, .ini-topo.com-modo { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t a"; align-items: center; padding-top: 10px; margin-bottom: 4px; }
+  .ini-topo .ini-topo-t, .ini-topo.compacto .ini-topo-t { margin: 0; }
+  .top, .top.com-voltar { grid-template-areas: "titulo acoes"; padding-top: 12px; margin-bottom: 16px; align-items: end; }
+  .top.com-voltar { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "esq titulo acoes"; }
+  .top .top-titulo { grid-area: titulo; }
+  .top .top-actions { grid-area: acoes; }
+  .top h1 { font-size: 27px; }
+  /* o "+" das telas: azul, redondo e com sombra suave */
+  .shell .icon-btn.top-mais, .shell .ini-topo .ini-mais { width: 44px !important; height: 44px !important; border-radius: 14px !important; box-shadow: 0 8px 18px color-mix(in srgb, var(--mode) 30%, transparent); }
+  .shell .top .icon-btn:not(.top-mais) { color: var(--muted); }
+}
+
+/* =========================================================
+   3. Barra de baixo do celular: branca, flutuante e com os nomes
+   ========================================================= */
+@media (max-width: 899px) {
+  :root { --barra-h: 64px; }
+  .shell .nav { left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 0; border-radius: 24px; background: var(--surface);
+    box-shadow: 0 0 0 1px var(--line), 0 10px 30px rgba(16, 24, 40, .12); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .shell .nav-in { height: var(--barra-h); padding: 6px; gap: 2px; max-width: 520px; }
+  .shell .nv { border-radius: 18px; gap: 3px; color: var(--faint); }
+  .shell .nv .lb { position: static; width: auto; height: auto; overflow: visible; clip: auto; font-size: 11px; font-weight: 600; letter-spacing: -.005em; line-height: 1; }
+  .shell .nv svg { width: 23px; height: 23px; }
+  .shell .nv-ic { width: 52px; height: 30px; border-radius: 15px; transition: background-color .2s ease, color .2s ease; }
+  .shell .nv.on { color: var(--accent-ink); }
+  .shell .nv.on .nv-ic { background: var(--accent-soft); color: var(--accent); }
+  .shell .nv.on .nv-ic::after { display: none; }
+  .shell .nv:active { transform: scale(.94); }
+  .shell .nav .badge { top: -4px; left: calc(50% + 8px); min-width: 17px; height: 17px; border-radius: 9px; padding: 0 4px; background: #F04438; color: #fff; font-size: 10.5px; font-weight: 700; box-shadow: 0 0 0 2px var(--surface); }
+  .app { padding-bottom: calc(var(--barra-h) + 34px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (prefers-color-scheme: dark) { :root:not([data-app-theme="light"]) .shell .nav { background: #232325; } }
+:root[data-app-theme="dark"] .shell .nav { background: #232325; }
+
+/* =========================================================
+   4. Cartões de destaque em azul: o "Hoje" do consultório e o primeiro do carrossel
+   ========================================================= */
+.shell .hoje, .shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g {
+  background: var(--azul-cartao); color: #fff; border-color: transparent; box-shadow: 0 12px 30px rgba(31, 59, 239, .26);
+  position: relative; overflow: hidden;
+}
+.shell .hoje::before, .shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g::after {
+  content: ""; position: absolute; right: -60px; top: -70px; width: 220px; height: 220px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 70%);
+}
+.shell .hoje > * { position: relative; }
+/* Hoje */
+.shell .hoje .hoje-rot { color: rgba(255, 255, 255, .78); }
+.shell .hoje .hoje-res { color: rgba(255, 255, 255, .85); }
+.shell .hoje .hoje-res b { color: #fff; }
+.shell .hoje .hoje-barra { background: rgba(255, 255, 255, .2); }
+.shell .hoje .hoje-barra i { background: #fff; }
+.shell .hoje .hoje-prox-main:hover { background: rgba(255, 255, 255, .08); }
+.shell .hoje .hoje-prox-main > svg { color: rgba(255, 255, 255, .7); }
+.shell .hoje .hoje-hora { border-left-color: #fff; color: #fff; }
+.shell .hoje .hoje-quem b { color: #fff; }
+.shell .hoje .hoje-quem small, .shell .hoje .hoje-vazio { color: rgba(255, 255, 255, .8); }
+.shell .hoje .selo { background: rgba(255, 255, 255, .16); color: #fff; }
+.shell .hoje .hoje-pt { background: rgba(255, 255, 255, .13); color: #fff; }
+.shell .hoje .hoje-pt i { color: rgba(255, 255, 255, .75); }
+.shell .hoje .hoje-pt::before { background: #fff; opacity: .9; }
+.shell .hoje .hoje-pt.prox { border-color: rgba(255, 255, 255, .7); background: rgba(255, 255, 255, .22); }
+.shell .hoje .hoje-pt.late { background: rgba(255, 196, 80, .28); }
+.shell .hoje .hoje-pt:hover { border-color: rgba(255, 255, 255, .45); }
+.shell .hoje .entrar-sala.grande { background: #fff; color: var(--azul-forte); animation: none; box-shadow: 0 6px 16px rgba(0, 0, 0, .14); }
+.shell .hoje .entrar-sala.discreto { color: #fff; }
+.shell .hoje .hoje-clima > * { background: rgba(255, 255, 255, .12) !important; border-color: transparent !important; color: #fff !important; }
+.shell .hoje .hoje-clima * { color: #fff !important; }
+/* primeiro cartão do carrossel */
+.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g .ini-g-topo { color: rgba(255, 255, 255, .85); }
+.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g .ini-g-ic { background: rgba(255, 255, 255, .18); color: #fff; }
+.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g :is(.ini-g-v, .ini-g-v *, b, strong) { color: #fff; }
+.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g :is(.ini-g-apoio, .ini-g-barra, .ini-g-entre, .ini-g-pergunta, small, .ini-g-txt span, .cur, .cents) { color: rgba(255, 255, 255, .78); }
+.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g svg { color: inherit; }
+.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g :is(.ini-g-barra i, .ini-g-trilho) { background: rgba(255, 255, 255, .22); }
+
+/* o carrossel e os cartões do Início com os cantos novos */
+.shell .ini-g, .shell .ini-cartao { border-radius: var(--r-card) !important; }
+
+/* =========================================================
+   5. Modo claro como foco: fundo, listas e campos
+   ========================================================= */
+.shell .txn-av { background: var(--accent-soft); color: var(--accent-ink); }
+.shell .panel { box-shadow: var(--card-shadow); }
+.shell .search { background: var(--surface); box-shadow: var(--card-shadow); border-color: transparent; }
+.shell .seg { background: var(--surface-3); }
+.shell .chip-btn { background: var(--surface); box-shadow: var(--card-shadow); border-color: transparent; }
+.shell .bub { box-shadow: var(--card-shadow); }
+.talk-who .mark { background: var(--accent); }
+
+/* o logo da marca no tour, no lugar do mascote */
+.tour-marca { display: inline-grid; width: 30px; height: 30px; flex: none; }
+.tour-marca .lt-a { width: 30px; height: 30px; border-radius: 9px; }
+.ini-g-oi-ic { display: grid !important; place-items: center; width: 46px !important; height: 46px !important; border-radius: 14px; background: rgba(255, 255, 255, .18); color: #fff; }
+.ini-g-oi-ic svg { width: 24px; height: 24px; }
+
+@media (prefers-reduced-motion: reduce) { .cab-app { transition: none; } }
+
+/* bolinhas do carrossel: embaixo dos cartões (e não por cima deles), a escolhida em azul */
+.shell .ini-car-bolinhas { position: static; transform: none; justify-content: center; margin-top: 10px; }
+.shell .ini-car.com-bolinhas .ini-g { padding-bottom: 18px; }
+.shell .ini-car-bolinhas button.on::before { background: var(--accent); }
+
+/* o "a" do logo na barra azul: branco cheio (o degradê dele é o da barra lateral, escondida no celular) */
+.cab-app-logo .lt-nome path { stroke: #fff; }
+/* botão dentro de um cartão azul: branco com o texto azul */
+.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g .ini-botao { background: #fff; color: var(--azul-forte); box-shadow: 0 6px 16px rgba(0, 0, 0, .12); }
