@@ -454,3 +454,46 @@
   .hamb i, .menu-lat-in > *, .menu-lat-lista > *, .puxa { transition: none !important; }
   .scrim.pagina > .sheet, .scrim.pagina.sai > .sheet { animation: none !important; }
 }
+
+/* =========================================================
+   15. Páginas (novo paciente, novo gasto...): a barra de cima cobre até o topo, e os formulários no visual novo
+   ========================================================= */
+@media (max-width: 899px) {
+  /* o espaço da barra de status fica DENTRO da barra presa (antes ficava acima dela, vazio, mostrando o que passava) */
+  .scrim.pagina > .sheet { padding-top: 0; }
+  .scrim.pagina .sheet-topo { top: 0; height: auto; min-height: calc(58px + env(safe-area-inset-top, 0px)); padding-top: env(safe-area-inset-top, 0px); background: var(--bg); }
+  .scrim.pagina .sheet-topo::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 14px; pointer-events: none;
+    background: linear-gradient(var(--bg), color-mix(in srgb, var(--bg) 0%, transparent)); opacity: 0; transition: opacity .2s ease; }
+  .scrim.pagina .sheet.rolou .sheet-topo { box-shadow: none; }
+  .scrim.pagina .sheet.rolou .sheet-topo::after { opacity: 1; }
+
+  /* campos agrupados num cartão branco, um embaixo do outro com uma linha fina entre eles */
+  .scrim.pagina .fields { gap: 0; background: var(--surface); border-radius: 20px; overflow: hidden; box-shadow: 0 0 0 1px var(--line), 0 2px 10px rgba(16, 24, 40, .04); }
+  .scrim.pagina .fields > .field { background: transparent; border-radius: 0 !important; min-height: 64px; padding: 12px 16px 12px 18px; box-shadow: none; position: relative; transition: background-color .15s ease; }
+  .scrim.pagina .fields > .field + .field::before { content: ""; position: absolute; left: 18px; right: 0; top: 0; height: 1px; background: var(--line); }
+  .scrim.pagina .field:focus-within { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  .scrim.pagina .field label { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  .scrim.pagina .field:focus-within label { color: var(--accent); }
+  .scrim.pagina .field input, .scrim.pagina .field select, .scrim.pagina .field textarea { font-size: 17px; font-weight: 500; }
+  .scrim.pagina .field-ic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); opacity: 1; }
+  .scrim.pagina .field-ic svg { width: 20px; height: 20px; }
+  .scrim.pagina .field .seg { margin-top: 6px; }
+  /* campo solto (fora de um grupo) também vira cartão */
+  .scrim.pagina .stack > .field { background: var(--surface); border-radius: 20px; box-shadow: 0 0 0 1px var(--line), 0 2px 10px rgba(16, 24, 40, .04); }
+  /* interruptores, avisos e escolhas como cartões */
+  .scrim.pagina .toggle { background: var(--surface); border-radius: 18px; min-height: 60px; padding: 0 16px 0 18px; box-shadow: 0 0 0 1px var(--line); }
+  .scrim.pagina .note { border-radius: 16px; padding: 14px 16px; }
+  .scrim.pagina .choice { background: var(--surface); border-radius: 18px; box-shadow: 0 0 0 1px var(--line); }
+  .scrim.pagina .choice.on { box-shadow: 0 0 0 2px var(--accent); }
+  .scrim.pagina .section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 10px 2px -4px; }
+  .scrim.pagina .hint { font-size: 13.5px; padding: 0 4px; }
+  /* o botão principal: largo, alto, fixo embaixo, com a sombra da cor do modo */
+  .scrim.pagina .stack > .btn.mode, .scrim.pagina .stack > form > .btn[type=submit], .scrim.pagina form.stack > .btn[type=submit], .scrim.pagina .stack > .btn:not(.ghost):not(.text):not(.danger):last-child {
+    position: sticky; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 4; height: 56px; border-radius: 18px; font-size: 16.5px; font-weight: 600;
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--mode) 30%, transparent), 0 0 0 10px var(--bg); }
+  .scrim.pagina .btn.ghost { border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+  /* o valor grande do novo gasto e as categorias */
+  .scrim.pagina .big-amt { background: var(--surface); border-radius: 22px; box-shadow: 0 0 0 1px var(--line); padding: 18px 16px; }
+  .scrim.pagina .cats button, .scrim.pagina .cat-op { background: var(--surface); border-radius: 18px; box-shadow: 0 0 0 1px var(--line); }
+  .scrim.pagina .voice { background: var(--surface); border-radius: 18px; box-shadow: 0 0 0 1px var(--line); }
+}

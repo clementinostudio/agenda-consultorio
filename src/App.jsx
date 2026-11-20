@@ -29,6 +29,8 @@ import { useLinkAgendamento, linkDo, confirmacaoDe, confirmado, enderecoConfirma
 import { AcoesAzuis, CartaoSaldo, GradeAtalhos, CartaoNovidade, CartaoResumo, noPeriodo } from "./blocos.jsx";
 import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
+// Ícones: Phosphor (phosphoricons.com), modernos e com vários pesos; os do app usam o "regular" e as abas escolhidas o "fill"
+import { House as PhHouse, CalendarBlank as PhCalendarBlank, SquaresFour as PhSquaresFour, UsersThree as PhUsersThree, Wallet as PhWallet, Plus as PhPlus, X as PhX, Trash as PhTrash, Check as PhCheck, CaretRight as PhCaretRight, CaretLeft as PhCaretLeft, CaretDown as PhCaretDown, GearSix as PhGearSix, Sun as PhSun, Moon as PhMoon, Eye as PhEye, EyeSlash as PhEyeSlash, Bell as PhBell, User as PhUser, EnvelopeSimple as PhEnvelopeSimple, LockSimple as PhLockSimple, DeviceMobile as PhDeviceMobile, Money as PhMoney, Door as PhDoor, ArrowsClockwise as PhArrowsClockwise, Clock as PhClock, WarningCircle as PhWarningCircle, Copy as PhCopy, PaperPlaneTilt as PhPaperPlaneTilt, ArrowDown as PhArrowDown, ArrowUp as PhArrowUp, Receipt as PhReceipt, ArrowCounterClockwise as PhArrowCounterClockwise, Key as PhKey, MagnifyingGlass as PhMagnifyingGlass, SignOut as PhSignOut, ChatCircle as PhChatCircle, PencilSimple as PhPencilSimple, ChartBar as PhChartBar, Invoice as PhInvoice, ShoppingCart as PhShoppingCart, Car as PhCar, ForkKnife as PhForkKnife, Heart as PhHeart, Star as PhStar, ShoppingBag as PhShoppingBag, DotsThree as PhDotsThree, Microphone as PhMicrophone, Cloud as PhCloud, CloudRain as PhCloudRain, CloudLightning as PhCloudLightning, Target as PhTarget, Export as PhExport, PiggyBank as PhPiggyBank, Flag as PhFlag, SpeakerHigh as PhSpeakerHigh, Camera as PhCamera, Barcode as PhBarcode, UploadSimple as PhUploadSimple, Gauge as PhGauge, Minus as PhMinus, VideoCamera as PhVideoCamera, FileText as PhFileText, DownloadSimple as PhDownloadSimple, CalendarCheck as PhCalendarCheck, ArrowLeft as PhArrowLeft } from "@phosphor-icons/react";
 
 // A Bolinha (fala, conversa com a IA e o mascote) está desligada: o código fica guardado, mas nada dela aparece no app.
 // A IA do servidor vai ser usada para outra coisa. Para voltar com ela, é só trocar para true.
@@ -1553,6 +1555,27 @@ const I = {
   upload: () => <Svg><path d="M12 15.5V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4.5 14v4.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V14"/></Svg>,
   gauge: () => <Svg><path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13l3.5-4"/><circle cx="12" cy="13" r="1.2"/></Svg>,
 };
+
+/* Ícones modernos (Phosphor) no lugar dos desenhados à mão: mesmos nomes (I.home, I.cal...), então nada mais muda.
+   ph(Componente, peso): "regular" no geral, "bold" nos sinais pequenos (+, ✓, setas) e "fill" nas abas escolhidas. */
+const ph = (C, weight = "regular") => props => <C weight={weight} aria-hidden="true" {...props} />;
+Object.assign(I, {
+  home: ph(PhHouse), homeOn: ph(PhHouse, "fill"), cal: ph(PhCalendarBlank), calOn: ph(PhCalendarBlank, "fill"), grid: ph(PhSquaresFour),
+  users: ph(PhUsersThree), usersOn: ph(PhUsersThree, "fill"), wallet: ph(PhWallet), walletOn: ph(PhWallet, "fill"),
+  plus: ph(PhPlus, "bold"), minus: ph(PhMinus, "bold"), x: ph(PhX, "bold"), trash: ph(PhTrash), check: ph(PhCheck, "bold"),
+  chev: ph(PhCaretRight, "bold"), chevL: ph(PhCaretLeft, "bold"), chevD: ph(PhCaretDown, "bold"), setaL: ph(PhArrowLeft, "bold"),
+  gear: ph(PhGearSix), sun: ph(PhSun), moon: ph(PhMoon), eye: ph(PhEye), eyeOff: ph(PhEyeSlash), bell: ph(PhBell), user: ph(PhUser),
+  mail: ph(PhEnvelopeSimple), lock: ph(PhLockSimple), phone: ph(PhDeviceMobile), money: ph(PhMoney), door: ph(PhDoor),
+  repeat: ph(PhArrowsClockwise), clock: ph(PhClock), alert: ph(PhWarningCircle), copy: ph(PhCopy), send: ph(PhPaperPlaneTilt),
+  down: ph(PhArrowDown, "bold"), up: ph(PhArrowUp, "bold"), receipt: ph(PhReceipt), undo: ph(PhArrowCounterClockwise), key: ph(PhKey),
+  search: ph(PhMagnifyingGlass), out: ph(PhSignOut), chat: ph(PhChatCircle), pencil: ph(PhPencilSimple),
+  chart: ph(PhChartBar), chartOn: ph(PhChartBar, "fill"), bill: ph(PhInvoice), billOn: ph(PhInvoice, "fill"),
+  cart: ph(PhShoppingCart), car: ph(PhCar), carOn: ph(PhCar, "fill"), food: ph(PhForkKnife), heart: ph(PhHeart), star: ph(PhStar),
+  bag: ph(PhShoppingBag), more: ph(PhDotsThree, "bold"), mic: ph(PhMicrophone), cloud: ph(PhCloud), rain: ph(PhCloudRain), storm: ph(PhCloudLightning),
+  target: ph(PhTarget), share: ph(PhExport), piggy: ph(PhPiggyBank), flag: ph(PhFlag), sound: ph(PhSpeakerHigh), camera: ph(PhCamera),
+  scan: ph(PhBarcode), upload: ph(PhUploadSimple), gauge: ph(PhGauge), video: ph(PhVideoCamera), doc: ph(PhFileText),
+  download: ph(PhDownloadSimple), calSync: ph(PhCalendarCheck),
+});
 const CatIcon = ({ cat }) => { const C = (cat && I[cat.ic]) || I.more; return <C />; };
 
 /* =========================================================
@@ -4587,13 +4610,8 @@ function useTema() {
 /* =========================================================
    15. APP (depois do login)
    ========================================================= */
-I.minus = () => <Svg sw={2.2}><path d="M5 12h14"/></Svg>;
 I.menu = () => <Svg sw={2}><path d="M4 7h16M4 12h16M4 17h11"/></Svg>;
-I.video = () => <Svg><rect x="3" y="6.5" width="13" height="11" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3"/></Svg>;
-I.doc = () => <Svg><path d="M6.5 3h7.5l4.5 4.5V19a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M13.5 3v5h5M8.5 13h7M8.5 16.5h5"/></Svg>;
-I.download = () => <Svg><path d="M12 3.5V15M7.5 10.5L12 15l4.5-4.5"/><path d="M5 17.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-1.5"/></Svg>;
-I.calSync = () => <Svg><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M9 15.2a3 3 0 0 0 5.4.8M15 13.8a3 3 0 0 0-5.4-.8"/></Svg>;
-I.setaL = () => <Svg sw={2.2}><path d="M19 12H5M11 6l-6 6 6 6"/></Svg>;
+
 
 // conta nova (nada salvo ainda): começa vazia
 const vazio = () => ({ settings: { pix: "" }, patients: [], sessions: [], charges: [], pessoal: pessoalVazio(), espera: [], fechados: {}, confirmados: {}, revisoes: {} });
@@ -6008,7 +6026,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       <div className="palco">
       {menu && <><Camada onFechar={fecharMenu} escurece={false} nome="menu" /><button type="button" className="palco-fechar" onClick={fecharMenu} aria-label="Fechar o menu" /></>}
       {/* Puxar para atualizar: uma pílula que desce de baixo da barra de cima, com o progresso e o que vai acontecer */}
-      <div className={"puxa" + (recarregando ? " gira" : puxar >= 70 ? " pronto" : puxar > 4 ? " vendo" : "")} aria-live="polite" style={{ "--p": Math.min(1, puxar / 70), "--y": `${recarregando ? 58 : Math.min(70, puxar) * .85}px` }}>
+      <div className={"puxa" + (recarregando ? " gira" : puxar >= 70 ? " pronto" : puxar > 4 ? " vendo" : "")} aria-live="polite" style={{ "--p": Math.min(1, puxar / 70), "--y": `${recarregando ? 44 : Math.min(76, puxar) * .62}px` }}>
         <span className="puxa-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle className="puxa-trilho" cx="12" cy="12" r="9" /><circle className="puxa-arco" cx="12" cy="12" r="9" pathLength="100" /></svg><I.down /></span>
         <span className="puxa-t">{recarregando ? "Atualizando seus dados…" : puxar >= 70 ? "Solte para atualizar" : "Puxe para atualizar"}</span>
       </div>
@@ -6026,7 +6044,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
           </div>
         </div>
       </header>
-      <main className={"app" + (puxar ? " puxando" : "")} style={puxar || recarregando ? { transform: `translateY(${recarregando ? 46 : puxar * .5}px)` } : undefined}>
+      <main className={"app" + (puxar ? " puxando" : "")} style={puxar || recarregando ? { transform: `translate3d(0, ${recarregando ? 66 : puxar * .95}px, 0)` } : undefined}>
         <DicaInstalar />
         {tabEf === "l-caixa" && avisosInicio}
         {tabEf === "home" && <HomeTab db={db} conta={conta} now={now} act={act} tema={tema} avisos={avisosInicio} />}
