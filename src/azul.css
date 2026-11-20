@@ -497,3 +497,56 @@
   .scrim.pagina .cats button, .scrim.pagina .cat-op { background: var(--surface); border-radius: 18px; box-shadow: 0 0 0 1px var(--line); }
   .scrim.pagina .voice { background: var(--surface); border-radius: 18px; box-shadow: 0 0 0 1px var(--line); }
 }
+
+/* =========================================================
+   16. Finanças (no jeito da tela de Pix), Pacientes e Agenda
+   ========================================================= */
+/* três botões azuis lado a lado (sem rolar) */
+.az-acoes.tres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; margin: 0 0 4px; padding: 0 0 8px; scroll-snap-type: none; }
+.az-acoes.tres .az-acao { width: auto; height: 104px; }
+/* "Outras ações" */
+.az-lista { display: flex; flex-direction: column; gap: 10px; }
+.az-lista .az-sec-t { margin: 8px 0 2px; }
+.az-lista-i { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 62px; padding: 10px 16px; border-radius: 20px; text-align: left;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--line); transition: transform .12s ease, box-shadow .15s ease; }
+.az-lista-i:active { transform: scale(.985); }
+@media (hover: hover) { .az-lista-i:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); } }
+.az-lista-ic { flex: none; color: var(--accent); display: grid; place-items: center; }
+.az-lista-ic svg { width: 26px; height: 26px; }
+.az-lista-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.az-lista-t b { font-size: 16px; font-weight: 500; }
+.az-lista-t small { font-size: 13px; color: var(--muted); }
+.az-lista-i > svg { width: 20px; height: 20px; color: var(--faint); flex: none; }
+.az-selo { font-style: normal; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--line-forte); color: var(--muted); }
+/* o valor do mês, solto como o "Saldo em conta" */
+.fin-saldo { display: flex; flex-direction: column; gap: 2px; padding: 4px 2px 6px; }
+.fin-saldo-l { display: inline-flex; align-items: center; gap: 6px; font-size: 15.5px; color: var(--muted); }
+.fin-saldo-l .eye { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; color: var(--muted); }
+.fin-saldo-l .eye svg { width: 20px; height: 20px; }
+.fin-saldo-v { font-size: 38px; font-weight: 700; letter-spacing: -.035em; line-height: 1.1; color: var(--fg); }
+.fin-saldo-v .cur, .fin-saldo-v .cents { opacity: 1; }
+.fin-saldo-sub { font-size: 14px; color: var(--muted); }
+.shell .bal { border-radius: 22px; box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+
+/* Pacientes: abas contornadas e a cor de cada um no avatar */
+.pac-abas { margin: 0; }
+.shell .pac-linha .txn-av { background: color-mix(in srgb, var(--pc) 16%, var(--surface)); color: color-mix(in srgb, var(--pc) 75%, var(--fg)); position: relative; font-weight: 700; }
+.shell .pac-linha .cdot { display: none; }
+.pac-online { position: absolute; right: -3px; bottom: -3px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; box-shadow: 0 0 0 2px var(--surface); }
+.pac-online svg { width: 12px; height: 12px; }
+.shell .pac-linha > svg { width: 18px; height: 18px; color: var(--faint); flex: none; margin-left: 2px; }
+.shell .pac-linha .amt { font-weight: 600; }
+
+/* Agenda: o dia escolhido em azul cheio, cartões mais redondos */
+.shell .week { border-radius: 22px; box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+.shell .week .wd { border-radius: 16px; transition: background-color .2s ease, color .2s ease; }
+.shell .week .wd.sel { background: var(--accent); color: #fff; }
+.shell .week .wd.sel .l, .shell .week .wd.sel .n { color: #fff; }
+.shell .week .wd.sel .ds i { background: #fff !important; opacity: .9 !important; }
+.shell .week .wd.today:not(.sel) .n { color: var(--accent); }
+.shell .month .mc.sel { background: var(--accent); color: #fff; border-radius: 14px; }
+.shell .tl-card { border-radius: 20px; box-shadow: 0 0 0 1px var(--line), var(--card-shadow); border-color: transparent; }
+.shell .tl-block { border-radius: 14px; }
+.shell .tl-gap { border-radius: 16px; }
+.shell .day-head h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.shell .small-acts .chip-btn { border-radius: 999px; color: var(--accent); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent); background: var(--surface); }

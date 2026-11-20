@@ -5,7 +5,7 @@
 // trocado inteiro a cada mudança), porque o relógio redesenha o Início a cada 30 s.
 import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { I, Money, brl, brlReal, ESCONDER, soma, todayISO, fromISO, MES_LONGO, catDe, catVars, MarcaLogo, acharMarca, itensDoDia, situacao, liquido, contaDinheiro, liquidoMes, situacaoConta, vencimento, diffDias, Sheet, vibrar, useWide, TERMO, Bolinha, addDays } from "../App.jsx";
+import { I, Money, brl, brlReal, ESCONDER, soma, todayISO, fromISO, MES_LONGO, catDe, catVars, MarcaLogo, acharMarca, itensDoDia, situacao, liquido, contaDinheiro, liquidoMes, situacaoConta, vencimento, diffDias, Sheet, vibrar, useWide, TERMO, addDays } from "../App.jsx";
 import { CatBolinha, useContagem, menosMovimento } from "./visual.jsx";
 import { resumoPessoal, GraficoLinha, BarraCategorias, eixoDoMes, LancRow, acumuladoMes, diasDoMes, MES_ABREV } from "./resumo.jsx";
 import { BancosPainel, useResumoBanco, useCaixinhasNoBanco, totaisBanco, nomeBanco, ABRIR_ABA_BANCO } from "./bancos.jsx";

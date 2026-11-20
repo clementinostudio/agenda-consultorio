@@ -19,7 +19,6 @@ import { K_ORIGEM, limparOrigem } from "./origem.js";
 // Quem não está logado e abriu pelo navegador vê primeiro a página de apresentação (avina.com.br, publicada à parte: veja site/).
 // Quem já está logado, ou abriu pelo app instalado, vai direto para o app.
 // Os links da apresentação usam #entrar ou #criar para entrar no app sem voltar para ela (#demo, dos links antigos, abre o criar conta).
-const BASE = import.meta.env.BASE_URL;
 const SITE = import.meta.env.VITE_SITE_URL || "https://avina.com.br/";
 let logado = false;
 try { logado = !!JSON.parse(localStorage.getItem("agenda-sessao") || "null"); } catch (e) {}

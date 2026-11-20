@@ -1,7 +1,5 @@
 // Parte do app carregada sob demanda (só quando é aberta). Gerado a partir do App.jsx.
-import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
-import PORQUINHO from "../assets/porquinho.webp";
-import { createPortal, flushSync } from "react-dom";
+import React, { useState, useEffect } from "react";
 import { todayISO, addDays, PERFIL, itensDoDia, registroPendente, contaDinheiro, Sheet, diaCurto, I, iniciais, corDe, relativo, brl, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, Seg, primeiro, Ilustra, IA_CONVERSA } from "../App.jsx";
 import { confirmacaoDe, enderecoConfirmar } from "../link.js";
 

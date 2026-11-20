@@ -189,7 +189,6 @@ body::before { background: var(--bg); background-image: none; }
 /* barra que aparece ao rolar nas abas */
 .aba-barra::before { background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(16px) saturate(160%); backdrop-filter: blur(16px) saturate(160%);
   -webkit-mask-image: none; mask-image: none; bottom: 0; box-shadow: 0 1px 0 var(--line); }
-.aba-barra-t { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
 
 /* foto (avatar) e seletor de modo */
 .me { font-weight: 600; font-size: 14px; }
@@ -489,17 +488,7 @@ body::before { background: var(--bg); background-image: none; }
 @media (display-mode: browser) {
   .topo-fixo::before { background: color-mix(in srgb, var(--bg) 90%, transparent); -webkit-backdrop-filter: blur(16px) saturate(160%); backdrop-filter: blur(16px) saturate(160%);
     height: calc(env(safe-area-inset-top, 0px) + 68px); box-shadow: 0 1px 0 var(--line); }
-  .topo-fixo-t { color: var(--fg); }
-  .topo-fixo .icon-btn.redondo { background: transparent; color: var(--muted); box-shadow: none; border-color: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
-  .topo-fixo .icon-btn.redondo svg { color: currentColor; }
-  .topo-fixo .me { box-shadow: none; }
 }
-.topo-fixo-in { padding-top: calc(env(safe-area-inset-top, 0px) + 14px); gap: 8px; }
-.topo-fixo .me { width: 36px; height: 36px; font-size: 13px; }
-.topo-fixo .icon-btn.redondo { width: 38px; height: 38px; border-radius: var(--r-ctl); }
-.topo-fixo-t { font-size: 17px; font-weight: 600; letter-spacing: -.015em; }
-.topo-fixo-pill { height: 34px; padding: 0 12px; border-radius: var(--r-ctl); font-weight: 600; font-size: 14px; box-shadow: none; }
-.topo-fixo-pill svg { width: 15px; height: 15px; }
 
 /* Barra lateral do computador, no jeito do Notion: cinza quente, itens finos, o escolhido só acende */
 @media (min-width: 900px) {
@@ -644,8 +633,6 @@ html[data-vt="modo"]::view-transition-new(root) { animation: n-vt-modo .36s var(
 .bal-amt { font-size: 40px; }
 .bal-tiles .bt b { font-size: 17px; }
 /* barra de cima do Início ao rolar: a troca de modo vira um botão discreto com a cor do modo */
-.topo-fixo-pill { background: var(--mode-soft); color: var(--mode-text); }
-@media (display-mode: browser) { .topo-fixo::before { background: color-mix(in srgb, var(--bg) 96%, transparent); } }
 
 /* clima: uma linha discreta, não um botão */
 .wx { height: 32px; padding: 0 10px 0 8px; gap: 6px; font-weight: 500; font-size: 13.5px; background: transparent; border-color: var(--line); }

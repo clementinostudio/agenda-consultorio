@@ -81,24 +81,33 @@ Segurando o ícone do app no Android aparecem atalhos: **Anotar gasto falando**,
 
 ```
 agenda-consultorio/
-├── index.html               ← título, cor da barra do celular
+├── index.html               ← título, cor da barra do celular (e a barra de status clara no modo claro)
 ├── vite.config.js           ← nome do app, ícones, atalhos e regras do modo offline (PWA)
 ├── public/
-│   ├── icons/               ← ícones do app (troque pelos seus, mesmos nomes e tamanhos)
-│   └── fundos/              ← imagens de fundo (cada uma tem a versão "-mini" para a miniatura)
-├── servidor-avisos/         ← avisos com o app fechado + IA (fala, perguntas, fotos), Cloudflare grátis
+│   ├── agendar/             ← a página que o paciente abre (link de agendamento, confirmação e "link na bio")
+│   ├── icons/ ilustras/     ← ícone do app e ilustrações 3D
+│   └── termos/ privacidade/ ← páginas legais
+├── servidor-avisos/         ← avisos com o app fechado, link de agendamento, confirmação, agenda .ics, assinatura (Cloudflare)
 ├── supabase/migrations/     ← o banco de dados na nuvem (tabelas e regras de segurança)
+├── sobre/                   ← a página de apresentação (avina.com.br)
 └── src/
-    ├── main.jsx             ← liga o app, as fontes e o service worker
-    ├── styles.css           ← todas as cores, tamanhos e o visual (claro, escuro e vidro)
-    ├── nuvem.js             ← login de verdade e sincronização com o Supabase
-    ├── boleto.js            ← entende código de barras e linha digitável de boleto
-    ├── extrato.js           ← lê o OFX/CSV exportado pelos bancos
-    ├── telas/ferramentas.jsx ← telas de ler boleto e importar extrato
-    └── App.jsx              ← o app inteiro, separado em seções numeradas
+    ├── main.jsx             ← liga o app, as fontes, os estilos e o service worker
+    ├── App.jsx              ← o coração do app: regras, Início, Agenda, Pacientes, Finanças e o Painel
+    ├── icones.jsx           ← todos os ícones (Phosphor), com os mesmos nomes de sempre: I.home, I.cal…
+    ├── datas.js             ← datas e horas (sem dependências)
+    ├── blocos.jsx           ← blocos no jeito dos apps de banco: botões azuis, saldo, grade de atalhos, listas
+    ├── link.js / link-regras.js  ← link de agendamento, confirmação pelo paciente e agenda no celular
+    ├── pix-auto.js          ← Pix que se marca sozinho (Open Finance)
+    ├── exportar.js          ← "Baixar meus dados" (.zip)
+    ├── documentos-pdf.js    ← recibo, declaração, contrato e prontuário em PDF
+    ├── nuvem.js             ← login e sincronização com o Supabase
+    ├── telas/               ← telas que carregam sob demanda (perfil, pessoal, consultório, navegação, agenda em grade…)
+    ├── styles.css           ← a base de estilos
+    ├── notion.css           ← ajustes de letra, cores e movimento
+    └── azul.css             ← a cara atual: modo claro em primeiro lugar, barra de cima, menu lateral, páginas e formulários
 ```
 
-Dentro do `src/App.jsx`, procure por `====` para pular entre as seções. As mais úteis:
+Dentro do `src/App.jsx`, procure por `====` para pular entre as seções. Antes de publicar, rode `npm test` e `npm run build`. As mais úteis:
 
 | Seção | O que tem |
 |---|---|

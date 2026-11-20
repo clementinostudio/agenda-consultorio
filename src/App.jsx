@@ -1,13 +1,15 @@
 /*
   Avina (antes: Agenda do Consultório)
   -------------------------------------
-  Quase todo o app está neste arquivo, separado em seções numeradas (procure por "====").
+  O coração do app está neste arquivo, separado em seções numeradas (procure por "====").
+  Fora daqui: ícones em src/icones.jsx, datas em src/datas.js, blocos do Início em src/blocos.jsx, a navegação do
+  celular (menu lateral, trocar de área, Alertas) em src/telas/navegacao.jsx e a agenda em grade em src/telas/semana-grade.jsx.
   Telas pouco usadas (perfil, painéis, cadastro inicial, recorte de foto e o modo Pessoal) ficam em src/telas/
   e só carregam quando são abertas: assim o app abre mais rápido.
   Para mudar textos, valores padrão, cores de paciente ou categorias, comece pela seção 1 (CONFIGURAÇÃO).
   Os estilos ficam em src/styles.css e as imagens de fundo em public/fundos/.
 */
-import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "./assets/porquinho.webp";
 import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monograma, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
@@ -22,15 +24,17 @@ import { useLoja, K_CONVITE_LOJA, CORES_PRODUTO } from "./loja.js";
 // a loja respondida no cadastro, esperando a nuvem para ser criada
 const K_LOJA_INICIAL = e => `agenda-loja-inicial:${e}`;
 import { janelasDoDia } from "./horarios.js";
-import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCortesia, emLancamento, linkSuporte } from "./plano.js";
+import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCortesia, emLancamento } from "./plano.js";
 import { lerWhatsapp, mascaraWhatsapp } from "./whatsapp.js";
 import { K_ORIGEM } from "./origem.js";
-import { useLinkAgendamento, linkDo, confirmacaoDe, confirmado, enderecoConfirmar } from "./link.js";
-import { AcoesAzuis, CartaoSaldo, GradeAtalhos, CartaoNovidade, CartaoResumo, noPeriodo } from "./blocos.jsx";
+import { useLinkAgendamento, confirmacaoDe } from "./link.js";
+import { AcoesAzuis, CartaoSaldo, GradeAtalhos, CartaoNovidade, CartaoResumo, ListaAcoes, noPeriodo } from "./blocos.jsx";
 import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
-// Ícones: Phosphor (phosphoricons.com), modernos e com vários pesos; os do app usam o "regular" e as abas escolhidas o "fill"
-import { House as PhHouse, CalendarBlank as PhCalendarBlank, SquaresFour as PhSquaresFour, UsersThree as PhUsersThree, Wallet as PhWallet, Plus as PhPlus, X as PhX, Trash as PhTrash, Check as PhCheck, CaretRight as PhCaretRight, CaretLeft as PhCaretLeft, CaretDown as PhCaretDown, GearSix as PhGearSix, Sun as PhSun, Moon as PhMoon, Eye as PhEye, EyeSlash as PhEyeSlash, Bell as PhBell, User as PhUser, EnvelopeSimple as PhEnvelopeSimple, LockSimple as PhLockSimple, DeviceMobile as PhDeviceMobile, Money as PhMoney, Door as PhDoor, ArrowsClockwise as PhArrowsClockwise, Clock as PhClock, WarningCircle as PhWarningCircle, Copy as PhCopy, PaperPlaneTilt as PhPaperPlaneTilt, ArrowDown as PhArrowDown, ArrowUp as PhArrowUp, Receipt as PhReceipt, ArrowCounterClockwise as PhArrowCounterClockwise, Key as PhKey, MagnifyingGlass as PhMagnifyingGlass, SignOut as PhSignOut, ChatCircle as PhChatCircle, PencilSimple as PhPencilSimple, ChartBar as PhChartBar, Invoice as PhInvoice, ShoppingCart as PhShoppingCart, Car as PhCar, ForkKnife as PhForkKnife, Heart as PhHeart, Star as PhStar, ShoppingBag as PhShoppingBag, DotsThree as PhDotsThree, Microphone as PhMicrophone, Cloud as PhCloud, CloudRain as PhCloudRain, CloudLightning as PhCloudLightning, Target as PhTarget, Export as PhExport, PiggyBank as PhPiggyBank, Flag as PhFlag, SpeakerHigh as PhSpeakerHigh, Camera as PhCamera, Barcode as PhBarcode, UploadSimple as PhUploadSimple, Gauge as PhGauge, Minus as PhMinus, VideoCamera as PhVideoCamera, FileText as PhFileText, DownloadSimple as PhDownloadSimple, CalendarCheck as PhCalendarCheck, ArrowLeft as PhArrowLeft } from "@phosphor-icons/react";
+import { Svg, Marca, I } from "./icones.jsx";
+import { MenuLateral, ModoFolha, AlertasTela } from "./telas/navegacao.jsx";
+import { SemanaGrade } from "./telas/semana-grade.jsx";
+import { DIA_CURTO, DIA_LONGO, SEMANA, MES_CURTO, MES_LONGO, pad, toISO, fromISO, addDays, todayISO, segunda, diasNoMes, dm, diaCurto, relativo, mins, hhmm, duracao, agoraMin, diffDias } from "./datas.js";
 
 // A Bolinha (fala, conversa com a IA e o mascote) está desligada: o código fica guardado, mas nada dela aparece no app.
 // A IA do servidor vai ser usada para outra coisa. Para voltar com ela, é só trocar para true.
@@ -93,33 +97,6 @@ const K = { contas: "agenda-contas", sessao: "agenda-sessao", tema: "agenda-tema
 /* =========================================================
    2. DATAS, HORAS E DINHEIRO
    ========================================================= */
-const DIA_CURTO = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-const DIA_LONGO = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
-const SEMANA = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"];
-const MES_CURTO = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
-const MES_LONGO = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
-
-const pad = n => String(n).padStart(2, "0");
-const toISO = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const fromISO = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
-const addDays = (s, n) => { const d = fromISO(s); d.setDate(d.getDate() + n); return toISO(d); };
-const todayISO = () => toISO(new Date());
-const segunda = iso => addDays(iso, -((fromISO(iso).getDay() + 6) % 7));
-const diasNoMes = chave => { const [y, m] = chave.split("-").map(Number); return new Date(y, m, 0).getDate(); };
-const dm = iso => { const d = fromISO(iso); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`; };
-const diaCurto = iso => { const d = fromISO(iso); return `${DIA_CURTO[d.getDay()].toLowerCase()}, ${d.getDate()} ${MES_CURTO[d.getMonth()]}`; };
-const relativo = iso => {
-  const t = todayISO();
-  if (iso === t) return "Hoje";
-  if (iso === addDays(t, 1)) return "Amanhã";
-  if (iso === addDays(t, -1)) return "Ontem";
-  return diaCurto(iso);
-};
-const mins = h => { const [a, b] = h.split(":").map(Number); return a * 60 + b; };
-const hhmm = m => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`;
-const duracao = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? pad(m % 60) : ""}`;
-const agoraMin = d => d.getHours() * 60 + d.getMinutes();
-const diffDias = (a, b) => Math.round((fromISO(b) - fromISO(a)) / 864e5);
 
 // Valores escondidos (olho): brl e Money respeitam isso
 let ESCONDER = false;
@@ -342,7 +319,7 @@ function conversa(db, now, act, perfil) {
     ? <><b>{primeiro(ped[0].nome)}</b> pediu pelo seu link {ped[0].pid ? "para remarcar para" : "um horário:"} {relativo(ped[0].data).toLowerCase()} às {ped[0].hora}.</>
     : <>Chegaram <b>{ped.length} pedidos de horário</b> pelo seu link.</>, acao: { l: ped.length === 1 ? "Ver pedido" : "Ver pedidos", ic: <I.cal />, fn: act.abrirPedidos } });
   const atrasados = db.patients.filter(p => p.active && p.nextDate < t);
-  if (atrasados.length) falas.push({ txt: <>Antes de tudo: {atrasados.length === 1 ? "uma sessão ficou" : `${atrasados.length} sessões ficaram`} sem marcar. Responde aqui embaixo, é um toque só.</> });
+  if (atrasados.length) falas.push({ txt: <>Antes de tudo: {atrasados.length === 1 ? "uma sessão ficou" : `${atrasados.length} sessões ficaram`} sem marcar. Veio ou faltou? É um toque só.</>, acao: { l: "Marcar agora", ic: <I.check />, fn: () => act.setTab("home") } });
   const hoje = itensDoDia(db, t);
   const abertos = hoje.filter(i => i.kind === "next");
   const prox = abertos.find(i => mins(i.time) + DURACAO_SESSAO > nm);
@@ -1315,20 +1292,6 @@ const destravarFala = () => { try { const s = window.speechSynthesis; if (s && !
 const FIM_CONVERSA = /^\s*(obrigad[oa]|valeu|tchau|so isso|era so isso|nada nao|nao obrigad[oa]|beleza|ta bom|tudo bem|ok|certo|entendi)\b[\s\S]{0,20}$/;
 
 // Avisos: banner dentro do app + som + vibração; notificação do sistema quando o aparelho permitir
-let audioCtx = null;
-function tocarSom() {
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    const t = audioCtx.currentTime;
-    [880, 1320].forEach((f, i) => {
-      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-      o.type = "sine"; o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, t + i * .16); g.gain.exponentialRampToValueAtTime(.16, t + i * .16 + .02); g.gain.exponentialRampToValueAtTime(.0001, t + i * .16 + .3);
-      o.connect(g); g.connect(audioCtx.destination); o.start(t + i * .16); o.stop(t + i * .16 + .32);
-    });
-    return true;
-  } catch (e) { return false; }
-}
 async function notificarSistema(titulo, corpo, pedir) {
   if (noApp) return chamarApp("avisos:mostrar", { titulo, corpo, pedir: !!pedir }).catch(() => "bloqueado");
   try {
@@ -1362,7 +1325,6 @@ const appInstalado = () => noApp || (window.matchMedia && window.matchMedia("(di
 const pushSuportado = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const pushLigado = () => !!lerJSON(K_PUSH, {}).ligado && !!servidorAvisos();
 const b64uBytes = s => { s = String(s).replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
-const bytesB64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const comPrazo = (p, ms) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error("tempo")), ms))]);
 
 // O que impede de ligar ("" = pode ligar)
@@ -1475,107 +1437,8 @@ function resumoSemana(db, dom, usaPessoal) {
 }
 
 /* =========================================================
-   6. ÍCONES
+   6. ÍCONES — moram em src/icones.jsx (Phosphor); aqui fica só o ícone de categoria
    ========================================================= */
-const Svg = ({ children, sw = 1.8 }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{children}</svg>;
-// Logo da Avina: um A de fita só (sobe, curva no topo, desce a haste; a travessa é um laço pela esquerda)
-const Marca = () => (
-  <svg viewBox="97 105 300 300" aria-hidden="true">
-    <path d="M338 380V176Q338 128 300 128Q274 128 260 158L196 300Q180 336 152 334Q128 332 134 302Q146 258 214 248Q296 238 338 300" fill="none" stroke="#1F3BEF" strokeWidth="44" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-const I = {
-  home: () => <Svg><path d="M4 10.5L12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-3.5v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19z"/></Svg>,
-  cal: () => <Svg><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></Svg>,
-  grid: () => <Svg><rect x="4" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8"/></Svg>,
-  users: () => <Svg><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.8a3.3 3.3 0 0 1 0 6.4M18.5 14.8c1.7.7 2.8 2.4 3 5.2"/></Svg>,
-  wallet: () => <Svg><rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16.5 15h1"/><path d="M6 6l9-3 1.5 3"/></Svg>,
-  plus: () => <Svg sw={2.2}><path d="M12 5v14M5 12h14"/></Svg>,
-  x: () => <Svg sw={2.2}><path d="M6 6l12 12M18 6L6 18"/></Svg>,
-  trash: () => <Svg><path d="M4 7h16M9.5 7V4.5h5V7"/><path d="M6.5 7l.9 11.6A2 2 0 0 0 9.4 20.5h5.2a2 2 0 0 0 2-1.9L17.5 7"/><path d="M10.5 11v5.5M13.5 11v5.5"/></Svg>,
-  check: () => <Svg sw={2.6}><path d="M5 12.5l4.5 4.5L19 7.5"/></Svg>,
-  chev: () => <Svg sw={2.2}><path d="M9 6l6 6-6 6"/></Svg>,
-  chevL: () => <Svg sw={2.2}><path d="M15 6l-6 6 6 6"/></Svg>,
-  chevD: () => <Svg sw={2.2}><path d="M6 9l6 6 6-6"/></Svg>,
-  gear: () => <Svg><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></Svg>,
-  sun: () => <Svg><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></Svg>,
-  moon: () => <Svg><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></Svg>,
-  eye: () => <Svg><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></Svg>,
-  eyeOff: () => <Svg><path d="M4 4l16 16M10 6a9.6 9.6 0 0 1 2-.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.6 3.4M6.6 7.3C3.9 9.1 2.5 12 2.5 12S6 18.5 12 18.5c1.6 0 3-.4 4.2-1.1"/><path d="M9.9 10a3 3 0 0 0 4.1 4.1"/></Svg>,
-  bell: () => <Svg><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></Svg>,
-  user: () => <Svg><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c.8-3.8 3.8-6 7.5-6s6.7 2.2 7.5 6"/></Svg>,
-  mail: () => <Svg><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7l8 6 8-6"/></Svg>,
-  lock: () => <Svg><rect x="5" y="10.5" width="14" height="10" rx="3"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 15v2"/></Svg>,
-  phone: () => <Svg><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/></Svg>,
-  money: () => <Svg><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v5M18 9.5v5"/></Svg>,
-  door: () => <Svg><path d="M5 21V4.5A1.5 1.5 0 0 1 6.5 3h11A1.5 1.5 0 0 1 19 4.5V21M3 21h18"/><path d="M15 12v.5"/></Svg>,
-  repeat: () => <Svg><path d="M17 2.5l3 3-3 3"/><path d="M4 11V9.5a4 4 0 0 1 4-4h12"/><path d="M7 21.5l-3-3 3-3"/><path d="M20 13v1.5a4 4 0 0 1-4 4H4"/></Svg>,
-  clock: () => <Svg><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></Svg>,
-  alert: () => <Svg sw={2.2}><path d="M12 7v6M12 16.5v.5"/></Svg>,
-  copy: () => <Svg><rect x="8.5" y="8.5" width="12" height="12" rx="2.5"/><path d="M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5"/></Svg>,
-  send: () => <Svg><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/></Svg>,
-  down: () => <Svg sw={2.2}><path d="M12 5v13M6 12l6 6 6-6"/></Svg>,
-  up: () => <Svg sw={2.2}><path d="M12 19V6M6 12l6-6 6 6"/></Svg>,
-  receipt: () => <Svg><path d="M6 2.5h12v19l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></Svg>,
-  undo: () => <Svg><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></Svg>,
-  key: () => <Svg><circle cx="8" cy="15" r="4.5"/><path d="M11.2 11.8L20 3M17 6l3 3"/></Svg>,
-  search: () => <Svg><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></Svg>,
-  out: () => <Svg><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15M10 16l-4-4 4-4M6 12h10"/></Svg>,
-  chat: () => <Svg sw={2.2}><path d="M5 18.5V7a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8z"/></Svg>,
-  pencil: () => <Svg sw={2}><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></Svg>,
-  chart: () => <Svg><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></Svg>,
-  // Versões cheias dos ícones da barra de baixo (aparecem na aba que está aberta, como no app do Xbox)
-  homeOn: () => <Svg><path fill="currentColor" stroke="none" d="M12 3.2c.4 0 .8.1 1.1.4l7 5.7c.6.5.9 1.2.9 1.9v7.8A2 2 0 0 1 19 21h-4.2v-5.5a1.3 1.3 0 0 0-1.3-1.3h-3a1.3 1.3 0 0 0-1.3 1.3V21H5a2 2 0 0 1-2-2v-7.8c0-.7.3-1.4.9-1.9l7-5.7c.3-.3.7-.4 1.1-.4z"/></Svg>,
-  calOn: () => <Svg><path fill="currentColor" stroke="none" fillRule="evenodd" d="M6.5 5h11a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-11a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3zM7 11.5v2h2v-2zM11 11.5v2h2v-2zM15 11.5v2h2v-2zM7 15.5v2h2v-2zM11 15.5v2h2v-2z"/><path d="M8 3v3M16 3v3"/></Svg>,
-  usersOn: () => <Svg><circle cx="9" cy="8" r="3.5" fill="currentColor"/><path fill="currentColor" d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5z"/><path d="M16 4.8a3.3 3.3 0 0 1 0 6.4M18.5 14.8c1.7.7 2.8 2.4 3 5.2"/></Svg>,
-  walletOn: () => <Svg><path d="M6 6l9-3 1.5 3"/><path fill="currentColor" stroke="none" fillRule="evenodd" d="M6 5.2h12a3 3 0 0 1 3 3V17a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8.2a3 3 0 0 1 3-3zM15.5 13.6a1.4 1.4 0 1 0 2.8 0a1.4 1.4 0 1 0-2.8 0z"/></Svg>,
-  chartOn: () => <Svg><rect x="2.8" y="10" width="3.4" height="10.5" rx="1.2" fill="currentColor" stroke="none"/><rect x="8.3" y="3.5" width="3.4" height="17" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.8" y="12.5" width="3.4" height="8" rx="1.2" fill="currentColor" stroke="none"/><rect x="19.3" y="7" width="2.4" height="13.5" rx="1.1" fill="currentColor" stroke="none"/></Svg>,
-  billOn: () => <Svg><path fill="currentColor" stroke="none" fillRule="evenodd" d="M7 3h10a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3zM8 7.2v1.6h8V7.2zM8 11.2v1.6h8v-1.6zM8 15.2v1.6h4v-1.6z"/></Svg>,
-  bill: () => <Svg><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h4"/></Svg>,
-  cart: () => <Svg><path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H7"/><circle cx="9.5" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></Svg>,
-  car: () => <Svg><path d="M4 16v-4l2-5h12l2 5v4M4 16h16M4 16v2.5M20 16v2.5"/><circle cx="7.5" cy="13.5" r=".8"/><circle cx="16.5" cy="13.5" r=".8"/></Svg>,
-  carOn: () => <Svg><path fill="currentColor" stroke="none" fillRule="evenodd" d="M6.9 5.5h10.2a1.5 1.5 0 0 1 1.4.94l1.9 4.76c.4.36.6.86.6 1.4V17a1 1 0 0 1-1 1h-.5v1.2a1 1 0 0 1-2 0V18H6.5v1.2a1 1 0 0 1-2 0V18H4a1 1 0 0 1-1-1v-4.4c0-.54.2-1.04.6-1.4L5.5 6.44a1.5 1.5 0 0 1 1.4-.94zM6.2 10.5h11.6l-1.3-3.2H7.5zM7.5 15.2a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6zm9 0a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6z"/></Svg>,
-  food: () => <Svg><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 21V3c-2 1-3.5 3.5-3.5 7h3.5"/></Svg>,
-  heart: () => <Svg><path d="M12 20s-7.5-4.5-7.5-10A4.3 4.3 0 0 1 12 7.5 4.3 4.3 0 0 1 19.5 10C19.5 15.5 12 20 12 20z"/></Svg>,
-  star: () => <Svg><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/></Svg>,
-  bag: () => <Svg><path d="M5 8h14l-1 12H6z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></Svg>,
-  more: () => <Svg sw={2.6}><path d="M6 12h.01M12 12h.01M18 12h.01"/></Svg>,
-  mic: () => <Svg sw={2}><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></Svg>,
-  cloud: () => <Svg><path d="M7 18.5h10a4 4 0 0 0 .6-8 5.5 5.5 0 0 0-10.6 1.2A3.4 3.4 0 0 0 7 18.5z"/></Svg>,
-  rain: () => <Svg><path d="M7 15h10a4 4 0 0 0 .6-8 5.5 5.5 0 0 0-10.6 1.2A3.4 3.4 0 0 0 7 15z"/><path d="M8 18l-1 2.5M12 18l-1 2.5M16 18l-1 2.5"/></Svg>,
-  storm: () => <Svg><path d="M7 15h10a4 4 0 0 0 .6-8 5.5 5.5 0 0 0-10.6 1.2A3.4 3.4 0 0 0 7 15z"/><path d="M12.5 15l-2 3.5h3l-2 3.5"/></Svg>,
-  target: () => <Svg><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" /></Svg>,
-  share: () => <Svg><path d="M12 15V3.5M7.5 8L12 3.5 16.5 8"/><path d="M5 12.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-6.5"/></Svg>,
-  piggy: () => <Svg><path d="M19 11.5c0-3.6-3.1-6-7-6-1.7 0-3.3.5-4.5 1.3L5 5.5V9C4 10 3.5 11 3.5 12.5 3.5 15 5 17 7.5 18v2h3v-1.5h3V20h3v-2.2c1.4-.8 2.5-2.1 2.5-3.8h1.5v-2.5z"/><circle cx="15" cy="10.5" r=".6"/></Svg>,
-  flag: () => <Svg><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></Svg>,
-  logo: () => <Svg sw={2.2}><rect x="4" y="5" width="16" height="15" rx="3.5"/><path d="M4 10h16M9 15l2 2 4-4"/></Svg>,
-  sound: () => <Svg><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></Svg>,
-  camera: () => <Svg><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="12.5" r="3.5"/></Svg>,
-  scan: () => <Svg><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M7.5 8v8M10 8v8M12.5 8v8M15 8v8M16.5 8v8"/></Svg>,
-  upload: () => <Svg><path d="M12 15.5V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4.5 14v4.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V14"/></Svg>,
-  gauge: () => <Svg><path d="M4.5 17a8 8 0 1 1 15 0"/><path d="M12 13l3.5-4"/><circle cx="12" cy="13" r="1.2"/></Svg>,
-};
-
-/* Ícones modernos (Phosphor) no lugar dos desenhados à mão: mesmos nomes (I.home, I.cal...), então nada mais muda.
-   ph(Componente, peso): "regular" no geral, "bold" nos sinais pequenos (+, ✓, setas) e "fill" nas abas escolhidas. */
-const ph = (C, weight = "regular") => props => <C weight={weight} aria-hidden="true" {...props} />;
-Object.assign(I, {
-  home: ph(PhHouse), homeOn: ph(PhHouse, "fill"), cal: ph(PhCalendarBlank), calOn: ph(PhCalendarBlank, "fill"), grid: ph(PhSquaresFour),
-  users: ph(PhUsersThree), usersOn: ph(PhUsersThree, "fill"), wallet: ph(PhWallet), walletOn: ph(PhWallet, "fill"),
-  plus: ph(PhPlus, "bold"), minus: ph(PhMinus, "bold"), x: ph(PhX, "bold"), trash: ph(PhTrash), check: ph(PhCheck, "bold"),
-  chev: ph(PhCaretRight, "bold"), chevL: ph(PhCaretLeft, "bold"), chevD: ph(PhCaretDown, "bold"), setaL: ph(PhArrowLeft, "bold"),
-  gear: ph(PhGearSix), sun: ph(PhSun), moon: ph(PhMoon), eye: ph(PhEye), eyeOff: ph(PhEyeSlash), bell: ph(PhBell), user: ph(PhUser),
-  mail: ph(PhEnvelopeSimple), lock: ph(PhLockSimple), phone: ph(PhDeviceMobile), money: ph(PhMoney), door: ph(PhDoor),
-  repeat: ph(PhArrowsClockwise), clock: ph(PhClock), alert: ph(PhWarningCircle), copy: ph(PhCopy), send: ph(PhPaperPlaneTilt),
-  down: ph(PhArrowDown, "bold"), up: ph(PhArrowUp, "bold"), receipt: ph(PhReceipt), undo: ph(PhArrowCounterClockwise), key: ph(PhKey),
-  search: ph(PhMagnifyingGlass), out: ph(PhSignOut), chat: ph(PhChatCircle), pencil: ph(PhPencilSimple),
-  chart: ph(PhChartBar), chartOn: ph(PhChartBar, "fill"), bill: ph(PhInvoice), billOn: ph(PhInvoice, "fill"),
-  cart: ph(PhShoppingCart), car: ph(PhCar), carOn: ph(PhCar, "fill"), food: ph(PhForkKnife), heart: ph(PhHeart), star: ph(PhStar),
-  bag: ph(PhShoppingBag), more: ph(PhDotsThree, "bold"), mic: ph(PhMicrophone), cloud: ph(PhCloud), rain: ph(PhCloudRain), storm: ph(PhCloudLightning),
-  target: ph(PhTarget), share: ph(PhExport), piggy: ph(PhPiggyBank), flag: ph(PhFlag), sound: ph(PhSpeakerHigh), camera: ph(PhCamera),
-  scan: ph(PhBarcode), upload: ph(PhUploadSimple), gauge: ph(PhGauge), video: ph(PhVideoCamera), doc: ph(PhFileText),
-  download: ph(PhDownloadSimple), calSync: ph(PhCalendarCheck),
-});
 const CatIcon = ({ cat }) => { const C = (cat && I[cat.ic]) || I.more; return <C />; };
 
 /* =========================================================
@@ -1652,23 +1515,6 @@ function ClimaSheet({ clima, cidade, act, onClose }) {
 function Avatar({ conta, onClick, label = "Sua conta e ajustes" }) {
   const inner = conta.foto ? <img src={conta.foto} alt="" /> : iniciais(conta.nome);
   return onClick ? <button className="me" onClick={onClick} aria-label={label}>{inner}</button> : <span className="me" aria-hidden="true">{inner}</span>;
-}
-// Lê a foto escolhida, corta em quadrado e reduz para 256px (fica leve para guardar)
-function lerFoto(file) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const s = 256, c = document.createElement("canvas"); c.width = c.height = s;
-        const m = Math.min(img.width, img.height);
-        c.getContext("2d").drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, s, s);
-        res(c.toDataURL("image/jpeg", .82));
-      };
-      img.onerror = rej; img.src = r.result;
-    };
-    r.onerror = rej; r.readAsDataURL(file);
-  });
 }
 // Lê um arquivo de imagem do aparelho
 const lerArquivo = file => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
@@ -2505,97 +2351,7 @@ function TopoInicio({ conta, act, tema, modo, now, compacto }) {
 }
 
 // Os cartões do Início (o carrossel e os que a pessoa escolhe) vêm sob demanda: src/telas/inicio-cartoes.jsx
-const CarrosselInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.Carrossel })));
-const CartoesInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.CartoesInicio })));
 const PersonalizarInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.PersonalizarInicio })));
-
-// Menu lateral do celular: fica atrás da tela; ao abrir, a tela encolhe e vai para a direita (com as bordas
-// arredondadas) e as opções aparecem à esquerda. go(f): fecha o menu e depois faz f.
-function MenuLateral({ aberto, conta, modo, modos, abas, tab, act, tema, nAlertas, onAlertas, go }) {
-  const extras = modo === "consultorio" ? [
-    { id: "al", l: "Alertas", ic: I.bell, f: onAlertas, n: nAlertas },
-    { id: "link", l: "Link de agendamento", ic: I.share, f: () => act.openSettings("link") },
-    { id: "cal", l: "Agenda no celular", ic: I.calSync, f: () => act.openSettings("calendario") },
-    { id: "espera", l: "Lista de espera", ic: I.clock, f: act.verEspera },
-    { id: "imp", l: "Recibos e imposto", ic: I.receipt, f: act.abrirImposto },
-  ] : modo === "pessoal" ? [
-    { id: "al", l: "Alertas", ic: I.bell, f: onAlertas, n: nAlertas },
-    { id: "casa", l: "Nossa casa", ic: I.home, f: act.abrirCasa },
-    { id: "cx", l: "Caixinhas", ic: I.piggy, f: () => act.abrirCaixinha() },
-    { id: "ext", l: "Importar extrato", ic: I.upload, f: act.importar },
-  ] : [];
-  let ordem = 0; const n = () => ({ "--i": ordem++ }); // a ordem de entrada de cada item (um depois do outro)
-  const Item = ({ x, on }) => { const Ic = x.ic; return (
-    <button type="button" className={"menu-lat-i" + (on ? " on" : "")} onClick={go(x.f)} style={n()}>
-      {typeof Ic === "function" ? <Ic /> : Ic}<span>{x.l}</span>{x.n > 0 && <em>{x.n > 99 ? "99+" : x.n}</em>}
-    </button>
-  ); };
-  return (
-    <aside className="menu-lat" aria-label="Menu" aria-hidden={!aberto} inert={aberto ? undefined : ""}>
-      <div className="menu-lat-in">
-        <div className="menu-lat-logo" style={n()}><AvinaNome /></div>
-        <button type="button" className="menu-lat-conta" onClick={go(act.openSettings)} style={n()}><Avatar conta={conta} /><span><b>{conta.nome}</b><small>Ver perfil e ajustes</small></span><I.chev /></button>
-        {modos.length > 1 && <div className="menu-lat-modos" role="group" aria-label="Área" style={n()}>{modos.map(m => <button key={m} type="button" className={m === modo ? "on" : ""} aria-pressed={m === modo} onClick={go(() => act.setModo(m))}>{NOME_MODO[m]}</button>)}</div>}
-        <nav className="menu-lat-lista">{abas.map(a => <Item key={a.id} x={{ l: a.l, ic: a.ic, n: a.n, f: () => act.setTab(a.id) }} on={tab === a.id} />)}</nav>
-        {extras.length > 0 && <><div className="menu-lat-sep" /><div className="menu-lat-lista">{extras.map(x => <Item key={x.id} x={x} />)}</div></>}
-        <div className="menu-lat-sep" />
-        <div className="menu-lat-lista menu-lat-pe">
-          <Item x={{ l: ESCONDER ? "Mostrar valores" : "Esconder valores", ic: ESCONDER ? I.eye : I.eyeOff, f: act.toggleOculto }} />
-          <Item x={{ l: tema.escuro ? "Modo claro" : "Modo escuro", ic: tema.escuro ? I.sun : I.moon, f: act.trocarTema }} />
-          <a className="menu-lat-i" href={linkSuporte()} target="_blank" rel="noopener" style={n()}><I.chat /><span>Fale com a gente</span></a>
-          <Item x={{ l: "Sair da conta", ic: I.out, f: act.sair }} />
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-// Trocar de área (Consultório, Pessoal, Loja): uma folha que sobe com um cartão grande para cada área
-const AREAS_INFO = {
-  consultorio: { nome: "Consultório", texto: "Agenda, pacientes, cobranças e recibos", ic: "cal", cor: "#2B46FF" },
-  pessoal: { nome: "Pessoal", texto: "Gastos, contas, casa e transporte", ic: "wallet", cor: "#12B76A" },
-  loja: { nome: "Loja", texto: "Caixa do dia, gastos e equipe", ic: "bag", cor: "#F79009" },
-};
-function ModoFolha({ modo, modos, act, onClose }) {
-  const ir = m => { vibrar("toque"); onClose(); if (m !== modo) setTimeout(() => act.setModo(m), 180); };
-  return (
-    <Sheet folha title="Trocar de área" sub="O app muda inteiro: o Início, as abas e os atalhos." onClose={onClose}>
-      <div className="modo-cartoes">
-        {modos.map((m, k) => { const a = AREAS_INFO[m], Ic = I[a.ic]; return (
-          <button key={m} type="button" className={"modo-cartao" + (m === modo ? " on" : "")} style={{ "--mc": a.cor, animationDelay: `${k * 50}ms` }} onClick={() => ir(m)} aria-pressed={m === modo}>
-            <span className="modo-cartao-ic"><Ic /></span>
-            <span className="modo-cartao-t"><b>{a.nome}</b><small>{a.texto}</small></span>
-            <span className="modo-cartao-ok">{m === modo ? <I.check /> : <I.chev />}</span>
-          </button>
-        ); })}
-      </div>
-      <button className="btn text" onClick={() => { onClose(); setTimeout(() => act.openSettings("pessoal"), 200); }}>Ligar ou desligar áreas</button>
-    </Sheet>
-  );
-}
-
-// Alertas: o que antes ficava no "Seu resumo" do Início, numa tela própria (o sino da barra de cima), no jeito da
-// lista de alertas dos apps de banco: o que pede atenção primeiro (com o botão para resolver), depois o resto.
-function AlertasTela({ falas, onClose }) {
-  useCamada(onClose, { escurece: false, nome: "alertas" });
-  const acao = falas.filter(f => f.acao), info = falas.filter(f => !f.acao);
-  const Linha = ({ f }) => (
-    <div className="al-linha">
-      <span className={"al-ic" + (f.acao ? " forte" : "")}>{f.acao ? <I.bell /> : <I.alert />}</span>
-      <div className="al-tx"><p>{f.txt}</p>{f.acao && <button className="al-acao" onClick={() => { onClose(); setTimeout(f.acao.fn, 200); }}>{f.acao.l}<I.chev /></button>}</div>
-    </div>
-  );
-  return createPortal(
-    <div className="tela-cheia" role="dialog" aria-modal="true" aria-label="Alertas">
-      <div className="tela-cheia-in">
-        <button className="tela-voltar" onClick={onClose} aria-label="Voltar"><I.setaL /></button>
-        <h1 className="tela-t">Alertas</h1>
-        {!falas.length && <div className="al-vazio"><Ilustra n="cafe" /><b>Tudo em dia</b><span>Quando algo pedir a sua atenção, aparece aqui.</span></div>}
-        {acao.length > 0 && <><h2 className="al-grupo">Pede atenção</h2>{acao.map((f, i) => <Linha key={"a" + i} f={f} />)}</>}
-        {info.length > 0 && <><h2 className="al-grupo">Para saber</h2>{info.map((f, i) => <Linha key={"i" + i} f={f} />)}</>}
-      </div>
-    </div>, document.body);
-}
 
 // O dia no topo do Início: quantas sessões, quanto entra, a próxima (com o "Entrar" da sala online) e a linha do dia
 function HojeConsultorio({ db, now, act, clima }) {
@@ -2843,104 +2599,6 @@ function Timeline({ db, iso, now, act }) {
   );
 }
 
-// A semana em grade (computador): um dia por coluna e as horas de cima para baixo, como num calendário.
-// Arrastar a próxima sessão de alguém remarca (com Desfazer); clicar num horário vazio cadastra alguém ali.
-const PX_HORA = 56, PASSO_MIN = 15;
-function SemanaGrade({ db, sel, setSel, now, act }) {
-  const t = todayISO(), ini = segunda(sel), nm = agoraMin(now);
-  const dias = Array.from({ length: 7 }, (_, i) => addDays(ini, i));
-  const porDia = dias.map(iso => itensDoDia(db, iso));
-  // as horas vão do início ao fim do expediente, e esticam se tiver sessão fora dele
-  const todos = porDia.flat().map(i => mins(i.time));
-  const hIni = Math.min(PERFIL.horaIni ?? 8, ...todos.map(m => Math.floor(m / 60)));
-  const hFim = Math.max(PERFIL.horaFim ?? 20, ...todos.map(m => Math.ceil((m + DURACAO_SESSAO) / 60)));
-  const horas = Array.from({ length: hFim - hIni }, (_, i) => hIni + i);
-  const corpo = useRef(null);
-  const [arr, setArr] = useState(null); // { it, x0, y0, dx, dy, moveu, alvo: { iso, min } }
-  const yDe = m => (m - hIni * 60) / 60 * PX_HORA;
-  const alvoDe = (x, y) => {
-    const r = corpo.current.getBoundingClientRect(), col = Math.min(6, Math.max(0, Math.floor((x - r.left) / (r.width / 7))));
-    const min = Math.round((hIni * 60 + (y - r.top) / PX_HORA * 60) / PASSO_MIN) * PASSO_MIN;
-    return { iso: dias[col], min: Math.min(hFim * 60 - DURACAO_SESSAO, Math.max(hIni * 60, min)) };
-  };
-  const podeArrastar = it => it.kind === "next" && it.date >= t;
-  const pegar = (e, it) => {
-    if (e.button !== 0) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setArr({ it, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, moveu: false, alvo: null });
-  };
-  const mover = e => {
-    if (!arr) return;
-    const dx = e.clientX - arr.x0, dy = e.clientY - arr.y0, moveu = arr.moveu || Math.abs(dx) + Math.abs(dy) > 6;
-    setArr({ ...arr, dx, dy, moveu, alvo: moveu && podeArrastar(arr.it) ? alvoDe(e.clientX, e.clientY) : null });
-  };
-  const soltar = () => {
-    if (!arr) return;
-    const { it, moveu, alvo } = arr; setArr(null);
-    if (!moveu) return act.openItem(it);
-    if (alvo && (alvo.iso !== it.date || hhmm(alvo.min) !== it.time)) {
-      if (alvo.iso < t || (alvo.iso === t && alvo.min < nm)) { vibrar("aviso"); return act.toast("Escolha um horário daqui para a frente"); }
-      act.moverSessao(it.patient.id, alvo.iso, hhmm(alvo.min));
-    }
-  };
-  const clicarVazio = (e, iso) => {
-    if (e.target !== e.currentTarget) return;
-    const { min } = alvoDe(e.clientX, e.clientY);
-    if (iso < t) return;
-    act.novoPacienteEm(iso, hhmm(Math.floor(min / 30) * 30));
-  };
-  // sessões que se cruzam no mesmo dia dividem a largura
-  const faixas = itens => {
-    const out = []; let grupo = [], fim = -1;
-    const fecha = () => grupo.forEach((x, k) => out.push({ ...x, k, n: grupo.length }));
-    itens.forEach(it => { const a = mins(it.time); if (a >= fim && grupo.length) { fecha(); grupo = []; } grupo.push({ it, a }); fim = Math.max(fim, a + DURACAO_SESSAO); });
-    fecha();
-    return out;
-  };
-  return (
-    <section className="sg" aria-label="Semana em grade">
-      <div className="sg-cab">
-        <span />
-        {dias.map((iso, i) => {
-          const d = fromISO(iso), n = porDia[i].filter(x => situacao(x, now) !== "missed").length;
-          return (
-            <button key={iso} className={"sg-dia" + (iso === t ? " eh-hoje" : "") + (iso === sel ? " sel" : "") + (feriado(iso) ? " hol" : "")} onClick={() => setSel(iso)} title={feriado(iso) ? feriado(iso).name : undefined}>
-              <small>{SEMANA[i]}</small><b className="num">{d.getDate()}</b>{n > 0 && <em className="num">{n}</em>}
-            </button>
-          );
-        })}
-      </div>
-      <div className="sg-rolar">
-        <div className="sg-grade" style={{ height: horas.length * PX_HORA }}>
-          <div className="sg-horas">{horas.map(h => <span key={h} style={{ top: (h - hIni) * PX_HORA }}>{pad(h)}:00</span>)}</div>
-          <div className="sg-corpo" ref={corpo} onPointerMove={mover} onPointerUp={soltar} onPointerCancel={() => setArr(null)}>
-            {horas.map(h => <i key={h} className="sg-linha" style={{ top: (h - hIni) * PX_HORA }} />)}
-            {dias.map((iso, i) => (
-              <div key={iso} className={"sg-col" + (iso === t ? " eh-hoje" : "") + (iso < t ? " passado" : "") + (!(PERFIL.diasTrab || [1, 2, 3, 4, 5]).includes(fromISO(iso).getDay()) ? " folga" : "")} onClick={e => clicarVazio(e, iso)}>
-                {iso === t && nm >= hIni * 60 && nm <= hFim * 60 && <i className="sg-agora" style={{ top: yDe(nm) }} />}
-                {faixas(porDia[i]).map(({ it, k, n }) => {
-                  const st = situacao(it, now), p = it.patient, segurando = arr && arr.it === it && arr.moveu;
-                  const cf = confirmacaoDe((db.confirmados || {})[`${p.id}:${iso}`]);
-                  return (
-                    <button key={p.id + it.kind + it.time} className={"sg-ses " + st + (podeArrastar(it) ? " arrasta" : "") + (segurando ? " segurando" : "")}
-                      style={{ ...corVars(p), top: yDe(mins(it.time)), height: DURACAO_SESSAO / 60 * PX_HORA - 3, left: `calc(${(k / n) * 100}% + 2px)`, width: `calc(${100 / n}% - 4px)`, ...(segurando ? { transform: `translate(${arr.dx}px, ${arr.dy}px)` } : {}) }}
-                      onPointerDown={e => pegar(e, it)} aria-label={`${it.time}, ${p.name}: ${ROTULO[st]}${podeArrastar(it) ? ". Arraste para remarcar" : ""}`}>
-                      <b>{p.name}</b>
-                      <small className="num">{it.time}{p.online ? " · online" : ""}{cf === "paciente" || cf === "manual" ? " · ✓" : cf === "remarcar" ? " · remarcar" : ""}</small>
-                    </button>
-                  );
-                })}
-                {arr && arr.alvo && arr.alvo.iso === iso && <i className="sg-fantasma" style={{ top: yDe(arr.alvo.min), height: DURACAO_SESSAO / 60 * PX_HORA - 3 }}><span className="num">{hhmm(arr.alvo.min)}</span></i>}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      <p className="sg-dica">Arraste a próxima sessão de alguém para remarcar. Clique num horário vazio para marcar alguém novo.</p>
-    </section>
-  );
-}
-
 function AgendaTab({ db, now, act, tema }) {
   const wide = useWide();
   const [sel, setSel] = useState(todayISO());
@@ -3103,10 +2761,17 @@ function PatientsTab({ db, act, tema, vista = "ativos", setVista }) {
   const ativos = db.patients.filter(p => p.active && p.name.toLowerCase().includes(busca.toLowerCase())).sort((a, b) => (a.nextDate || "").localeCompare(b.nextDate || ""));
   return (
     <div className="page" style={{ maxWidth: 820 }}>
-      <TopBar eyebrow={`${db.patients.length} ${db.patients.length === 1 ? TERMO.s : TERMO.p}`} title={TERMO.P} act={act} tema={tema} mais={{ l: `Novo ${TERMO.s}`, f: act.novoPaciente }}
-        extra={<button className="icon-btn" onClick={act.importarAgenda} aria-label="Trazer da agenda antiga"><I.upload /></button>} />
+      <TopBar eyebrow={`${db.patients.length} ${db.patients.length === 1 ? TERMO.s : TERMO.p}`} title={TERMO.P} act={act} tema={tema} mais={{ l: `Novo ${TERMO.s}`, f: act.novoPaciente }} />
       <div className="stack">
-        <Seg big value={vista} onChange={setVista} options={[{ v: "ativos", l: TERMO.P }, { v: "espera", l: `Lista de espera${db.espera.length ? ` (${db.espera.length})` : ""}` }]} />
+        <AcoesAzuis itens={[
+          { id: "novo", l: `Novo ${TERMO.s}`, ic: I.plus, f: act.novoPaciente },
+          { id: "trazer", l: "Trazer da agenda antiga", ic: I.upload, f: act.importarAgenda },
+          { id: "espera", l: "Lista de espera", ic: I.clock, f: () => setVista("espera") },
+          { id: "livres", l: "Horários livres", ic: I.share, f: act.livres },
+        ]} />
+        <div className="az-abas pac-abas" role="tablist">
+          {[["ativos", `${TERMO.P} (${db.patients.filter(p => p.active).length})`], ["espera", `Lista de espera${db.espera.length ? ` (${db.espera.length})` : ""}`]].map(([v, l]) => <button key={v} type="button" role="tab" aria-selected={vista === v} className={vista === v ? "on" : ""} onClick={() => setVista(v)}>{l}</button>)}
+        </div>
         {vista === "espera" && <>
           <div className="panel">
             {db.espera.length === 0 && <div className="empty"><b>Lista vazia</b>Quem pedir horário e não couber agora fica aqui.</div>}
@@ -3126,20 +2791,40 @@ function PatientsTab({ db, act, tema, vista = "ativos", setVista }) {
           {ativos.map(p => {
             const ab = sessoesAbertas(db, p.id).length;
             return (
-              <button key={p.id} className="txn" onClick={() => act.openPatient(p.id)}>
-                <span className="txn-av">{iniciais(p.name)}<i className="cdot" style={{ background: corDe(p).cor }} /></span>
+              <button key={p.id} className="txn pac-linha" style={corVars(p)} onClick={() => act.openPatient(p.id)}>
+                <span className="txn-av">{iniciais(p.name)}{p.online && <i className="pac-online" aria-label="Online"><I.video /></i>}</span>
                 <span className="mid">
                   <span className="nm">{p.name}</span>
                   <span className="sb">{freqNome(p.freq)} · {relativo(p.nextDate).toLowerCase()} {p.time}</span>
                   <span className="sb">{p.billing === "package" ? <>Pacote <Dots total={p.packageSize} filled={ab} /></> : "Paga por sessão"}</span>
                 </span>
                 <span className="amt"><Money v={p.price} /></span>
+                <I.chev />
               </button>
             );
           })}
         </div>}
       </div>
     </div>
+  );
+}
+
+// Recibo pela aba Finanças: primeiro escolhe de quem (quem já pagou alguma coisa aparece primeiro)
+function EscolherRecibo({ db, onClose, act }) {
+  const pagou = pid => db.charges.filter(c => c.patientId === pid && c.paid && !c.hidden);
+  const lista = db.patients.map(p => ({ p, n: pagou(p.id).length, ult: pagou(p.id).reduce((m, c) => (c.paidAt || "") > m ? c.paidAt : m, "") }))
+    .filter(x => x.n > 0).sort((a, b) => b.ult.localeCompare(a.ult));
+  return (
+    <Sheet title="Recibo" sub={`De quem é o recibo? Aparece quem já pagou alguma sessão.`} onClose={onClose}>
+      {!lista.length && <div className="empty com-ilustra"><Ilustra n="arquivo" /><b>Ninguém pagou ainda</b>O recibo fica disponível depois do primeiro pagamento.</div>}
+      {lista.length > 0 && <div className="panel">{lista.map(({ p, n, ult }) => (
+        <button key={p.id} className="txn pac-linha" style={corVars(p)} onClick={() => { onClose(); setTimeout(() => act.abrirRecibo(p.id), 250); }}>
+          <span className="txn-av">{iniciais(p.name)}</span>
+          <span className="mid"><span className="nm">{p.name}</span><span className="sb">{n} {n === 1 ? "pagamento" : "pagamentos"} · último em {dm(ult.slice(0, 10))}</span></span>
+          <I.chev />
+        </button>
+      ))}</div>}
+    </Sheet>
   );
 }
 
@@ -3376,6 +3061,7 @@ function Ritmo({ db }) {
 function FinanceTab({ db, act, tema, meta }) {
   const [off, setOff] = useState(0);
   const [filtro, setFiltro] = useState("abertas");
+  const movRef = useRef(null);
   const base = new Date();
   const m = new Date(base.getFullYear(), base.getMonth() + off, 1);
   const chave = `${m.getFullYear()}-${pad(m.getMonth() + 1)}`;
@@ -3399,13 +3085,25 @@ function FinanceTab({ db, act, tema, meta }) {
       <TopBar eyebrow={`${MES_LONGO[m.getMonth()]} de ${m.getFullYear()}`} title="Finanças" act={act} tema={tema} extra={nav} />
       <div className="cols">
         <div className="col">
+          {/* No jeito da tela de Pix dos apps de banco: o valor grande, três botões azuis e "Outras ações" em lista */}
+          <section className="fin-saldo">
+            <span className="fin-saldo-l">Líquido em {MES_LONGO[m.getMonth()]} <button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></span>
+            <b className="fin-saldo-v num"><Money v={liq} /></b>
+            <span className="fin-saldo-sub num">{brl(bruto)} bruto · {brl(sbl)} de sublocação</span>
+          </section>
+          <AcoesAzuis tres itens={[
+            { id: "cobrar", l: abertas.length ? `Cobrar (${abertas.length})` : "Cobrar", ic: I.send, f: () => { setFiltro("abertas"); if (!abertas.length) act.toast("Ninguém para cobrar agora"); setTimeout(() => movRef.current && movRef.current.scrollIntoView({ behavior: "smooth", block: "start" }), 50); } },
+            { id: "recibo", l: "Recibo", ic: I.receipt, f: act.escolherRecibo },
+            { id: "planilha", l: "Planilha", ic: I.download, f: () => act.exportar(chave) },
+          ]} />
+          <ListaAcoes titulo="Outras ações" itens={[
+            { id: "imposto", l: "Imposto de Renda", d: "Receita Saúde e Carnê-Leão", ic: I.receipt, f: act.abrirImposto },
+            { id: "revisao", l: "Revisão da semana", ic: I.chart, f: act.revisao },
+            { id: "fechar", l: "Fechar o dia", ic: I.moon, f: act.fecharDia },
+            { id: "metas", l: "Valores e metas", ic: I.target, f: () => act.openSettings("dinheiro") },
+          ]} />
           <section className="bal">
-            <div className="bal-top">
-              <span className="lab">Líquido do mês <button className="eye" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button></span>
-              {abertas.length > 0 && <button className="badge-btn" onClick={() => setFiltro("abertas")}>{abertas.length} para cobrar <I.chev /></button>}
-            </div>
-            <div className="bal-amt"><Money v={liq} /></div>
-            <div className="bal-sub"><span className="up">+{brl(bruto)} bruto</span><span className="trend dn">− {brl(sbl)} sublocação</span></div>
+            <div className="bal-top"><span className="lab">Como o mês está andando</span></div>
             <AreaChart serie={serie} cor="var(--mint-btn)" />
             <div className="bal-tiles">
               <div className="bt"><span>Recebido</span><b style={{ color: "var(--mint)" }}><Money v={recebido} /></b></div>
@@ -3419,15 +3117,11 @@ function FinanceTab({ db, act, tema, meta }) {
               <Porquinho />
             </div>
           )}
-          <div className="small-acts">
-            <button className="chip-btn" onClick={() => act.exportar(chave)}><I.down />Planilha para o contador</button>
-            <button className="chip-btn" onClick={act.revisao}><I.chart />Revisão da semana</button>
-          </div>
           <SaudeConsultorio db={db} chave={chave} meta={meta} />
           <Ritmo db={db} />
         </div>
         <div className="col">
-          <div className="panel">
+          <div className="panel" ref={movRef}>
             <div className="panel-head"><h3>Movimento</h3></div>
             <div className="chips" role="tablist">
               {[["abertas", `Para cobrar${abertas.length ? ` (${abertas.length})` : ""}`], ["pagas", "Pagas"], ["sessoes", "Sessões"]].map(([v, l]) => (
@@ -4610,7 +4304,6 @@ function useTema() {
 /* =========================================================
    15. APP (depois do login)
    ========================================================= */
-I.menu = () => <Svg sw={2}><path d="M4 7h16M4 12h16M4 17h11"/></Svg>;
 
 
 // conta nova (nada salvo ainda): começa vazia
@@ -5088,7 +4781,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const recarregar = async () => {
     recRef.current = true; setRecarregando(true); vibrar("ok");
     const espera = new Promise(r => setTimeout(r, 900));
-    const cidade = perfil.cidade, y = new Date().getFullYear();
+    const y = new Date().getFullYear();
     // os seus dados primeiro: o que mudou em outro aparelho, os pedidos e as respostas dos pacientes pelo link
     const nuvemR = sincronizarAgora().catch(() => "offline");
     await Promise.all([
@@ -5340,6 +5033,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     // Consultório: recibo, imposto e anotações
     abrirRecibo: (pid, cid) => setSheet({ type: "recibo", pid, cid }),
     abrirImposto: () => setSheet({ type: "imposto" }),
+    escolherRecibo: () => setSheet({ type: "escolher-recibo" }),
     abrirDocumentos: pid => setSheet({ type: "documentos", pid }),
     meusDados: () => setSheet({ type: "meus-dados" }),
     abrirNotas: (pid, sid) => setSheet({ type: "notas", pid, sid }),
@@ -5979,6 +5673,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "transp-gasto" && <Suspense fallback={null}><GastoTransporteSheet key={sheet.n} veiculos={veiculosDe(db)} veiculoId={sheet.veiculoId || (sheet.inicial && sheet.inicial.veiculoId) || veicAtual} sub0={sheet.sub} manut0={sheet.manut} inicial={sheet.inicial} precos={precosGuardados()} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "recibo" && <Suspense fallback={null}><ReciboSheet key={sheet.pid + (sheet.cid || "")} db={db} conta={conta} pid={sheet.pid} cid={sheet.cid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "imposto" && <Suspense fallback={null}><ImpostoSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "escolher-recibo" && <EscolherRecibo db={db} onClose={close} act={act} />}
       {sheet && sheet.type === "documentos" && <Suspense fallback={null}><DocumentosSheet key={sheet.pid} db={db} conta={conta} pid={sheet.pid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "meus-dados" && <Suspense fallback={null}><MeusDadosSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "notas" && <Suspense fallback={null}><NotasSheet key={sheet.pid + (sheet.sid || "")} db={db} pid={sheet.pid} sid={sheet.sid} onClose={close} act={act} /></Suspense>}
@@ -6196,7 +5891,7 @@ function App() {
 
 
 // Peças usadas pelas telas carregadas sob demanda (pasta telas/)
-export { IA_CONVERSA, AvinaA, AvinaNome, Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar, voltarDaTela, pagarContaP, despagarContaP, limiteDoApp, TopoInicio, situacao, liquido, useWide, TERMO,
+export { IA_CONVERSA, NOME_MODO, DURACAO_SESSAO, ROTULO, corVars, AvinaA, AvinaNome, Marca, Bolinha, logoPropria, fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, PERFIL, registroPendente, contaDinheiro, Sheet, diaCurto, iniciais, corDe, relativo, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, primeiro, MES_LONGO, HelloRow, saudacao, WeatherChip, Talk, AreaChart, pad, TopBar, CORES, catDe, catVars, CatIcon, MarcaLogo, acharMarca, interpretarFala, CAT_ENTRADA, CATEGORIAS, brlReal, uid, situacaoConta, diffDias, ESTILO, liquidoDia, CalBadge, ajustarVibrar, limparPedidoInstalar, tetosAlerta, gastoPorCat, Ilustra, ProximaConquista, ajudaConquistas, useCamada, servidorAvisos, Confirmar, voltarDaTela, pagarContaP, despagarContaP, limiteDoApp, TopoInicio, situacao, liquido, useWide, TERMO,
   // o app de celular (src/app-nativo-trabalho.js): as regras do consultório sem tela
   registrar, desfazer, sublocacao, sessoesAbertas, cobrancasDoPix, freqNome, reajusteDe, periodoDe, mins, hhmm, INTERVALO_MIN, limitePacApp, csvDoMes };
 

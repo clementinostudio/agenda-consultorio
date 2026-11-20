@@ -135,7 +135,7 @@ export function textoContrato(c) {
   const pr = c.prof || {}, pa = c.paciente || {}, resp = pa.responsavel && pa.responsavel.nome ? pa.responsavel : null;
   const quem = PROFISSIONAL[pr.profissao] || (pr.profissao ? `profissional de ${pr.profissao.toLowerCase()}` : "");
   const end = semPonto(pr.endereco), sala = String(c.sala || "").trim();
-  const mod = c.modalidade || "presencial", online = mod !== "presencial", presencial = mod !== "online";
+  const mod = c.modalidade || "presencial", presencial = mod !== "online";
   const freq = semPonto(c.frequencia), freqTxt = FREQ_TXT[freq.toLowerCase()] || freq;
   const valor = Number(c.valor) || 0, horas = Number(c.faltas && c.faltas.horas) || 24;
   const reaj = semPonto(c.reajuste), pag = semPonto(c.pagamento);

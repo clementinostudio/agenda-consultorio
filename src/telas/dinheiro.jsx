@@ -1,8 +1,8 @@
 // Dinheiro rendendo (modo Pessoal): caixinhas com meta, "à vista ou parcelado?" e modo viagem.
 // Usa as cotações de src/cotacoes.js (CDI, IPCA e câmbio, gratuitos e guardados para funcionar offline).
 import React, { useState } from "react";
-import { I, Sheet, Field, Seg, Toggle, ConfirmButton, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, soma, MES_LONGO, diffDias, ESCONDER, Money, relativo, Ilustra } from "../App.jsx";
-import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, fmtPct, quandoTxt, IOF_CARTAO } from "../cotacoes.js";
+import { I, Sheet, Field, Seg, Toggle, ConfirmButton, brl, num, soNumero, fmtNum, uid, todayISO, soma, MES_LONGO, diffDias, ESCONDER, Money, relativo, Ilustra } from "../App.jsx";
+import { useCotacoes, MOEDAS, CODIGOS, fmtMoeda, fmtTaxa, fmtPct, quandoTxt, IOF_CARTAO } from "../cotacoes.js";
 import { useInflacao, acumulado, INDICES, nomeMesCurto } from "../inflacao.js";
 import { Anel } from "./visual.jsx";
 

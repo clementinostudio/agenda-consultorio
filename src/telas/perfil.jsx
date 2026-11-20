@@ -1,17 +1,16 @@
 // Parte do app carregada sob demanda (só quando é aberta). Gerado a partir do App.jsx.
-import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
-import PORQUINHO from "../assets/porquinho.webp";
-import { createPortal, flushSync } from "react-dom";
-import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada, Marca, Confirmar } from "../App.jsx";
+import React, { Suspense, useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { fmtNum, AVISOS_PADRAO, num, idadeDe, termoDe, I, pushLigado, Avatar, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS, ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada, Confirmar } from "../App.jsx";
 import { DadosRecibo } from "./consultorio.jsx";
 import { AvinaNome } from "../App.jsx";
 import { AssinaturaPagina, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaAssin } from "./assinatura.jsx";
-import { GradeHorarios, LinkAgendamento, AgendaNoCelular, linkDo } from "./agendamento.jsx";
+import { GradeHorarios, LinkAgendamento, AgendaNoCelular } from "./agendamento.jsx";
 import { gradeDo, resumoGrade, periodosIniciais } from "../horarios.js";
 import { linkSuporte } from "../plano.js";
 import { lerWhatsapp, mascaraWhatsapp, mostrarWhatsapp } from "../whatsapp.js";
 import { nivelDe, TRILHAS } from "../conquistas.js";
-import { noApp, appIOS, chamarApp } from "../app-nativo.js";
+import { noApp, chamarApp } from "../app-nativo.js";
 
 const TEXTO_EXCLUIR = "O login, o perfil e todos os dados saem da nuvem e deste aparelho, de vez. Se você assina o Avina Pro, a assinatura é cancelada junto (nos 7 dias da garantia, devolvemos o valor). Isso não dá para desfazer.";
 
@@ -183,40 +182,10 @@ function PerfilPage({ db, conta, tema, inicio: pedido, onClose, act, nuvem }) {
   const textoPermissao = { granted: "Permitidas", denied: "Bloqueadas", default: "Ainda não pedidas", indisponivel: "Indisponíveis neste navegador" };
 
   // Números do cartão
-  const hoje = todayISO(), chave = hoje.slice(0, 7);
-  const ativos = db.patients.filter(p => p.active).length;
-  const sessMes = db.sessions.filter(s => s.status === "done" && s.date.startsWith(chave)).length;
-  const liqMes = liquidoMes(db, chave);
-  let seguidos = 0;
-  for (let i = 1; i < 60; i++) { const d = addDays(hoje, -i); if (!itensDoDia(db, d).length) continue; if ((db.fechados || {})[d]) seguidos++; else break; }
   const idade = idadeDe(nasc);
   const T = termoDe(termo);
-  const diasTxt = diasT.length === 5 && [1, 2, 3, 4, 5].every(d => diasT.includes(d)) ? "seg a sex" : [1, 2, 3, 4, 5, 6, 0].filter(d => diasT.includes(d)).map(d => DIA_CURTO[d].toLowerCase()).join(", ");
-  const temaNome = { dark: "Escuro", light: "Claro", auto: "Do aparelho" }[tema.modo];
 
-  const secoes = [
-    { grupo: "Você", itens: [
-      { id: "dados", ic: <I.user />, t: "Dados pessoais", v: [profissao, cidade].filter(Boolean).join(" · ") || "Nome, foto e cidade" },
-      { id: "pix", ic: <I.key />, t: "Chave Pix", v: pix ? "Entra nas cobranças" : "Ainda não colocou" },
-    ] },
-    ...(consult ? [{ grupo: "Consultório", itens: [
-      { id: "agenda", ic: <I.cal />, t: "Agenda", v: diasT.length ? `${diasTxt} · ${hIni}h às ${hFim}h` : "Escolha os dias em que atende" },
-      { id: "calendario", ic: <I.cal />, t: "Agenda no celular", v: pf.agendaCal && pf.agendaCal.token ? "Ligada no Google ou no iPhone" : "Ver as sessões no Google Agenda ou no iPhone" },
-      { id: "link", ic: <I.share />, t: "Link de agendamento e sua página", v: (db.pedidos || []).length ? `${db.pedidos.length} ${db.pedidos.length === 1 ? "pedido esperando" : "pedidos esperando"}` : linkDo(pf).ativo ? "O paciente escolhe o horário" : "Desligado" },
-      { id: "dinheiro", ic: <I.wallet />, t: "Valores e metas", v: meta ? `Meta de ${brl(num(meta))}` : "Sem meta" },
-      { id: "docs", ic: <I.receipt />, t: "Recibos e imposto", v: pf.doc && pf.doc.registro ? "Seus dados prontos para o recibo" : "CPF, registro e assinatura" },
-    ] }] : []),
-    { grupo: "Avisos", itens: [
-      { id: "avisos", ic: <I.bell />, t: "Avisos", v: !avAtivo ? "Desligados" : pushLigado() ? (consult ? `Com o app fechado · ${antec} min antes` : "Com o app fechado") : consult ? `${antec} min antes` : "Ligados" },
-    ] },
-    { grupo: "App", itens: [
-      { id: "visual", ic: <I.sun />, t: "Aparência e fundo", v: temaNome },
-      { id: "pessoal", ic: <I.piggy />, t: "Como você usa o app", v: [consult && "Consultório", pessoal && "Pessoal", lojaU && "Loja"].filter(Boolean).join(" e ").replace(/ e (?=.* e )/, ", ") },
-      noApp ? { id: "trava", ic: <I.lock />, t: "Bloqueio do app", v: appIOS ? "Face ID para abrir o Avina" : "Digital ou rosto para abrir o Avina" }
-        : { id: "app", ic: <I.down />, t: "Instalar e atalhos", v: appInstalado() ? "Instalado" : "Colocar na tela inicial" },
-    ] },
-  ];
-  const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
+  const conq = act.conquistas || [];
   const resAssin = assin.situacao === "ok" ? resumoAssinatura(assin.a) : { texto: assin.situacao === "carregando" ? "Conferindo…" : assin.situacao === "rede" ? "Sem conexão agora" : assin.situacao === "erro" ? "Não deu para abrir agora" : "Precisa da sua conta" };
   const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", calendario: "Agenda no celular", link: "Link e sua página", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos", trava: "Bloqueio do app" }[aba];
 

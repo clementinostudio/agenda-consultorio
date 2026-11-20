@@ -1,7 +1,6 @@
 // Parte do app carregada sob demanda (só quando é aberta). Gerado a partir do App.jsx.
-import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
-import PORQUINHO from "../assets/porquinho.webp";
-import { createPortal, flushSync } from "react-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { vibrar, I } from "../App.jsx";
 
 function Cropper({ src, forma = "circulo", titulo, onDone, onCancel }) {

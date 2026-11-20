@@ -192,7 +192,7 @@ export async function rotaLink(req, env, url, json, ctx, avisar) {
     await env.AVISOS.put(kLim, String(n + 1), { expirationTtl: 2 * 86400 });
     // avisa no celular do profissional (quando os avisos estão ligados lá)
     if (link.push) {
-      const [y, m, d] = data.split("-");
+      const [, m, d] = data.split("-");
       ctx.waitUntil(avisar(link.push, { titulo: "Pedido de horário", corpo: `${conhecido ? "Um paciente quer remarcar" : `${nome.split(" ")[0]} pediu um horário`}: ${d}/${m} às ${hora}. Abra o Avina para responder.`, tag: "pedido-horario" }).catch(() => {}));
     }
     return json({ ok: true });

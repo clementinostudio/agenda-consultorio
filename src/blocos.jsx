@@ -4,9 +4,9 @@ import React, { useState } from "react";
 import { I, Money, brl, soma, todayISO, addDays, MES_LONGO, Ilustra, ESCONDER } from "./App.jsx";
 
 // Botões azuis do topo (rolam para o lado no celular). itens: [{ id, l, ic, f }]
-export function AcoesAzuis({ itens }) {
+export function AcoesAzuis({ itens, tres }) {
   return (
-    <div className="az-acoes" role="group" aria-label="Ações rápidas">
+    <div className={"az-acoes" + (tres ? " tres" : "")} role="group" aria-label="Ações rápidas">
       {itens.map(a => { const Ic = a.ic; return (
         <button key={a.id} type="button" className="az-acao" onClick={a.f}><span className="az-acao-ic"><Ic /></span><span className="az-acao-l">{a.l}</span></button>
       ); })}
@@ -40,6 +40,21 @@ export function GradeAtalhos({ titulo, itens }) {
           </button>
         ); })}
       </div>
+    </section>
+  );
+}
+
+// "Outras ações": linhas arredondadas com o ícone azul, o nome, um selo opcional ("Novo") e a setinha
+export function ListaAcoes({ titulo, itens }) {
+  return (
+    <section className="az-lista" aria-label={titulo || "Outras ações"}>
+      {titulo && <h3 className="az-sec-t">{titulo}</h3>}
+      {itens.map(a => { const Ic = a.ic; return (
+        <button key={a.id} type="button" className="az-lista-i" onClick={a.f}>
+          <span className="az-lista-ic"><Ic /></span><span className="az-lista-t"><b>{a.l}</b>{a.d && <small>{a.d}</small>}</span>
+          {a.selo && <em className="az-selo">{a.selo}</em>}<I.chev />
+        </button>
+      ); })}
     </section>
   );
 }

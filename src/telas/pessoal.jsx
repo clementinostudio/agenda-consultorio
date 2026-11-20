@@ -1,18 +1,16 @@
 // Parte do app carregada sob demanda (só quando é aberta). Gerado a partir do App.jsx.
-import React, { Suspense, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, useDeferredValue, memo } from "react";
-import PORQUINHO from "../assets/porquinho.webp";
-import { createPortal, flushSync } from "react-dom";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, useDeferredValue } from "react";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
 import { ViagemAviso } from "./dinheiro.jsx";
 import { AcoesAzuis, CartaoSaldo, GradeAtalhos, CartaoResumo, noPeriodo } from "../blocos.jsx";
-import { Carrossel, CartoesInicio, Grande } from "./inicio-cartoes.jsx";
-import { CatBolinha, useContagem, Topo, Comparacao, menosMovimento } from "./visual.jsx";
+import { CartoesInicio } from "./inicio-cartoes.jsx";
+import { CatBolinha, Topo, Comparacao } from "./visual.jsx";
 import { SeloBanco, nomeBanco } from "./bancos.jsx";
-import { resumoPessoal, GraficoLinha, BarraCategorias, LinhaCategoria, MES_ABREV, diaMes, eixoDoMes, marcaDoNome, LancRow, acumuladoMes, diasDoMes } from "./resumo.jsx";
+import { resumoPessoal, GraficoLinha, BarraCategorias, LinhaCategoria, MES_ABREV, diaMes, eixoDoMes, LancRow, acumuladoMes, diasDoMes } from "./resumo.jsx";
 import "../pessoal.css";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
 import { logoPropria, lerArquivo, IA_CONVERSA } from "../App.jsx";
-import { todayISO, addDays, MES_LONGO, TopoInicio, saudacao, WeatherChip, Talk, ESCONDER, I, Money, brl, AreaChart, pad, soma, TopBar, CORES, catDe, catVars, CatIcon, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, contaDinheiro, CalBadge, liquidoMes, tetosAlerta, Ilustra, ProximaConquista, servidorAvisos, Confirmar, vibrar } from "../App.jsx";
+import { todayISO, addDays, MES_LONGO, TopoInicio, ESCONDER, I, Money, brl, pad, soma, TopBar, catDe, catVars, CatIcon, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, contaDinheiro, CalBadge, tetosAlerta, Ilustra, Confirmar, vibrar } from "../App.jsx";
 import { saldos as saldosCasa } from "../casa.js";
 
 /* ---------- Logo enquanto digita: sugere as empresas parecidas (mesmo com erro de digitação),
@@ -139,7 +137,6 @@ function previsaoAgora(db) {
   const peso = varAnt > 0 ? 7 : 0;
   const ritmo = (varMes + (varAnt / diasAnt) * peso) / (diaHoje + peso);
   const R = P.renda && P.renda.valor > 0 && !(P.renda.lancados || {})[ch] ? P.renda : null;
-  const pac = id => db.patients.find(p => p.id === id);
   const liq = p => p.price - (p.subletType === "percent" ? p.price * p.sublet / 100 : p.sublet);
   const contas = P.contas.filter(c => !(c.pagas && c.pagas[ch]));
   const atrasadas = contas.filter(c => vencimento(c, ch) < hoje);
@@ -218,30 +215,6 @@ function respostaGastar(db, frase) {
   return `Melhor não agora: mesmo sem nenhum outro gasto, faltariam ${brlReal(v - g.livre)} para fechar o mês.`;
 }
 
-// "Hoje você pode gastar": um cartão do carrossel do Início (logo depois do "Sobrou"). Tocar pergunta à Bolinha.
-function grandeHoje(db, act) {
-  const P = db.pessoal;
-  if (!P.lanc.length && !(P.renda && P.renda.valor)) return null;
-  const g = podeGastar(db), passou = g.hoje < 0, ruim = g.livre <= 0;
-  const rotulo = ruim ? "Mês apertado" : passou ? "Hoje já passou do ideal" : "Hoje você pode gastar";
-  const v = ruim ? 0 : passou ? -g.hoje : g.hoje;
-  const texto = ruim ? `O que entra até o dia ${g.ultimo} não cobre as contas no ritmo de agora. Segure o que der.`
-    : passou ? `Tudo bem: amanhã volta a ${brl(g.porDia)} por dia.`
-    : g.gastoHoje > 0 ? `Já foram ${brl(g.gastoHoje)} hoje. Até o dia ${g.ultimo}, o ideal é ${brl(g.porDia)} por dia.`
-    : `Até o dia ${g.ultimo}, ${brl(g.porDia)} por dia, com as contas pagas.`;
-  const chat = servidorAvisos();
-  return { id: "hoje", el: (
-    <Grande rotulo={rotulo} icone={I.target} cor={ruim ? "var(--rose)" : passou ? "var(--amber)" : "#FF9A4C"} onClick={chat && IA_CONVERSA ? act.abrirChat : () => act.setTab("p-gastos")}
-      falar={`${rotulo}: ${brl(v)}. ${texto}${chat && IA_CONVERSA ? " Toque para perguntar à Bolinha" : ""}`}>
-      <b className={"ini-g-v" + (passou || ruim ? " neg" : "")}><Money v={v} /></b>
-      <span className="ini-g-apoio">{texto}</span>
-      <span className="ini-g-pe">
-        {!ruim && <span className="ini-trilho grosso" style={{ "--bc": passou ? "var(--amber)" : "#FF9A4C" }}><i style={{ width: `${Math.min(100, Math.round(g.gastoHoje / (g.porDia || 1) * 100))}%` }} /></span>}
-        {chat && <span className="ini-g-pergunta"><I.chat />Pergunte: “posso gastar 200 no sábado?”</span>}
-      </span>
-    </Grande>
-  ) };
-}
 
 // Assinaturas esquecidas: o mesmo gasto, com o mesmo valor, em meses diferentes (geralmente vindo do extrato)
 const MARCAS_ASSINATURA = new Set(["netflix", "spotify", "deezer", "youtube", "primevideo", "disney", "max", "globoplay", "paramount", "crunchyroll", "appletv", "applemusic", "amazonmusic", "tidal", "telecine", "premiere", "mubi", "kindle", "audible", "skeelo", "skymais", "claro tv"]);
@@ -863,7 +836,7 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onVoz, onFoto, onS
 
 // pre: dados vindos de um boleto lido ({ nome, valor, dia, cat, codigo })
 function ContaSheet({ inicial, pre, onSave, onDelete, onClose, onLogo, onBoleto, onCopiar }) {
-  const cot = useCotacoes();
+  useCotacoes(); // já busca as cotações, para a conversão de moeda estar pronta
   const [nome, setNome] = useState(inicial ? inicial.nome : pre && pre.nome ? pre.nome : "");
   const codigo = (inicial && inicial.codigo) || (pre && pre.codigo) || "";
   const [escolha, setEscolha] = useState(() => escolhaInicial(inicial));
