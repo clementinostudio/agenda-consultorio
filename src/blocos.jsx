@@ -1,7 +1,7 @@
 // Blocos do Início no jeito dos apps de banco (Asaas): botões azuis grandes no topo, o cartão de saldo, a grade de
 // atalhos, o cartão de resumo com "Este mês | Últimos 30 dias" e o cartão de novidade. Estilos em src/azul.css.
 import React, { useState } from "react";
-import { I, Money, brl, soma, todayISO, addDays, MES_LONGO, Ilustra } from "./App.jsx";
+import { I, Money, brl, soma, todayISO, addDays, MES_LONGO, Ilustra, ESCONDER } from "./App.jsx";
 
 // Botões azuis do topo (rolam para o lado no celular). itens: [{ id, l, ic, f }]
 export function AcoesAzuis({ itens }) {
@@ -14,13 +14,16 @@ export function AcoesAzuis({ itens }) {
   );
 }
 
-// "Saldo": o rótulo, o valor grande em azul e a setinha. sub: uma linha embaixo (opcional)
-export function CartaoSaldo({ rotulo, valor, sub, onClick, neg }) {
+// "Saldo": o rótulo, o valor grande em azul, a setinha e o olho (esconde os valores do app todo). sub: linha embaixo
+export function CartaoSaldo({ rotulo, valor, sub, onClick, neg, act }) {
   return (
-    <button type="button" className="az-saldo" onClick={onClick}>
-      <span className="az-saldo-t"><small>{rotulo}</small><b className={"num" + (neg ? " neg" : "")}><Money v={valor} /></b>{sub && <em>{sub}</em>}</span>
-      <I.chev />
-    </button>
+    <div className="az-saldo">
+      <button type="button" className="az-saldo-main" onClick={onClick}>
+        <span className="az-saldo-t"><small>{rotulo}</small><b className={"num" + (neg ? " neg" : "")}><Money v={valor} /></b>{sub && <em>{sub}</em>}</span>
+        <I.chev />
+      </button>
+      {act && <button type="button" className="az-saldo-olho" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button>}
+    </div>
   );
 }
 

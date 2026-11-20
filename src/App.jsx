@@ -7,7 +7,7 @@
   Para mudar textos, valores padrão, cores de paciente ou categorias, comece pela seção 1 (CONFIGURAÇÃO).
   Os estilos ficam em src/styles.css e as imagens de fundo em public/fundos/.
 */
-import React, { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
+import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import PORQUINHO from "./assets/porquinho.webp";
 import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monograma, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
@@ -22,7 +22,7 @@ import { useLoja, K_CONVITE_LOJA, CORES_PRODUTO } from "./loja.js";
 // a loja respondida no cadastro, esperando a nuvem para ser criada
 const K_LOJA_INICIAL = e => `agenda-loja-inicial:${e}`;
 import { janelasDoDia } from "./horarios.js";
-import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCortesia, emLancamento } from "./plano.js";
+import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCortesia, emLancamento, linkSuporte } from "./plano.js";
 import { lerWhatsapp, mascaraWhatsapp } from "./whatsapp.js";
 import { K_ORIGEM } from "./origem.js";
 import { useLinkAgendamento, linkDo, confirmacaoDe, confirmado, enderecoConfirmar } from "./link.js";
@@ -2482,6 +2482,46 @@ const CarrosselInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m =
 const CartoesInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.CartoesInicio })));
 const PersonalizarInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.PersonalizarInicio })));
 
+// Menu lateral do celular: fica atrás da tela; ao abrir, a tela encolhe e vai para a direita (com as bordas
+// arredondadas) e as opções aparecem à esquerda. go(f): fecha o menu e depois faz f.
+function MenuLateral({ aberto, conta, modo, modos, abas, tab, act, tema, nAlertas, onAlertas, go }) {
+  const extras = modo === "consultorio" ? [
+    { id: "al", l: "Alertas", ic: I.bell, f: onAlertas, n: nAlertas },
+    { id: "link", l: "Link de agendamento", ic: I.share, f: () => act.openSettings("link") },
+    { id: "cal", l: "Agenda no celular", ic: I.calSync, f: () => act.openSettings("calendario") },
+    { id: "espera", l: "Lista de espera", ic: I.clock, f: act.verEspera },
+    { id: "imp", l: "Recibos e imposto", ic: I.receipt, f: act.abrirImposto },
+  ] : modo === "pessoal" ? [
+    { id: "al", l: "Alertas", ic: I.bell, f: onAlertas, n: nAlertas },
+    { id: "casa", l: "Nossa casa", ic: I.home, f: act.abrirCasa },
+    { id: "cx", l: "Caixinhas", ic: I.piggy, f: () => act.abrirCaixinha() },
+    { id: "ext", l: "Importar extrato", ic: I.upload, f: act.importar },
+  ] : [];
+  const Item = ({ x, on }) => { const Ic = x.ic; return (
+    <button type="button" className={"menu-lat-i" + (on ? " on" : "")} onClick={go(x.f)}>
+      {typeof Ic === "function" ? <Ic /> : Ic}<span>{x.l}</span>{x.n > 0 && <em>{x.n > 99 ? "99+" : x.n}</em>}
+    </button>
+  ); };
+  return (
+    <aside className="menu-lat" aria-label="Menu" aria-hidden={!aberto} inert={aberto ? undefined : ""}>
+      <div className="menu-lat-in">
+        <div className="menu-lat-logo"><AvinaNome /></div>
+        <button type="button" className="menu-lat-conta" onClick={go(act.openSettings)}><Avatar conta={conta} /><span><b>{conta.nome}</b><small>Ver perfil e ajustes</small></span><I.chev /></button>
+        {modos.length > 1 && <div className="menu-lat-modos" role="group" aria-label="Área">{modos.map(m => <button key={m} type="button" className={m === modo ? "on" : ""} aria-pressed={m === modo} onClick={go(() => act.setModo(m))}>{NOME_MODO[m]}</button>)}</div>}
+        <nav className="menu-lat-lista">{abas.map(a => <Item key={a.id} x={{ l: a.l, ic: a.ic, n: a.n, f: () => act.setTab(a.id) }} on={tab === a.id} />)}</nav>
+        {extras.length > 0 && <><div className="menu-lat-sep" /><div className="menu-lat-lista">{extras.map(x => <Item key={x.id} x={x} />)}</div></>}
+        <div className="menu-lat-sep" />
+        <div className="menu-lat-lista menu-lat-pe">
+          <Item x={{ l: ESCONDER ? "Mostrar valores" : "Esconder valores", ic: ESCONDER ? I.eye : I.eyeOff, f: act.toggleOculto }} />
+          <Item x={{ l: tema.escuro ? "Modo claro" : "Modo escuro", ic: tema.escuro ? I.sun : I.moon, f: act.trocarTema }} />
+          <a className="menu-lat-i" href={linkSuporte()} target="_blank" rel="noopener"><I.chat /><span>Fale com a gente</span></a>
+          <Item x={{ l: "Sair da conta", ic: I.out, f: act.sair }} />
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 // Trocar de área (Consultório, Pessoal, Loja): uma folha que sobe com um cartão grande para cada área
 const AREAS_INFO = {
   consultorio: { nome: "Consultório", texto: "Agenda, pacientes, cobranças e recibos", ic: "cal", cor: "#2B46FF" },
@@ -2616,7 +2656,7 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
       <TopoInicio conta={conta} act={act} tema={tema} modo="consultorio" now={now} compacto />
       {avisos}
       <AcoesAzuis itens={acoes} />
-      <CartaoSaldo rotulo={`Recebido em ${MES_LONGO[now.getMonth()]}`} valor={recebidoMes} sub={aReceber > 0 ? `${brl(aReceber)} a receber` : "Nada a receber agora"} onClick={() => act.setTab("fin")} />
+      <CartaoSaldo act={act} rotulo={`Recebido em ${MES_LONGO[now.getMonth()]}`} valor={recebidoMes} sub={aReceber > 0 ? `${brl(aReceber)} a receber` : "Nada a receber agora"} onClick={() => act.setTab("fin")} />
       <GradeAtalhos itens={atalhos} />
       {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
       <HojeConsultorio db={db} now={now} act={act} clima={<WeatherChip cidade={pf.cidade} act={act} sessao={prox} />} />
@@ -4543,6 +4583,7 @@ function useTema() {
    15. APP (depois do login)
    ========================================================= */
 I.minus = () => <Svg sw={2.2}><path d="M5 12h14"/></Svg>;
+I.menu = () => <Svg sw={2}><path d="M4 7h16M4 12h16M4 17h11"/></Svg>;
 I.video = () => <Svg><rect x="3" y="6.5" width="13" height="11" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3"/></Svg>;
 I.doc = () => <Svg><path d="M6.5 3h7.5l4.5 4.5V19a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M13.5 3v5h5M8.5 13h7M8.5 16.5h5"/></Svg>;
 I.download = () => <Svg><path d="M12 3.5V15M7.5 10.5L12 15l4.5-4.5"/><path d="M5 17.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-1.5"/></Svg>;
@@ -4850,6 +4891,16 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   // as falas do Pessoal (para os Alertas) moram em telas/pessoal.jsx, que carrega sob demanda
   const [convP, setConvP] = useState(null);
   const [alertas, setAlertas] = useState(false);
+  // menu lateral: guarda onde a página estava, para a tela encolhida mostrar o mesmo pedaço e voltar para ele ao fechar
+  const [menu, setMenu] = useState(false);
+  const menuY = useRef(0);
+  const abrirMenu = () => { menuY.current = window.scrollY; document.documentElement.style.setProperty("--menu-y", `${menuY.current}px`); vibrar("toque"); setMenu(true); };
+  const fecharMenu = () => setMenu(false);
+  const menuGo = f => () => { setMenu(false); if (typeof f === "function") setTimeout(f, 280); };
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle("menu-aberto", menu);
+    if (!menu && menuY.current) window.scrollTo(0, menuY.current);
+  }, [menu]);
   useEffect(() => { if (usaPessoal) import("./telas/pessoal.jsx").then(m => setConvP(() => m.conversaPessoal)).catch(() => {}); }, [usaPessoal]);
   CLIMA = clima;
   const tRef = useRef(null);
@@ -5937,14 +5988,18 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         style={{ transform: `translate(-50%, ${recarregando ? 46 : puxar * .45 + 2}px) rotate(${puxar * 2}deg)`, opacity: recarregando || puxar > 6 ? 1 : 0, transition: puxar ? "opacity .15s" : undefined }}>
         <svg viewBox="0 0 24 24"><circle className="puxar-trilho" cx="12" cy="12" r="8.5" /><circle className="puxar-arco" cx="12" cy="12" r="8.5" pathLength="100" style={{ strokeDashoffset: recarregando ? 70 : 100 - Math.min(1, puxar / 70) * 92 }} /></svg>
       </div>
+      <MenuLateral aberto={menu} conta={conta} modo={modoEf} modos={modos} abas={abas} tab={tabEf} act={act} tema={tema} nAlertas={nAlertas} onAlertas={() => setAlertas(true)} go={menuGo} />
+      <div className="palco">
+      {menu && <><Camada onFechar={fecharMenu} escurece={false} nome="menu" /><button type="button" className="palco-fechar" onClick={fecharMenu} aria-label="Fechar o menu" /></>}
       {/* Barra de cima do celular: fixa e sempre útil (logo, modo, olho e conta). No computador quem faz isso é a barra lateral */}
       <header className={"cab-app" + (rolouCab ? " rolou" : "")}>
         <div className="cab-app-in">
           <VoltarAoApp className="icon-btn cab-ic" />
+          <button className="icon-btn cab-ic cab-menu" onClick={abrirMenu} aria-label="Abrir o menu" aria-expanded={menu}><I.menu /></button>
           <button className="cab-app-logo" onClick={() => { if (tabEf !== inicioDo(modoEf)) act.setTab(inicioDo(modoEf)); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label="Avina, início"><AvinaNome /></button>
           <div className="cab-app-a">
             {doisModos && <button type="button" className="mode-pill cab-modo" onClick={() => { vibrar("toque"); setSheet({ type: "modo" }); }} aria-label={`Área: ${NOME_MODO[modoEf]}. Trocar`}><span className="mode-dot" />{NOME_MODO[modoEf]}<I.chevD /></button>}
-            <button className="icon-btn cab-ic" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>
+            {modoEf === "loja" && <button className="icon-btn cab-ic" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>}
             {modoEf !== "loja" && <button className="icon-btn cab-ic cab-sino" onClick={() => { vibrar("toque"); setAlertas(true); }} aria-label={nAlertas ? `Alertas: ${nAlertas} pedem atenção` : "Alertas"}><I.bell />{nAlertas > 0 && <i className="cab-ponto" />}</button>}
             <Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes" />
           </div>
@@ -5985,6 +6040,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
           </button>}
         </div>
       </nav>
+      </div>
 
       {paineis}
       {sheet && sheet.type === "modo" && <ModoFolha modo={modoEf} modos={modos} act={act} onClose={close} />}

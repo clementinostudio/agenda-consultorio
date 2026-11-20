@@ -400,7 +400,7 @@ function PessoalHome({ db, conta, now, act, tema, avisos }) {
       <TopoInicio conta={conta} act={act} tema={tema} modo="pessoal" now={now} compacto />
       {avisos}
       <AcoesAzuis itens={acoes} />
-      <CartaoSaldo rotulo={r.sobra >= 0 ? `Sobrou em ${MES_LONGO[now.getMonth()]}` : `Passou do que entrou em ${MES_LONGO[now.getMonth()]}`} valor={Math.abs(r.sobra)} neg={r.sobra < 0}
+      <CartaoSaldo act={act} rotulo={r.sobra >= 0 ? `Sobrou em ${MES_LONGO[now.getMonth()]}` : `Passou do que entrou em ${MES_LONGO[now.getMonth()]}`} valor={Math.abs(r.sobra)} neg={r.sobra < 0}
         sub={r.aPagar > 0 ? `${brl(r.aPagar)} em contas a pagar` : "Todas as contas do mês pagas"} onClick={() => act.setTab("p-gastos")} />
       <ViagemAviso db={db} act={act} />
       <GradeAtalhos itens={atalhos} />

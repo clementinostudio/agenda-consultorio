@@ -10,7 +10,7 @@
   --r-xl: 26px; --r-card: 20px; --r-tile: 16px; --r-ctl: 12px; --r-chip: 10px;
   --azul: #2B46FF; --azul-forte: #1F3BEF; --azul-fundo: #1830C8;
   --azul-cartao: linear-gradient(140deg, #3550FF 0%, #2440F2 45%, #1A33CF 100%);
-  --cab-bg: #191919; --cab-ic: rgba(255, 255, 255, .86); --cab-h: 58px;
+  --cab-bg: #191919; --cab-fg: #fff; --cab-ic: rgba(255, 255, 255, .86); --cab-logo: #fff; --cab-pill: rgba(255, 255, 255, .12); --cab-linha: rgba(255, 255, 255, .06); --cab-h: 58px;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]):not([data-app-theme="dark"]) {
@@ -22,7 +22,7 @@
     --sombra-flutua: 0 0 0 1px rgba(16, 24, 40, .05), 0 6px 16px rgba(16, 24, 40, .08), 0 18px 44px rgba(16, 24, 40, .12);
     --accent: #2B46FF; --accent-hi: #2B46FF; --accent-soft: #EBEEFF; --accent-ink: #1F3BEF;
     --side-bg: #FFFFFF; --nav-bg: #FFFFFF;
-    --topo-nevoa: #1F3BEF; --cab-bg: #1F3BEF;
+    --topo-nevoa: #FFFFFF; --cab-bg: #FFFFFF; --cab-fg: var(--fg); --cab-ic: #5B6476; --cab-logo: #2B46FF; --cab-pill: #F2F4F8; --cab-linha: rgba(16, 24, 40, .08);
   }
 }
 :root[data-theme="light"]:not([data-app-theme="dark"]), :root[data-app-theme="light"] {
@@ -34,7 +34,7 @@
   --sombra-flutua: 0 0 0 1px rgba(16, 24, 40, .05), 0 6px 16px rgba(16, 24, 40, .08), 0 18px 44px rgba(16, 24, 40, .12);
   --accent: #2B46FF; --accent-hi: #2B46FF; --accent-soft: #EBEEFF; --accent-ink: #1F3BEF;
   --side-bg: #FFFFFF; --nav-bg: #FFFFFF;
-  --topo-nevoa: #1F3BEF; --cab-bg: #1F3BEF;
+  --topo-nevoa: #FFFFFF; --cab-bg: #FFFFFF; --cab-fg: var(--fg); --cab-ic: #5B6476; --cab-logo: #2B46FF; --cab-pill: #F2F4F8; --cab-linha: rgba(16, 24, 40, .08);
 }
 
 /* cartões: mais redondos, sem borda dura no claro (a sombra macia separa do fundo) */
@@ -296,3 +296,79 @@
 /* a sombra dos botões azuis não pode ser cortada pela faixa que rola (virava um retângulo claro) */
 .az-acoes { padding-top: 6px; padding-bottom: 22px; margin-top: -6px; margin-bottom: -16px !important; }
 .az-acao { box-shadow: 0 8px 16px -4px rgba(43, 70, 255, .28); }
+
+
+/* =========================================================
+   10. Barra de cima clara no modo claro: branca, logo azul (no escuro continua grafite com o logo branco)
+   ========================================================= */
+@media (max-width: 899px) {
+  .cab-app { color: var(--cab-fg); box-shadow: 0 1px 0 var(--cab-linha); }
+  .cab-app.rolou { box-shadow: 0 1px 0 var(--cab-linha), 0 8px 24px rgba(16, 24, 40, .07); }
+  .cab-app-logo, .cab-app-logo .lt-nome { color: var(--cab-logo); }
+  .cab-app-logo .lt-nome path { stroke: var(--cab-logo); }
+  .cab-app .icon-btn.cab-ic { color: var(--cab-ic); }
+  .cab-app .icon-btn.cab-ic:active { background: var(--hover-2); }
+  .cab-app .cab-modo, .cab-app .mode-pill { background: var(--cab-pill); color: var(--cab-fg); }
+  .cab-app .cab-modo .mode-dot { background: var(--accent); }
+  .cab-app .cab-modo svg { color: var(--cab-ic); }
+  .cab-app .me { background: var(--accent); color: #fff; box-shadow: none; }
+}
+/* o Perfil e as páginas de dentro continuam azuis (o topo do Asaas), nos dois temas */
+.pf-hero, .perfil-top.azul { background: #1F3BEF; }
+
+/* =========================================================
+   11. Menu lateral do celular: a tela encolhe e vai para a direita; o menu aparece atrás, à esquerda
+   ========================================================= */
+.menu-lat, .cab-menu { display: none; }
+@media (min-width: 900px) { .palco { display: contents; } }
+@media (max-width: 899px) {
+  .cab-menu { display: grid; margin-left: -8px; }
+  .cab-app-logo { margin-left: 2px; }
+  .palco { position: relative; z-index: 1; min-height: 100vh; min-height: 100dvh; background: var(--bg);
+    transition: transform .5s cubic-bezier(.32, .72, 0, 1), border-radius .5s cubic-bezier(.32, .72, 0, 1), box-shadow .5s ease; }
+  .shell.com-foto .palco { background: transparent; }
+  :root.menu-aberto, :root.menu-aberto body { overflow: hidden; }
+  :root.menu-aberto .palco { position: fixed; inset: 0; overflow: hidden; background: var(--bg); transform-origin: 0 50%;
+    transform: translateX(min(74vw, 300px)) scale(.86); border-radius: 34px; box-shadow: -18px 0 50px rgba(10, 20, 80, .28); }
+  :root.menu-aberto .palco > .app { margin-top: calc(var(--menu-y, 0px) * -1); }
+  .palco-fechar { position: absolute; inset: 0; z-index: 70; background: transparent; cursor: pointer; }
+  /* o menu */
+  .menu-lat { display: block; position: fixed; inset: 0; z-index: 0; overflow-y: auto; visibility: hidden; transition: visibility 0s .5s;
+    background: radial-gradient(120% 60% at 0% 0%, #3A55FF 0%, rgba(58, 85, 255, 0) 60%), linear-gradient(165deg, #2440F2 0%, #1A33CF 60%, #142AA8 100%); color: #fff;
+    padding: calc(env(safe-area-inset-top, 0px) + 22px) 0 calc(env(safe-area-inset-bottom, 0px) + 24px); }
+  :root.menu-aberto .menu-lat { visibility: visible; transition: none; }
+  .menu-lat-in { width: min(70vw, 280px); padding: 0 18px 0 20px; display: flex; flex-direction: column; gap: 6px;
+    opacity: 0; transform: translateX(-28px); transition: opacity .3s ease, transform .5s cubic-bezier(.32, .72, 0, 1); }
+  :root.menu-aberto .menu-lat-in { opacity: 1; transform: none; transition-delay: .06s; }
+  .menu-lat-logo { color: #fff; margin: 4px 0 18px 2px; }
+  .menu-lat-logo .lt-nome { display: block; height: 26px; width: auto; color: #fff; }
+  .menu-lat-logo .lt-nome path { stroke: #fff; }
+  .menu-lat-conta { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; margin: 0 -10px 10px; border-radius: 16px; text-align: left; color: #fff; background: rgba(255, 255, 255, .1); }
+  .menu-lat-conta .me { width: 42px; height: 42px; background: #fff; color: #1F3BEF; box-shadow: none; font-size: 14px; flex: none; }
+  .menu-lat-conta span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .menu-lat-conta b { font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .menu-lat-conta small { font-size: 12.5px; color: rgba(255, 255, 255, .72); }
+  .menu-lat-conta > svg { width: 18px; height: 18px; color: rgba(255, 255, 255, .7); }
+  .menu-lat-modos { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: rgba(0, 0, 0, .16); margin-bottom: 10px; }
+  .menu-lat-modos button { flex: 1; height: 34px; border-radius: 10px; color: rgba(255, 255, 255, .78); font-size: 13.5px; font-weight: 600; }
+  .menu-lat-modos button.on { background: #fff; color: #1F3BEF; }
+  .menu-lat-lista { display: flex; flex-direction: column; gap: 2px; }
+  .menu-lat-i { display: flex; align-items: center; gap: 14px; height: 46px; padding: 0 12px; margin: 0 -12px; border-radius: 14px; color: rgba(255, 255, 255, .86); font-size: 16px; font-weight: 500; text-align: left; text-decoration: none; transition: background-color .15s ease; }
+  .menu-lat-i svg { width: 22px; height: 22px; flex: none; }
+  .menu-lat-i span { flex: 1; }
+  .menu-lat-i em { font-style: normal; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #fff; color: #1F3BEF; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+  .menu-lat-i:active { background: rgba(255, 255, 255, .12); }
+  .menu-lat-i.on { background: rgba(255, 255, 255, .16); color: #fff; font-weight: 600; }
+  .menu-lat-sep { height: 1px; margin: 10px 0; background: rgba(255, 255, 255, .16); }
+  .menu-lat-pe .menu-lat-i { height: 42px; font-size: 15px; color: rgba(255, 255, 255, .74); }
+  @media (prefers-reduced-motion: reduce) { .palco, .menu-lat-in { transition: none; } }
+}
+/* saldo com o olho no canto (o olho saiu da barra de cima no celular) */
+.az-saldo { position: relative; display: block; padding: 0; }
+.az-saldo-main { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 20px 20px 20px 22px; border-radius: inherit; }
+.az-saldo-olho { position: absolute; top: 12px; right: 52px; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; color: var(--muted); }
+.az-saldo-olho svg { width: 21px; height: 21px; }
+.az-saldo-olho:active { background: var(--hover-2); }
+.menu-lat-conta .me { display: grid; place-items: center; }
+.az-saldo-main > svg { width: 24px; height: 24px; color: var(--faint); flex: none; }
+.az-saldo-main .az-saldo-t { padding-right: 36px; }

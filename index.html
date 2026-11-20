@@ -14,6 +14,9 @@
     <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
     <meta name="application-name" content="Avina" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- No modo claro (o principal), a barra de status do iPhone fica clara com o texto escuro, junto da barra de cima branca.
+         O iPhone lê isto ao abrir o app: por isso é escolhido aqui, antes de tudo, pelo tema guardado -->
+    <script>try{var t=localStorage.getItem("agenda-tema")||"light";if(t==="light"||(t==="auto"&&matchMedia("(prefers-color-scheme: light)").matches))document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').setAttribute("content","default")}catch(e){}</script>
     <meta name="apple-mobile-web-app-title" content="Avina" />
     <link rel="icon" href="icons/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
