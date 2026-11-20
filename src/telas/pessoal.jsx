@@ -4,6 +4,7 @@ import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
 import { ViagemAviso } from "./dinheiro.jsx";
+import { AcoesAzuis, CartaoSaldo, GradeAtalhos, CartaoResumo, noPeriodo } from "../blocos.jsx";
 import { Carrossel, CartoesInicio, Grande } from "./inicio-cartoes.jsx";
 import { CatBolinha, useContagem, Topo, Comparacao, menosMovimento } from "./visual.jsx";
 import { SeloBanco, nomeBanco } from "./bancos.jsx";
@@ -364,33 +365,55 @@ function BillRow({ c, chave, act }) {
 /* ---------- tela inicial: o topo, o carrossel e os cartões que a pessoa escolhe (src/telas/inicio-cartoes.jsx) ---------- */
 // O que pede atenção (o resumo, a viagem, a casa) fica antes dos cartões; a previsão e a próxima conquista, depois.
 function PessoalHome({ db, conta, now, act, tema, avisos }) {
-  const falas = conversaPessoal(db, act);
-  const agora = (
-    <div className="ini-agora">
-      <ViagemAviso db={db} act={act} />
-      <div className="acts narrow-only">
-        {IA_CONVERSA && <button className="act" onClick={act.falarGasto}><i><I.mic /></i>Falar</button>}
-        <button className="act" onClick={() => act.novoLanc("saida")}><i><I.minus /></i>Gasto</button>
-        <button className="act" onClick={() => act.novoLanc("entrada")}><i><I.plus /></i>Entrada</button>
-        <button className="act" onClick={() => act.novaConta()}><i><I.bill /></i>Conta fixa</button>
-      </div>
-      <Talk falas={falas} />
-      {IA_CONVERSA && servidorAvisos() && <div className="small-acts"><button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button></div>}
-      <CasaCartao casa={act.casa} onAbrir={act.abrirCasa} />
-    </div>
-  );
+  const ch = todayISO().slice(0, 7), r = resumoPessoal(db, ch), P = db.pessoal;
+  const acoes = [
+    { id: "gasto", l: "Anotar gasto", ic: I.minus, f: () => act.novoLanc("saida") },
+    { id: "entrada", l: "Anotar entrada", ic: I.plus, f: () => act.novoLanc("entrada") },
+    { id: "conta", l: "Nova conta fixa", ic: I.bill, f: () => act.novaConta() },
+    { id: "boleto", l: "Ler boleto", ic: I.scan, f: () => act.lerBoleto() },
+    { id: "extrato", l: "Importar extrato", ic: I.upload, f: act.importar },
+  ];
+  const atalhos = [
+    { id: "gastos", l: "Gastos", ic: I.chart, f: () => act.setTab("p-gastos") },
+    { id: "contas", l: "Contas", ic: I.bill, f: () => act.setTab("p-contas"), n: r.abertas.length },
+    { id: "transp", l: "Transporte", ic: I.car, f: act.abrirTransporte },
+    { id: "casa", l: "Nossa casa", ic: I.home, f: act.abrirCasa },
+    { id: "caixinhas", l: "Caixinhas", ic: I.piggy, f: () => act.abrirCaixinha() },
+    { id: "tetos", l: "Tetos", ic: I.target, f: () => act.abrirTeto() },
+    { id: "extrato", l: "Extrato", ic: I.upload, f: act.importar },
+    { id: "boleto", l: "Boleto", ic: I.scan, f: () => act.lerBoleto() },
+  ];
+  const linhas = per => {
+    const f = noPeriodo(per);
+    const ent = P.lanc.filter(l => l.tipo === "entrada" && f(l.data)), sai = P.lanc.filter(l => l.tipo === "saida" && f(l.data));
+    const pagas = [], abertas = r.abertas;
+    P.contas.forEach(c => Object.entries(c.pagas || {}).forEach(([, d]) => { if (typeof d === "string" && f(d)) pagas.push(c); }));
+    return [
+      { t: "Entradas", rotN: "Lançamentos", n: ent.length, v: soma(ent, l => l.valor), cor: "verde" },
+      { t: "Gastos", rotN: "Lançamentos", n: sai.length, v: soma(sai, l => l.valor), cor: "azul" },
+      { t: "Contas pagas", rotN: "Contas", n: pagas.length, v: soma(pagas, c => c.valor), cor: "laranja" },
+      { t: "Contas a pagar no mês", rotN: "Contas", n: abertas.length, v: soma(abertas, c => c.valor), cor: "vermelho" },
+    ];
+  };
   return (
-    <div className="page ini">
-      <TopoInicio conta={conta} act={act} tema={tema} modo="pessoal" now={now} />
+    <div className="page ini az-ini">
+      <TopoInicio conta={conta} act={act} tema={tema} modo="pessoal" now={now} compacto />
       {avisos}
-      <WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} />
-      <Carrossel db={db} modo="pessoal" act={act} extras={[grandeHoje(db, act)]} />
+      <AcoesAzuis itens={acoes} />
+      <CartaoSaldo rotulo={r.sobra >= 0 ? `Sobrou em ${MES_LONGO[now.getMonth()]}` : `Passou do que entrou em ${MES_LONGO[now.getMonth()]}`} valor={Math.abs(r.sobra)} neg={r.sobra < 0}
+        sub={r.aPagar > 0 ? `${brl(r.aPagar)} em contas a pagar` : "Todas as contas do mês pagas"} onClick={() => act.setTab("p-gastos")} />
+      <ViagemAviso db={db} act={act} />
+      <GradeAtalhos itens={atalhos} />
+      <CasaCartao casa={act.casa} onAbrir={act.abrirCasa} />
+      <CartaoResumo titulo="Resumo do mês" onAbrir={() => act.setTab("p-gastos")} linhas={linhas} />
       <CartoesInicio db={db} modo="pessoal" act={act} now={now}
-        antes={[{ id: "agora", el: agora, h: 200 + falas.length * 90 + (act.casa && act.casa.casa ? 80 : 0) }]}
-        depois={[{ id: "previsao", el: <CartaoPrevisao db={db} />, h: 330 }, { id: "conquista", el: <ProximaConquista act={act} trilhas={["dinheiro", "app"]} />, h: 110 }]} />
+        depois={[{ id: "previsao", el: <CartaoPrevisao db={db} />, h: 330 }]} />
     </div>
   );
 }
+
+// As falas do Início do Pessoal agora moram nos Alertas (o sino da barra de cima)
+export { conversaPessoal };
 
 // Para onde foi o dinheiro: compara com o mês anterior (no mês corrente, só até o mesmo dia, para ser justo)
 function ParaOndeFoi({ db, chave, act }) {

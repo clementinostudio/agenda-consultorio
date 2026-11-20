@@ -26,6 +26,7 @@ import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCor
 import { lerWhatsapp, mascaraWhatsapp } from "./whatsapp.js";
 import { K_ORIGEM } from "./origem.js";
 import { useLinkAgendamento, linkDo, confirmacaoDe, confirmado, enderecoConfirmar } from "./link.js";
+import { AcoesAzuis, CartaoSaldo, GradeAtalhos, CartaoNovidade, CartaoResumo, noPeriodo } from "./blocos.jsx";
 import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
 
@@ -2481,6 +2482,53 @@ const CarrosselInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m =
 const CartoesInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.CartoesInicio })));
 const PersonalizarInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.PersonalizarInicio })));
 
+// Trocar de área (Consultório, Pessoal, Loja): uma folha que sobe com um cartão grande para cada área
+const AREAS_INFO = {
+  consultorio: { nome: "Consultório", texto: "Agenda, pacientes, cobranças e recibos", ic: "cal", cor: "#2B46FF" },
+  pessoal: { nome: "Pessoal", texto: "Gastos, contas, casa e transporte", ic: "wallet", cor: "#12B76A" },
+  loja: { nome: "Loja", texto: "Caixa do dia, gastos e equipe", ic: "bag", cor: "#F79009" },
+};
+function ModoFolha({ modo, modos, act, onClose }) {
+  const ir = m => { vibrar("toque"); onClose(); if (m !== modo) setTimeout(() => act.setModo(m), 180); };
+  return (
+    <Sheet title="Trocar de área" sub="O app muda inteiro: o Início, as abas e os atalhos." onClose={onClose}>
+      <div className="modo-cartoes">
+        {modos.map((m, k) => { const a = AREAS_INFO[m], Ic = I[a.ic]; return (
+          <button key={m} type="button" className={"modo-cartao" + (m === modo ? " on" : "")} style={{ "--mc": a.cor, animationDelay: `${k * 50}ms` }} onClick={() => ir(m)} aria-pressed={m === modo}>
+            <span className="modo-cartao-ic"><Ic /></span>
+            <span className="modo-cartao-t"><b>{a.nome}</b><small>{a.texto}</small></span>
+            <span className="modo-cartao-ok">{m === modo ? <I.check /> : <I.chev />}</span>
+          </button>
+        ); })}
+      </div>
+      <button className="btn text" onClick={() => { onClose(); setTimeout(() => act.openSettings("pessoal"), 200); }}>Ligar ou desligar áreas</button>
+    </Sheet>
+  );
+}
+
+// Alertas: o que antes ficava no "Seu resumo" do Início, numa tela própria (o sino da barra de cima), no jeito da
+// lista de alertas dos apps de banco: o que pede atenção primeiro (com o botão para resolver), depois o resto.
+function AlertasTela({ falas, onClose }) {
+  useCamada(onClose, { escurece: false, nome: "alertas" });
+  const acao = falas.filter(f => f.acao), info = falas.filter(f => !f.acao);
+  const Linha = ({ f }) => (
+    <div className="al-linha">
+      <span className={"al-ic" + (f.acao ? " forte" : "")}>{f.acao ? <I.bell /> : <I.alert />}</span>
+      <div className="al-tx"><p>{f.txt}</p>{f.acao && <button className="al-acao" onClick={() => { onClose(); setTimeout(f.acao.fn, 200); }}>{f.acao.l}<I.chev /></button>}</div>
+    </div>
+  );
+  return createPortal(
+    <div className="tela-cheia" role="dialog" aria-modal="true" aria-label="Alertas">
+      <div className="tela-cheia-in">
+        <button className="tela-voltar" onClick={onClose} aria-label="Voltar"><I.setaL /></button>
+        <h1 className="tela-t">Alertas</h1>
+        {!falas.length && <div className="al-vazio"><Ilustra n="cafe" /><b>Tudo em dia</b><span>Quando algo pedir a sua atenção, aparece aqui.</span></div>}
+        {acao.length > 0 && <><h2 className="al-grupo">Pede atenção</h2>{acao.map((f, i) => <Linha key={"a" + i} f={f} />)}</>}
+        {info.length > 0 && <><h2 className="al-grupo">Para saber</h2>{info.map((f, i) => <Linha key={"i" + i} f={f} />)}</>}
+      </div>
+    </div>, document.body);
+}
+
 // O dia no topo do Início: quantas sessões, quanto entra, a próxima (com o "Entrar" da sala online) e a linha do dia
 function HojeConsultorio({ db, now, act, clima }) {
   const t = todayISO(), nm = agoraMin(now);
@@ -2527,39 +2575,55 @@ function HojeConsultorio({ db, now, act, clima }) {
 }
 
 function HomeTab({ db, conta, now, act, tema, avisos }) {
-  const t = todayISO(), nm = agoraMin(now);
-  const falas = conversa(db, now, act, conta.perfil);
+  const t = todayISO(), ch = t.slice(0, 7), nm = agoraMin(now);
   const atrasados = db.patients.filter(p => p.active && p.nextDate < t).sort((a, b) => a.nextDate.localeCompare(b.nextDate));
   const prox = itensDoDia(db, t).filter(i => i.kind === "next").find(i => mins(i.time) + DURACAO_SESSAO > nm);
-  // o que pede atenção agora: o resumo, os atalhos, as sessões sem marcar e a próxima sessão (fica antes dos cartões)
-  const agora = (
-    <div className="ini-agora">
-      <Talk falas={falas} />
-      <div className="small-acts">
-        {IA_CONVERSA && servidorAvisos() && <button className="chip-btn" onClick={act.abrirChat}><I.chat />Perguntar à Bolinha</button>}
-        <button className="chip-btn" onClick={act.agora}><I.target />Só o agora</button>
-        <button className="chip-btn" onClick={act.fecharDia}><I.moon />{(db.fechados || {})[t] ? "Dia fechado ✓" : "Fechar o dia"}</button>
-        <button className="chip-btn" onClick={act.revisao}><I.chart />Revisão da semana</button>
-      </div>
-      {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
-      <div className="acts narrow-only">
-        <button className="act" onClick={act.novoPaciente}><i><I.plus /></i>{TERMO.S}</button>
-        <button className="act" onClick={() => act.setTab("agenda")}><i><I.cal /></i>Agenda</button>
-        <button className="act" onClick={() => act.setTab("fin")}><i><I.send /></i>Cobrar</button>
-      </div>
-    </div>
-  );
+  const cs = db.charges.filter(c => !c.hidden);
+  const recebidoMes = soma(cs.filter(c => c.paid && (c.paidAt || "").startsWith(ch)), c => c.amount);
+  const aReceber = soma(cs.filter(c => !c.paid), c => c.amount);
+  const amanha = addDays(t, 1), nPedidos = (db.pedidos || []).length;
+  const acoes = [
+    { id: "pac", l: `Novo ${TERMO.s}`, ic: I.plus, f: act.novoPaciente },
+    { id: "cobrar", l: "Cobrar", ic: I.send, f: () => act.setTab("fin") },
+    { id: "conf", l: "Confirmar amanhã", ic: I.check, f: () => act.confirmar(amanha) },
+    { id: "link", l: "Link de agendamento", ic: I.share, f: () => act.openSettings("link") },
+    { id: "livres", l: "Horários livres", ic: I.clock, f: act.livres },
+  ];
+  const atalhos = [
+    { id: "agenda", l: "Agenda", ic: I.cal, f: () => act.setTab("agenda") },
+    { id: "pac", l: TERMO.P, ic: I.users, f: () => act.setTab("pac") },
+    { id: "fin", l: "Cobranças", ic: I.money, f: () => act.setTab("fin"), n: cs.filter(c => !c.paid).length },
+    { id: "pedidos", l: "Pedidos", ic: I.bell, f: nPedidos ? act.abrirPedidos : () => act.openSettings("link"), n: nPedidos },
+    { id: "fechar", l: "Fechar o dia", ic: I.moon, f: act.fecharDia },
+    { id: "agora", l: "Só o agora", ic: I.target, f: act.agora },
+    { id: "revisao", l: "Revisão", ic: I.chart, f: act.revisao },
+    { id: "imposto", l: "Imposto", ic: I.receipt, f: act.abrirImposto },
+  ];
+  const linhas = per => {
+    const f = noPeriodo(per), limite = addDays(t, -7);
+    const rec = cs.filter(c => c.paid && f(c.paidAt)), feitas = db.sessions.filter(s => s.status === "done" && f(s.date));
+    const abertas = cs.filter(c => !c.paid && f(c.createdAt)), atras = abertas.filter(c => c.createdAt < limite), aguard = abertas.filter(c => c.createdAt >= limite);
+    return [
+      { t: "Recebidas", rotN: "Cobranças", n: rec.length, v: soma(rec, c => c.amount), cor: "verde" },
+      { t: "Sessões atendidas", rotN: "Sessões", n: feitas.length, v: soma(feitas, s => s.price - s.sublet), cor: "azul" },
+      { t: "Aguardando pagamento", rotN: "Cobranças", n: aguard.length, v: soma(aguard, c => c.amount), cor: "laranja" },
+      { t: "Atrasadas (mais de 7 dias)", rotN: "Cobranças", n: atras.length, v: soma(atras, c => c.amount), cor: "vermelho" },
+    ];
+  };
+  const pf = conta.perfil || {}, temLink = !!(pf.link && pf.link.endereco), temCal = !!(pf.agendaCal && pf.agendaCal.token);
   return (
-    <div className="page ini">
+    <div className="page ini az-ini">
       <TopoInicio conta={conta} act={act} tema={tema} modo="consultorio" now={now} compacto />
       {avisos}
-      <HojeConsultorio db={db} now={now} act={act} clima={<WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} sessao={prox} />} />
-      <Suspense fallback={<div className="ini-car-espera" />}><CarrosselInicio db={db} modo="consultorio" act={act} meta={conta.perfil && conta.perfil.meta} /></Suspense>
-      <Suspense fallback={agora}>
-        <CartoesInicio db={db} modo="consultorio" act={act} now={now}
-          antes={[{ id: "agora", el: agora, h: 380 + falas.length * 90 + atrasados.length * 190 }]}
-          depois={[{ id: "conquista", el: <ProximaConquista act={act} trilhas={["rotina", "consultorio", "metas", "app", "seguranca"]} />, h: 110 }]} />
-      </Suspense>
+      <AcoesAzuis itens={acoes} />
+      <CartaoSaldo rotulo={`Recebido em ${MES_LONGO[now.getMonth()]}`} valor={recebidoMes} sub={aReceber > 0 ? `${brl(aReceber)} a receber` : "Nada a receber agora"} onClick={() => act.setTab("fin")} />
+      <GradeAtalhos itens={atalhos} />
+      {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
+      <HojeConsultorio db={db} now={now} act={act} clima={<WeatherChip cidade={pf.cidade} act={act} sessao={prox} />} />
+      {!temLink ? <CartaoNovidade icone={I.share} titulo="Seu link de agendamento" texto="Coloque na bio do Instagram: quem chega vê a sua página e já pede um horário." onClick={() => act.openSettings("link")} />
+        : !temCal ? <CartaoNovidade icone={I.cal} titulo="Sessões no Google Agenda" texto="Veja a agenda do Avina junto com o resto do seu dia, no Google ou no iPhone." onClick={() => act.openSettings("calendario")} />
+        : null}
+      <CartaoResumo titulo="Resumo das cobranças" onAbrir={() => act.setTab("fin")} linhas={linhas} />
     </div>
   );
 }
@@ -4783,6 +4847,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     return () => clearTimeout(t);
   }, [tourVisto, sheet, modoEf, db.patients.length]);
   const vozApi = useRef({});
+  // as falas do Pessoal (para os Alertas) moram em telas/pessoal.jsx, que carrega sob demanda
+  const [convP, setConvP] = useState(null);
+  const [alertas, setAlertas] = useState(false);
+  useEffect(() => { if (usaPessoal) import("./telas/pessoal.jsx").then(m => setConvP(() => m.conversaPessoal)).catch(() => {}); }, [usaPessoal]);
   CLIMA = clima;
   const tRef = useRef(null);
   // Clima real; atualiza a cada 20 min com o app aberto e ao voltar para ele
@@ -5855,7 +5923,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   );
   if (!saindo) paineisCong.current = paineis;
 
-  const rolouCab = useRolouTitulo(6); // a barra de cima ganha uma sombra suave quando o conteúdo passa por baixo dela
+  const rolouCab = useRolouTitulo(6);
+  const falasAlerta = modoEf === "consultorio" ? conversa(db, now, act, perfil) : modoEf === "pessoal" && convP ? convP(db, act) : [];
+  const nAlertas = falasAlerta.filter(f => f.acao).length; // a barra de cima ganha uma sombra suave quando o conteúdo passa por baixo dela
   // o que pede atenção logo que a pessoa entra (fica abaixo da saudação)
   const avisosInicio = <><AvisoNotificacoes conta={conta} modo={modoEf} act={act} />{avisoPlano0 && <AvisoCortesia fase={avisoPlano0} conta={conta} db={db} modo={modoEf} onPlanos={() => act.openSettings("assinatura")} />}</>;
   return (
@@ -5873,8 +5943,9 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
           <VoltarAoApp className="icon-btn cab-ic" />
           <button className="cab-app-logo" onClick={() => { if (tabEf !== inicioDo(modoEf)) act.setTab(inicioDo(modoEf)); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label="Avina, início"><AvinaNome /></button>
           <div className="cab-app-a">
-            {doisModos && <ModeSwitch modo={modoEf} setModo={act.setModo} modos={modos} />}
+            {doisModos && <button type="button" className="mode-pill cab-modo" onClick={() => { vibrar("toque"); setSheet({ type: "modo" }); }} aria-label={`Área: ${NOME_MODO[modoEf]}. Trocar`}><span className="mode-dot" />{NOME_MODO[modoEf]}<I.chevD /></button>}
             <button className="icon-btn cab-ic" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>
+            {modoEf !== "loja" && <button className="icon-btn cab-ic cab-sino" onClick={() => { vibrar("toque"); setAlertas(true); }} aria-label={nAlertas ? `Alertas: ${nAlertas} pedem atenção` : "Alertas"}><I.bell />{nAlertas > 0 && <i className="cab-ponto" />}</button>}
             <Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes" />
           </div>
         </div>
@@ -5916,6 +5987,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       </nav>
 
       {paineis}
+      {sheet && sheet.type === "modo" && <ModoFolha modo={modoEf} modos={modos} act={act} onClose={close} />}
+      {alertas && <AlertasTela falas={falasAlerta} onClose={() => setAlertas(false)} />}
       {foco && <Agora db={db} conta={conta} now={now} onClose={() => setFoco(false)} act={act} />}
       {tourVisto && !tourVisto[modoEf] && tabEf === inicioDo(modoEf) && !sheet && !festa.length && !foco && !vozAtiva && <Suspense fallback={null}><Tour key={modoEf} modo={modoEf} termo={TERMO} doisModos={doisModos} onFim={() => fimTour(modoEf)} /></Suspense>}
 

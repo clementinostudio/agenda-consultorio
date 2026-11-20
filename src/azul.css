@@ -90,71 +90,27 @@
 }
 
 /* =========================================================
-   3. Barra de baixo do celular: branca, flutuante e com os nomes
+   3. Barra de baixo do celular: branca, presa embaixo, com os nomes
    ========================================================= */
 @media (max-width: 899px) {
-  :root { --barra-h: 64px; }
-  .shell .nav { left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 0; border-radius: 24px; background: var(--surface);
-    box-shadow: 0 0 0 1px var(--line), 0 10px 30px rgba(16, 24, 40, .12); -webkit-backdrop-filter: none; backdrop-filter: none; }
-  .shell .nav-in { height: var(--barra-h); padding: 6px; gap: 2px; max-width: 520px; }
-  .shell .nv { border-radius: 18px; gap: 3px; color: var(--faint); }
-  .shell .nv .lb { position: static; width: auto; height: auto; overflow: visible; clip: auto; font-size: 11px; font-weight: 600; letter-spacing: -.005em; line-height: 1; }
-  .shell .nv svg { width: 23px; height: 23px; }
-  .shell .nv-ic { width: 52px; height: 30px; border-radius: 15px; transition: background-color .2s ease, color .2s ease; }
-  .shell .nv.on { color: var(--accent-ink); }
-  .shell .nv.on .nv-ic { background: var(--accent-soft); color: var(--accent); }
+  :root { --barra-h: 62px; }
+  .shell .nav { left: 0; right: 0; bottom: 0; padding: 0 0 env(safe-area-inset-bottom, 0px); border-radius: 0; background: var(--surface);
+    box-shadow: 0 -1px 0 var(--line), 0 -6px 20px rgba(16, 24, 40, .05); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .shell .nav-in { height: var(--barra-h); padding: 0 6px; gap: 0; max-width: 560px; }
+  .shell .nv { gap: 4px; color: var(--faint); border-radius: 0; }
+  .shell .nv .lb { position: static; width: auto; height: auto; overflow: visible; clip: auto; font-size: 11.5px; font-weight: 600; letter-spacing: -.005em; line-height: 1; }
+  .shell .nv svg { width: 24px; height: 24px; }
+  .shell .nv-ic { width: auto; height: 26px; background: none !important; }
+  .shell .nv.on { color: var(--accent); }
+  .shell .nv.on::before { content: ""; position: absolute; top: 0; left: 50%; width: 32px; height: 3px; margin-left: -16px; border-radius: 0 0 3px 3px; background: var(--accent); animation: nv-risco .25s var(--ease-entra, ease); }
+  @keyframes nv-risco { from { transform: scaleX(0); } }
   .shell .nv.on .nv-ic::after { display: none; }
   .shell .nv:active { transform: scale(.94); }
-  .shell .nav .badge { top: -4px; left: calc(50% + 8px); min-width: 17px; height: 17px; border-radius: 9px; padding: 0 4px; background: #F04438; color: #fff; font-size: 10.5px; font-weight: 700; box-shadow: 0 0 0 2px var(--surface); }
-  .app { padding-bottom: calc(var(--barra-h) + 34px + env(safe-area-inset-bottom, 0px)); }
+  .shell .nav .badge { top: -5px; left: calc(50% + 6px); min-width: 17px; height: 17px; border-radius: 9px; padding: 0 4px; background: #F04438; color: #fff; font-size: 10.5px; font-weight: 700; box-shadow: 0 0 0 2px var(--surface); }
+  .app { padding-bottom: calc(var(--barra-h) + 28px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (prefers-color-scheme: dark) { :root:not([data-app-theme="light"]) .shell .nav { background: #232325; } }
 :root[data-app-theme="dark"] .shell .nav { background: #232325; }
-
-/* =========================================================
-   4. Cartões de destaque em azul: o "Hoje" do consultório e o primeiro do carrossel
-   ========================================================= */
-.shell .hoje, .shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g {
-  background: var(--azul-cartao); color: #fff; border-color: transparent; box-shadow: 0 12px 30px rgba(31, 59, 239, .26);
-  position: relative; overflow: hidden;
-}
-.shell .hoje::before, .shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g::after {
-  content: ""; position: absolute; right: -60px; top: -70px; width: 220px; height: 220px; border-radius: 50%; pointer-events: none;
-  background: radial-gradient(circle, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 70%);
-}
-.shell .hoje > * { position: relative; }
-/* Hoje */
-.shell .hoje .hoje-rot { color: rgba(255, 255, 255, .78); }
-.shell .hoje .hoje-res { color: rgba(255, 255, 255, .85); }
-.shell .hoje .hoje-res b { color: #fff; }
-.shell .hoje .hoje-barra { background: rgba(255, 255, 255, .2); }
-.shell .hoje .hoje-barra i { background: #fff; }
-.shell .hoje .hoje-prox-main:hover { background: rgba(255, 255, 255, .08); }
-.shell .hoje .hoje-prox-main > svg { color: rgba(255, 255, 255, .7); }
-.shell .hoje .hoje-hora { border-left-color: #fff; color: #fff; }
-.shell .hoje .hoje-quem b { color: #fff; }
-.shell .hoje .hoje-quem small, .shell .hoje .hoje-vazio { color: rgba(255, 255, 255, .8); }
-.shell .hoje .selo { background: rgba(255, 255, 255, .16); color: #fff; }
-.shell .hoje .hoje-pt { background: rgba(255, 255, 255, .13); color: #fff; }
-.shell .hoje .hoje-pt i { color: rgba(255, 255, 255, .75); }
-.shell .hoje .hoje-pt::before { background: #fff; opacity: .9; }
-.shell .hoje .hoje-pt.prox { border-color: rgba(255, 255, 255, .7); background: rgba(255, 255, 255, .22); }
-.shell .hoje .hoje-pt.late { background: rgba(255, 196, 80, .28); }
-.shell .hoje .hoje-pt:hover { border-color: rgba(255, 255, 255, .45); }
-.shell .hoje .entrar-sala.grande { background: #fff; color: var(--azul-forte); animation: none; box-shadow: 0 6px 16px rgba(0, 0, 0, .14); }
-.shell .hoje .entrar-sala.discreto { color: #fff; }
-.shell .hoje .hoje-clima > * { background: rgba(255, 255, 255, .12) !important; border-color: transparent !important; color: #fff !important; }
-.shell .hoje .hoje-clima * { color: #fff !important; }
-/* primeiro cartão do carrossel */
-.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g .ini-g-topo { color: rgba(255, 255, 255, .85); }
-.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g .ini-g-ic { background: rgba(255, 255, 255, .18); color: #fff; }
-.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g :is(.ini-g-v, .ini-g-v *, b, strong) { color: #fff; }
-.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g :is(.ini-g-apoio, .ini-g-barra, .ini-g-entre, .ini-g-pergunta, small, .ini-g-txt span, .cur, .cents) { color: rgba(255, 255, 255, .78); }
-.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g svg { color: inherit; }
-.shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g :is(.ini-g-barra i, .ini-g-trilho) { background: rgba(255, 255, 255, .22); }
-
-/* o carrossel e os cartões do Início com os cantos novos */
-.shell .ini-g, .shell .ini-cartao { border-radius: var(--r-card) !important; }
 
 /* =========================================================
    5. Modo claro como foco: fundo, listas e campos
@@ -184,3 +140,159 @@
 .cab-app-logo .lt-nome path { stroke: #fff; }
 /* botão dentro de um cartão azul: branco com o texto azul */
 .shell:is([data-mode="pessoal"], [data-mode="loja"]) .ini-car-item:first-child .ini-g .ini-botao { background: #fff; color: var(--azul-forte); box-shadow: 0 6px 16px rgba(0, 0, 0, .12); }
+
+
+/* =========================================================
+   6. Início no jeito do Asaas
+   ========================================================= */
+@media (max-width: 899px) { .az-ini .ini-topo { display: none; } }
+.az-ini { display: flex; flex-direction: column; gap: 16px; padding-top: 6px; }
+.az-ini > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+/* botões azuis do topo */
+.az-acoes { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -16px; padding: 4px 16px 6px; }
+.az-acoes::-webkit-scrollbar { display: none; }
+.az-acao { flex: none; width: 128px; height: 112px; scroll-snap-align: start; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; text-align: left;
+  padding: 16px 14px 14px 16px; border-radius: 22px; background: var(--azul); color: #fff; box-shadow: 0 8px 18px rgba(43, 70, 255, .22); transition: transform .12s ease, filter .15s ease; }
+.az-acao:active { transform: scale(.96); }
+@media (hover: hover) { .az-acao:hover { filter: brightness(1.08); } }
+.az-acao-ic svg { width: 26px; height: 26px; }
+.az-acao-l { font-size: 15px; font-weight: 600; line-height: 1.2; letter-spacing: -.01em; }
+@media (min-width: 900px) { .az-acoes { margin: 0; padding: 4px 0 6px; flex-wrap: wrap; } .az-acao { width: 150px; } }
+/* saldo */
+.az-saldo { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 20px 20px 20px 22px; border-radius: 22px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--card-shadow); transition: transform .12s ease; }
+.az-saldo:active { transform: scale(.99); }
+.az-saldo-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.az-saldo-t small { font-size: 15px; font-weight: 500; color: var(--muted); }
+.az-saldo-t b { font-size: 32px; font-weight: 700; letter-spacing: -.03em; color: var(--accent); line-height: 1.15; }
+.az-saldo-t b.neg { color: var(--rose); }
+.az-saldo-t b .cur, .az-saldo-t b .cents { opacity: 1; }
+.az-saldo-t em { font-style: normal; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.az-saldo > svg { width: 24px; height: 24px; color: var(--faint); flex: none; }
+/* grade de atalhos */
+.az-sec-t { margin: 4px 0 12px; font-size: 19px; font-weight: 700; letter-spacing: -.015em; }
+.az-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 12px; }
+.az-atalho { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.az-atalho-ic { position: relative; width: 100%; aspect-ratio: 1; max-width: 84px; border-radius: 22px; background: var(--surface); color: var(--accent); display: grid; place-items: center;
+  box-shadow: 0 0 0 1px var(--line), 0 2px 8px rgba(16, 24, 40, .04); transition: transform .12s ease, box-shadow .15s ease; }
+.az-atalho:active .az-atalho-ic { transform: scale(.94); }
+@media (hover: hover) { .az-atalho:hover .az-atalho-ic { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 6px 16px rgba(16, 24, 40, .08); } }
+.az-atalho-ic svg { width: 26px; height: 26px; }
+.az-atalho-l { font-size: 12.5px; font-weight: 600; line-height: 1.2; text-align: center; color: var(--fg); }
+.az-ponto { position: absolute; top: 12px; right: 12px; width: 9px; height: 9px; border-radius: 50%; background: #F04438; box-shadow: 0 0 0 2px var(--surface); }
+@media (min-width: 900px) { .az-grade { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
+/* novidade */
+.az-novidade { display: flex; align-items: center; gap: 16px; width: 100%; text-align: left; padding: 18px 20px; border-radius: 22px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+.az-novidade b { display: block; font-size: 16.5px; font-weight: 700; letter-spacing: -.01em; }
+.az-novidade small { display: block; margin-top: 3px; font-size: 14px; color: var(--muted); line-height: 1.4; }
+.az-novidade-ic { flex: none; width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; color: #fff; background: linear-gradient(140deg, #3550FF, #1A33CF); box-shadow: 0 8px 18px rgba(43, 70, 255, .25); transform: rotate(-6deg); }
+.az-novidade-ic svg { width: 26px; height: 26px; }
+.az-novidade-ilu { width: 64px; height: 64px; object-fit: contain; flex: none; }
+/* resumo com abas */
+.az-resumo { border-radius: 22px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--card-shadow); padding: 20px 20px 10px; }
+.az-resumo-cab { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; }
+.az-resumo-cab b { font-size: 19px; font-weight: 700; letter-spacing: -.015em; }
+.az-resumo-cab svg { width: 24px; height: 24px; color: var(--faint); }
+.az-abas { display: grid; grid-template-columns: 1fr 1fr; margin: 16px 0 6px; padding: 3px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--accent); }
+.az-abas button { height: 40px; border-radius: 999px; font-size: 15px; font-weight: 600; color: var(--accent); transition: background-color .2s ease, color .2s ease; }
+.az-abas button.on { background: var(--accent); color: #fff; }
+.az-resumo-l { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 0; padding: 14px 4px; border-bottom: 1px solid var(--line); }
+.az-resumo-l:last-child { border-bottom: 0; }
+.az-resumo-l > b { grid-column: 1 / -1; font-size: 15.5px; font-weight: 600; margin-bottom: 4px; }
+.az-resumo-l span { display: flex; flex-direction: column; gap: 1px; }
+.az-resumo-l span + span { padding-left: 16px; border-left: 1px solid var(--line); }
+.az-resumo-l small { font-size: 13px; color: var(--muted); }
+.az-resumo-l strong { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.az-resumo-l.verde strong { color: #12A150; } .az-resumo-l.azul strong { color: var(--accent); }
+.az-resumo-l.laranja strong { color: #E8700C; } .az-resumo-l.vermelho strong { color: #E5323E; }
+/* o cartão "Hoje" e o "Faltou marcar" no mesmo jeito dos outros */
+.shell .az-ini .hoje, .shell .az-ini .pend { border-radius: 22px; margin: 0; }
+.shell .az-ini .hoje { box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+
+/* =========================================================
+   7. Barra de cima: o sino e o botão de área
+   ========================================================= */
+@media (max-width: 899px) {
+  .cab-app .cab-modo { height: 34px; padding: 0 10px 0 12px; gap: 6px; border-radius: 999px; background: rgba(255, 255, 255, .14); color: #fff; font-size: 13.5px; font-weight: 600; border: 0; }
+  .cab-app .cab-modo .mode-dot { background: #fff; }
+  .cab-app .cab-modo svg { width: 15px; height: 15px; color: rgba(255, 255, 255, .85); }
+  .cab-app .cab-modo:active { background: rgba(255, 255, 255, .24); }
+  .cab-sino { position: relative; }
+  .cab-ponto { position: absolute; top: 8px; right: 9px; width: 9px; height: 9px; border-radius: 50%; background: #F04438; box-shadow: 0 0 0 2px var(--cab-bg); animation: cab-ponto 2s ease-in-out infinite; }
+  @keyframes cab-ponto { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+}
+/* folha de trocar de área: um cartão grande para cada área */
+.modo-cartoes { display: flex; flex-direction: column; gap: 10px; }
+.modo-cartao { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 14px 16px; border-radius: 20px; background: var(--surface); box-shadow: 0 0 0 1px var(--line);
+  animation: modo-entra .35s cubic-bezier(.2, .8, .2, 1) both; transition: box-shadow .15s ease, transform .12s ease; }
+@keyframes modo-entra { from { opacity: 0; transform: translateY(10px); } }
+.modo-cartao:active { transform: scale(.98); }
+.modo-cartao.on { box-shadow: 0 0 0 2px var(--mc), 0 8px 20px color-mix(in srgb, var(--mc) 18%, transparent); }
+.modo-cartao-ic { flex: none; width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--mc); color: #fff; }
+.modo-cartao-ic svg { width: 26px; height: 26px; }
+.modo-cartao-t { flex: 1; min-width: 0; }
+.modo-cartao-t b { display: block; font-size: 17px; font-weight: 700; }
+.modo-cartao-t small { display: block; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.modo-cartao-ok svg { width: 22px; height: 22px; color: var(--faint); }
+.modo-cartao.on .modo-cartao-ok svg { color: var(--mc); }
+
+/* =========================================================
+   8. Tela cheia de Alertas
+   ========================================================= */
+.tela-cheia { position: fixed; inset: 0; z-index: 45; background: var(--bg); overflow-y: auto; overscroll-behavior: contain; animation: tela-entra .28s cubic-bezier(.2, .8, .2, 1); }
+@keyframes tela-entra { from { opacity: 0; transform: translateX(24px); } }
+.tela-cheia-in { max-width: 560px; margin: 0 auto; padding: calc(14px + env(safe-area-inset-top, 0px)) 20px calc(32px + env(safe-area-inset-bottom, 0px)); }
+.tela-voltar { width: 44px; height: 44px; margin-left: -10px; display: grid; place-items: center; color: var(--accent); border-radius: 12px; }
+.tela-voltar svg { width: 26px; height: 26px; }
+.tela-t { margin: 14px 0 6px; font-size: 32px; font-weight: 700; letter-spacing: -.03em; }
+.al-grupo { margin: 22px 0 4px; font-size: 19px; font-weight: 700; color: var(--accent); letter-spacing: -.01em; }
+.al-linha { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); animation: modo-entra .35s cubic-bezier(.2, .8, .2, 1) both; }
+.al-ic { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); }
+.al-ic.forte { background: var(--accent-soft); color: var(--accent); }
+.al-ic svg { width: 21px; height: 21px; }
+.al-tx { flex: 1; min-width: 0; }
+.al-tx p { margin: 0; font-size: 15.5px; line-height: 1.45; color: var(--muted); }
+.al-tx p b { color: var(--fg); font-weight: 600; }
+.al-acao { display: inline-flex; align-items: center; gap: 2px; margin-top: 8px; font-size: 15px; font-weight: 600; color: var(--accent); }
+.al-acao svg { width: 18px; height: 18px; }
+.al-vazio { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 48px 20px; color: var(--muted); }
+.al-vazio .ilustra { width: 110px; height: 110px; object-fit: contain; }
+.al-vazio b { color: var(--fg); font-size: 17px; }
+
+/* =========================================================
+   9. Perfil no jeito do Asaas
+   ========================================================= */
+.perfil-top.sumido { display: none; }
+.perfil-top.azul { background: var(--cab-bg, #1F3BEF); color: #fff; border: 0; box-shadow: none; padding-bottom: 14px; }
+.perfil-top.azul b { color: #fff; text-align: left; font-size: 19px; font-weight: 600; }
+.perfil-top.azul .icon-btn { width: 44px !important; height: 44px !important; border-radius: 50%; background: rgba(255, 255, 255, .22); color: #fff; border: 0; }
+.perfil-top.azul .perfil-salvo { color: #fff; }
+.pf-hero { margin: calc(-10px - env(safe-area-inset-top, 0px)) -16px 4px; padding: calc(14px + env(safe-area-inset-top, 0px)) 20px 28px; background: var(--cab-bg, #1F3BEF); color: #fff;
+  border-radius: 0 0 32px 32px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+.pf-hero-top { width: 100%; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; margin-bottom: 8px; }
+.pf-logo { display: flex; justify-content: center; }
+.pf-logo .lt-nome { display: block; height: 24px; width: auto; color: #fff; }
+.pf-logo .lt-nome path { stroke: #fff; }
+.pf-fechar { width: 44px; height: 44px; display: grid; place-items: center; color: #fff; border-radius: 12px; }
+.pf-fechar svg { width: 26px; height: 26px; }
+.pf-foto .me { width: 76px; height: 76px; font-size: 26px; background: rgba(255, 255, 255, .78); color: var(--azul-forte); box-shadow: 0 0 0 3px rgba(255, 255, 255, .55); }
+.pf-nome { display: inline-flex; align-items: center; gap: 8px; height: 48px; padding: 0 22px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px #fff; color: #fff; font-size: 19px; font-weight: 600; margin-top: 6px; }
+.pf-nome svg { width: 20px; height: 20px; }
+.pf-email { font-size: 14.5px; color: rgba(255, 255, 255, .92); }
+.pf-linha { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.pf-linha b { font-size: 16px; font-weight: 700; }
+.pf-linha small { font-size: 14px; color: rgba(255, 255, 255, .85); }
+.pf-nuvem { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: rgba(255, 255, 255, .8); }
+.pf-nuvem svg { width: 15px; height: 15px; }
+.pf-sec h3 { margin: 10px 0 14px; font-size: 21px; font-weight: 700; letter-spacing: -.015em; }
+.pf-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px 12px; }
+.pf-item { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; text-decoration: none; color: var(--fg); }
+.pf-tile { position: relative; width: 100%; aspect-ratio: 1; max-width: 84px; border-radius: 22px; background: var(--surface); color: var(--accent); display: grid; place-items: center; box-shadow: 0 0 0 1px var(--line), 0 2px 8px rgba(16, 24, 40, .04); transition: transform .12s ease; }
+.pf-item:active .pf-tile { transform: scale(.94); }
+.pf-tile svg { width: 26px; height: 26px; }
+.pf-tile-l { font-size: 12.5px; font-weight: 600; line-height: 1.25; text-align: center; }
+.pf-zap { margin-top: 6px; }
+.az-acoes { background: transparent; scroll-padding-inline: 16px; }
+@media (min-width: 900px) { .az-acoes { scroll-padding-inline: 0; } }
+/* a sombra dos botões azuis não pode ser cortada pela faixa que rola (virava um retângulo claro) */
+.az-acoes { padding-top: 6px; padding-bottom: 22px; margin-top: -6px; margin-bottom: -16px !important; }
+.az-acao { box-shadow: 0 8px 16px -4px rgba(43, 70, 255, .28); }

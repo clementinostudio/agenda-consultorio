@@ -4,6 +4,7 @@ import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
 import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada, Marca, Confirmar } from "../App.jsx";
 import { DadosRecibo } from "./consultorio.jsx";
+import { AvinaNome } from "../App.jsx";
 import { AssinaturaPagina, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaAssin } from "./assinatura.jsx";
 import { GradeHorarios, LinkAgendamento, AgendaNoCelular, linkDo } from "./agendamento.jsx";
 import { gradeDo, resumoGrade, periodosIniciais } from "../horarios.js";
@@ -222,76 +223,63 @@ function PerfilPage({ db, conta, tema, inicio: pedido, onClose, act, nuvem }) {
   return createPortal(
     <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
       <div className="perfil-in">
-        <div className="perfil-top">
+        <div className={"perfil-top" + (aba ? " azul" : " sumido")}>
           <button className="icon-btn" onClick={() => sub ? setSub(voltaAssin(sub)) : aba ? setAba(null) : onClose()} aria-label={aba ? "Voltar" : "Fechar"}>{aba ? <I.chevL /> : <I.x />}</button>
           <b>{titulo || "Perfil"}</b>
           <span className={"perfil-salvo" + (salvo ? " on" : "")} aria-live="polite">{salvo ? <><I.check /> Salvo</> : ""}</span>
         </div>
 
         {!aba && <>
-          <div className="perfil-hero">
-            <button className="perfil-foto" onClick={() => setAba("dados")} aria-label="Trocar foto e dados">
-              <Avatar conta={{ nome: nome || "?", foto }} /><i><I.pencil /></i>
-            </button>
-            <h2>{nome || conta.nome}{act.plano && act.plano.pro && <span className="pro-selo grande" title="Avina Pro">PRO</span>}</h2>
-            <p>{[profissao, idade ? `${idade} anos` : null].filter(Boolean).join(" · ")}</p>
-            <span className="perfil-email">{conta.email}</span>
-            {nuvem && <span className={"perfil-nuvem " + nuvem.estado} role="status"><I.cloud />{{ ok: "Tudo salvo na nuvem", enviando: "Sincronizando…", offline: nuvem.pendentes ? `Sem internet · ${nuvem.pendentes} ${nuvem.pendentes === 1 ? "mudança guardada" : "mudanças guardadas"} aqui` : "Sem internet · tudo guardado aqui", erro: "A nuvem não respondeu · tento de novo sozinho" }[nuvem.estado]}</span>}
-            <div className="perfil-nums">
-              <div><b>{ativos}</b><span>{ativos === 1 ? `${T.s} ativo` : `${T.p} ativos`}</span></div>
-              <div><b>{sessMes}</b><span>{sessMes === 1 ? "sessão no mês" : "sessões no mês"}</span></div>
-              <div><b className="num">{ESCONDER ? "R$ •••" : `R$ ${Math.round(liqMes).toLocaleString("pt-BR")}`}</b><span>líquido no mês</span></div>
+          <div className="pf-hero">
+            <div className="pf-hero-top">
+              <span />
+              <span className="pf-logo" aria-label="Avina"><AvinaNome /></span>
+              <button className="pf-fechar" onClick={onClose} aria-label="Fechar"><I.x /></button>
             </div>
-            {seguidos >= 2 && <div className="perfil-seq"><I.flag /> Você fechou o dia {seguidos} vezes seguidas</div>}
-            {conq.length > 0 && (
-              <button className="perfil-conq" onClick={() => setAba("conquistas")}>
-                <Ilustra n="trofeu" />
-                <span><b>Nível {nivel.nome}</b><small>{nConq} de {conq.length} conquistas{nivel.prox ? ` · faltam ${nivel.faltam} para ${nivel.prox}` : ""}</small></span>
-                <I.chev />
-              </button>
-            )}
+            <button className="pf-foto" onClick={() => setAba("dados")} aria-label="Trocar foto e dados"><Avatar conta={{ nome: nome || "?", foto }} /></button>
+            <button className="pf-nome" onClick={() => setAba("dados")}>{nome || conta.nome}<I.chevD /></button>
+            <span className="pf-email">{conta.email}</span>
+            <span className="pf-linha"><b>{act.plano && act.plano.pro ? "Avina Pro" : "Avina"} · {resAssin.texto}</b><small>{[profissao, pf.doc && pf.doc.registro ? `registro ${pf.doc.registro}` : null, idade ? `${idade} anos` : null].filter(Boolean).join(" · ") || "Toque no nome para completar seus dados"}</small></span>
+            {nuvem && <span className={"pf-nuvem " + nuvem.estado} role="status"><I.cloud />{{ ok: "Tudo salvo na nuvem", enviando: "Sincronizando…", offline: "Sem internet · tudo guardado aqui", erro: "A nuvem não respondeu · tento de novo sozinho" }[nuvem.estado]}</span>}
           </div>
 
-          <div className="perfil-grupo">
-            <h3>Assinatura</h3>
-            <div className="perfil-lista">
-              <button className="perfil-row" onClick={() => setAba("assinatura")}>
-                <i className="assin-ic"><Marca /></i><span><b>{act.plano && act.plano.pro ? "Avina Pro" : "Avina"}</b><small>{resAssin.texto}</small></span>
-                {resAssin.selo && <em className="assin-selo">{resAssin.selo}</em>}<I.chev />
-              </button>
-            </div>
-          </div>
-
-          {secoes.map(g => (
-            <div key={g.grupo} className="perfil-grupo">
-              <h3>{g.grupo}</h3>
-              <div className="perfil-lista">
-                {g.itens.map(it => (
-                  <button key={it.id} className="perfil-row" onClick={() => setAba(it.id)}>
-                    <i>{it.ic}</i><span><b>{it.t}</b><small>{it.v}</small></span><I.chev />
-                  </button>
-                ))}
+          {[
+            { t: "Minha conta", itens: [
+              { id: "dados", ic: I.user, l: "Dados pessoais" },
+              { id: "assinatura", ic: I.star, l: "Assinatura", ponto: !!resAssin.selo },
+              { id: "pix", ic: I.key, l: "Chave Pix" },
+              { id: "avisos", ic: I.bell, l: "Avisos" },
+              { id: "visual", ic: I.sun, l: "Aparência" },
+              { id: "pessoal", ic: I.grid, l: "Como usa o app" },
+              ...(conq.length ? [{ id: "conquistas", ic: I.flag, l: "Conquistas" }] : []),
+              noApp ? { id: "trava", ic: I.lock, l: "Bloqueio" } : { id: "app", ic: I.phone, l: "Instalar" },
+              { id: "_dados", ic: I.download, l: "Baixar meus dados", f: act.meusDados },
+            ] },
+            ...(consult ? [{ t: "Consultório", itens: [
+              { id: "agenda", ic: I.cal, l: "Agenda" },
+              { id: "link", ic: I.share, l: "Link e página", ponto: (db.pedidos || []).length > 0 },
+              { id: "calendario", ic: I.calSync, l: "Agenda no celular" },
+              { id: "dinheiro", ic: I.wallet, l: "Valores e metas" },
+              { id: "docs", ic: I.receipt, l: "Recibos e imposto" },
+            ] }] : []),
+            { t: "Ajuda", itens: [
+              { id: "_zap", ic: I.chat, l: "Fale com a gente", href: linkSuporte() },
+              { id: "_termos", ic: I.doc, l: "Termos e privacidade", href: `${BASE}termos/` },
+              { id: "_tour", ic: I.star, l: "Ver o tour", f: act.verTour },
+              { id: "_refazer", ic: I.repeat, l: "Refazer perguntas", f: act.refazer },
+              { id: "_sair", ic: I.out, l: "Sair da conta", f: act.sair },
+            ] },
+          ].map(g => (
+            <section key={g.t} className="pf-sec">
+              <h3>{g.t}</h3>
+              <div className="pf-grade">
+                {g.itens.map(it => { const Ic = it.ic, dentro = <><span className="pf-tile">{<Ic />}{it.ponto && <i className="az-ponto" />}</span><span className="pf-tile-l">{it.l}</span></>; return it.href
+                  ? <a key={it.id} className="pf-item" href={it.href} target="_blank" rel="noopener">{dentro}</a>
+                  : <button key={it.id} type="button" className="pf-item" onClick={it.f || (() => setAba(it.id))}>{dentro}</button>; })}
               </div>
-            </div>
+            </section>
           ))}
-
-          <div className="perfil-grupo">
-            <h3>Conta</h3>
-            <div className="perfil-seguro">
-              <Ilustra n="cadeados" />
-              <span><b>{conta.uid ? "Seus dados estão protegidos" : "Seus dados ficam neste aparelho"}</b>
-                <small>{conta.uid ? "Login com senha, cópia na nuvem e cada conta só enxerga os próprios dados." : "Crie uma conta com login para ter uma cópia na nuvem e usar em outros aparelhos."}</small></span>
-            </div>
-            <div className="perfil-lista">
-              {conta.uid && <WhatsappRow conta={conta} act={act} />}
-              <button className="perfil-row" onClick={act.meusDados}><i><I.down /></i><span><b>Baixar meus dados</b><small>Tudo num arquivo: {consult ? `${T.p}, sessões, cobranças e prontuários` : "gastos, contas e o resto"}</small></span><I.chev /></button>
-              <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
-              <button className="perfil-row" onClick={act.verTour}><i><I.star /></i><span><b>Ver o tour de novo</b><small>Um passeio rápido pelo que tem nesta tela</small></span><I.chev /></button>
-              <a className="perfil-row" href={linkSuporte()} target="_blank" rel="noopener"><i><I.chat /></i><span><b>Fale com a gente</b><small>Dúvidas, ideias ou problemas: direto no WhatsApp</small></span><I.chev /></a>
-              <a className="perfil-row" href={`${BASE}termos/`} target="_blank" rel="noopener"><i><I.receipt /></i><span><b>Termos e privacidade</b><small>Termos de uso, privacidade (LGPD) e cookies</small></span><I.chev /></a>
-              <button className="perfil-row" onClick={act.sair}><i><I.out /></i><span><b>Sair da conta</b><small>{conta.uid ? "Seus dados continuam guardados na nuvem" : "Seus dados ficam guardados neste aparelho"}</small></span><I.chev /></button>
-            </div>
-          </div>
+          {conta.uid && <div className="perfil-lista pf-zap"><WhatsappRow conta={conta} act={act} /></div>}
           <ConfirmButton label="Apagar meus dados" titulo="Apagar todos os seus dados?" texto={conta.uid ? "Pacientes, sessões, cobranças e gastos somem de vez, da nuvem e de todos os seus aparelhos. A conta continua. Isso não dá para desfazer." : "Pacientes, sessões, cobranças e gastos deste aparelho somem de vez. Isso não dá para desfazer."} acao="Apagar tudo" onConfirm={act.zerar} />
           {conta.uid && <ConfirmButton label="Excluir minha conta" titulo="Excluir sua conta?" texto={TEXTO_EXCLUIR} acao="Excluir conta" onConfirm={act.excluirConta} />}
           {excluindo && <Confirmar titulo="Excluir sua conta?" texto={TEXTO_EXCLUIR} acao="Excluir conta" icon={<I.trash />} onSim={act.excluirConta} onFim={() => setExcluindo(false)} />}
