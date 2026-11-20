@@ -27,11 +27,11 @@
 .ini-car-seta.esq { left: -21px; } .ini-car-seta.dir { right: -21px; }
 .ini-car-seta:disabled { opacity: 0; pointer-events: none; }
 .ini-car-seta svg { width: 18px; height: 18px; }
-.ini-car-espera { height: 214px; margin: 4px 0 16px; border-radius: 28px; background: var(--surface); border: 1px solid var(--line); opacity: .6; }
+.ini-car-espera { height: 214px; margin: 4px 0 16px; border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); opacity: .6; }
 
 /* ---------- o cartão grande ---------- */
 .ini-g { position: relative; isolation: isolate; overflow: hidden; width: 100%; min-height: var(--alt); display: flex; flex-direction: column; align-items: stretch; gap: 3px;
-  padding: 18px 20px 20px; border-radius: 28px; background: var(--surface); background-image: var(--brilho-cartao); border: 1px solid var(--line); box-shadow: var(--card-shadow);
+  padding: 18px 20px 20px; border-radius: var(--r-card); background: var(--surface); background-image: var(--brilho-cartao); border: 1px solid var(--line); box-shadow: var(--card-shadow);
   color: var(--fg); text-align: left; transition: transform .12s ease; }
 .ini-car.com-bolinhas .ini-g { padding-bottom: 34px; }
 /* um brilho da cor do cartão no canto de cima */
@@ -104,7 +104,7 @@ button.ini-g:active { transform: scale(.985); }
 .ini-col > .conq-prox { margin-top: 0; }
 .ini-cartoes > .conq-prox { margin-top: 0; }
 
-.ini-cartao { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 2px; width: 100%; min-width: 0; padding: 18px; border-radius: 28px;
+.ini-cartao { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 2px; width: 100%; min-width: 0; padding: 18px; border-radius: var(--r-card);
   background: var(--surface); background-image: var(--brilho-cartao); border: 1px solid var(--line); box-shadow: var(--card-shadow); color: var(--fg); text-align: left; scroll-margin-top: 84px; }
 button.ini-cartao { transition: transform .12s ease; }
 button.ini-cartao:active { transform: scale(.985); }
@@ -129,7 +129,7 @@ button.ini-cartao:active { transform: scale(.985); }
 
 /* gastos por categoria: as quatro maiores, duas por linha */
 .ini-cats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; margin: 4px -6px 0; }
-.ini-cat { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 6px; border-radius: 16px; background: none; color: var(--fg); text-align: left; transition: background .15s, transform .12s; }
+.ini-cat { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 6px; border-radius: var(--r-ctl); background: none; color: var(--fg); text-align: left; transition: background .15s, transform .12s; }
 .ini-cat:active { transform: scale(.97); }
 @media (hover: hover) { .ini-cat:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); } }
 .ini-cat > span:last-child { display: grid; gap: 1px; min-width: 0; }
@@ -145,7 +145,7 @@ button.ini-cartao:active { transform: scale(.985); }
 :is(.ini-ses, .ini-pilula).marcar { --tc: var(--amber); }
 .ini-pilula.neutro { --tc: var(--muted); }
 .ini-dia { display: flex; flex-direction: column; margin: 10px -6px 0; }
-.ini-ses { display: grid; grid-template-columns: 42px 12px minmax(0, 1fr) auto 54px; align-items: center; gap: 9px; min-height: 46px; padding: 0 6px; border-radius: 14px;
+.ini-ses { display: grid; grid-template-columns: 42px 12px minmax(0, 1fr) auto 54px; align-items: center; gap: 9px; min-height: 46px; padding: 0 6px; border-radius: var(--r-ctl);
   background: none; color: var(--fg); text-align: left; transition: background .15s; }
 @media (hover: hover) { .ini-ses:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); } }
 .ini-ses-h { font-family: var(--f-display); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
@@ -164,7 +164,7 @@ button.ini-cartao:active { transform: scale(.985); }
 .ini-ses-v { text-align: right; font-family: var(--f-display); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 .ini-ses:is(.prox, .prev, .marcar) .ini-ses-v { color: var(--fg); }
 .ini-dia-mais { padding: 4px 0 0 67px; }
-.ini-livre { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 13px 14px; border-radius: 16px; background: var(--surface-2); color: var(--muted); font-size: 14px; font-weight: 600; }
+.ini-livre { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 13px 14px; border-radius: var(--r-ctl); background: var(--surface-2); color: var(--muted); font-size: 14px; font-weight: 600; }
 .ini-livre svg { width: 18px; height: 18px; flex: none; }
 .ini-numeros { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .ini-numeros > span { display: grid; gap: 2px; min-width: 0; }
@@ -224,7 +224,7 @@ button.ini-cartao:active { transform: scale(.985); }
 
 /* caixinhas: cada uma com o anel da meta e o emoji no meio */
 .ini-cx-lista { display: flex; flex-direction: column; margin: 8px -8px 4px; }
-.ini-cx-linha { display: flex; align-items: center; gap: 12px; min-height: 66px; padding: 7px 8px; border-radius: 18px; background: none; color: var(--fg); text-align: left; transition: background .15s, transform .12s; }
+.ini-cx-linha { display: flex; align-items: center; gap: 12px; min-height: 66px; padding: 7px 8px; border-radius: var(--r-tile); background: none; color: var(--fg); text-align: left; transition: background .15s, transform .12s; }
 .ini-cx-linha:active { transform: scale(.985); }
 @media (hover: hover) { .ini-cx-linha:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); } }
 .ini-cx-anel .trilho { stroke: color-mix(in srgb, var(--cxc) 18%, transparent); }
@@ -249,7 +249,7 @@ button.ini-cartao:active { transform: scale(.985); }
 
 /* as áreas do Avina: duas por linha (com um número ímpar, a última ocupa a linha toda) */
 .ini-areas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
-.ini-area { display: flex; flex-direction: column; justify-content: space-between; gap: 14px; min-height: 116px; padding: 14px; border-radius: 20px; background: var(--surface-2); border: 1px solid var(--line);
+.ini-area { display: flex; flex-direction: column; justify-content: space-between; gap: 14px; min-height: 116px; padding: 14px; border-radius: var(--r-tile); background: var(--surface-2); border: 1px solid var(--line);
   color: var(--fg); text-align: left; transition: transform .12s, border-color .15s; }
 .ini-area:last-child:nth-child(odd) { grid-column: 1 / -1; min-height: 0; flex-direction: row; align-items: center; justify-content: flex-start; }
 .ini-area:active { transform: scale(.97); }
@@ -260,10 +260,10 @@ button.ini-cartao:active { transform: scale(.985); }
 .ini-area small { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; font-weight: 600; line-height: 1.35; }
 
 /* o painel do banco (src/telas/bancos.jsx) no lugar do cartão "Saldo em contas": o mesmo jeito dos outros cartões */
-.panel.bancos#ini-bancos { margin: 0; padding: 6px 18px 12px; border-radius: 28px; scroll-margin-top: 84px; }
+.panel.bancos#ini-bancos { margin: 0; padding: 6px 18px 12px; border-radius: var(--r-card); scroll-margin-top: 84px; }
 #ini-bancos .panel-head h3 { font-family: var(--f-body); font-size: 15px; font-weight: 600; color: var(--muted); }
 /* a previsão do mês (src/telas/pessoal.jsx) também */
-.ini .panel.ps-prev { margin: 0; padding: 6px 18px 16px; border-radius: 28px; }
+.ini .panel.ps-prev { margin: 0; padding: 6px 18px 16px; border-radius: var(--r-card); }
 .ini .ps-prev .panel-head h3 { font-family: var(--f-body); font-size: 15px; font-weight: 600; color: var(--muted); }
 
 /* o fim: personalizar o início */
@@ -273,7 +273,7 @@ button.ini-cartao:active { transform: scale(.985); }
 
 /* ---------- Personalizar início ---------- */
 .pz-lista { display: flex; flex-direction: column; gap: 8px; }
-.pz-linha { position: relative; display: flex; align-items: center; gap: 8px; min-height: 66px; padding: 8px 6px 8px 2px; border-radius: 18px; background: var(--surface-2); border: 1px solid var(--line); }
+.pz-linha { position: relative; display: flex; align-items: center; gap: 8px; min-height: 66px; padding: 8px 6px 8px 2px; border-radius: var(--r-tile); background: var(--surface-2); border: 1px solid var(--line); }
 .pz-lista.arrastando .pz-linha:not(.pega) { transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
 .pz-linha.pega { z-index: 2; background: var(--surface-3); box-shadow: 0 16px 36px rgba(0, 0, 0, .28); }
 .pz-alca { width: 38px; height: 46px; flex: none; display: grid; place-items: center; border-radius: 12px; background: none; color: var(--faint); cursor: grab; touch-action: none; }
@@ -315,3 +315,43 @@ button.ini-cartao:active { transform: scale(.985); }
   .ini-ses { grid-template-columns: 40px 12px minmax(0, 1fr) auto; }
   .ini-ses-v { display: none; }
 }
+
+/* ---------- visual calmo (src/notion.css): cartões lisos, números em 600, botões com cantos discretos ---------- */
+.ini-g { padding: 16px 18px 18px; }
+.ini-g::before { display: none; }
+.ini-g-topo { font-size: 14px; font-weight: 500; }
+.ini-g-ic { width: 24px; height: 24px; border-radius: var(--r-chip); }
+.ini-g-ic svg { width: 14px; height: 14px; }
+.ini-g-v { font-weight: 600; font-size: 34px; letter-spacing: -.03em; }
+.ini-g-apoio { font-weight: 400; }
+.ini-g-trio b, .ini-g-barra b, .ini-numeros b, .ini-meia-v b, .ini-meia-num, .ini-cat b, .ini-contagem b, .ini-teto-t > em, .ini-cx-pct { font-weight: 600; }
+.ini-g-oi > b { font-weight: 600; font-size: 19px; }
+.ini-botao { height: 36px; padding: 0 14px; border-radius: var(--r-ctl); background: var(--mode); color: var(--mode-ink); font-weight: 600; transition: filter .14s ease, transform .12s ease; }
+.ini-botao:active { transform: scale(.98); }
+@media (hover: hover) { .ini-botao:hover { filter: brightness(1.06); } }
+.ini-cartao { padding: 16px; }
+@media (hover: hover) { button.ini-cartao:hover, button.ini-g:hover { border-color: var(--line-forte); } }
+button.ini-cartao, button.ini-g { transition: transform .12s ease, border-color .14s ease; }
+button.ini-cartao:active, button.ini-g:active { transform: scale(.99); }
+.ini-cab { font-size: 14px; font-weight: 500; }
+.ini-valor { font-weight: 600; font-size: 28px; }
+.ini-sub { font-weight: 600; font-size: 17px; }
+.ini-apoio, .ini-comp { font-weight: 400; }
+.ini-pilula { height: 22px; padding: 0 7px; border-radius: 4px; font-weight: 500; }
+.ini-ses-nm { font-weight: 500; }
+.ini-area { background: transparent; }
+@media (hover: hover) { .ini-area:hover { background: var(--hover); } }
+.ini-area-ic, .ini-linha-ic { border-radius: var(--r-ctl); }
+.ini-area-ic { width: 32px; height: 32px; }
+.ini-area-ic svg { width: 17px; height: 17px; }
+.ini-area b { font-weight: 600; }
+.ini-area small { font-weight: 400; }
+.ini-rodape .chip-btn { height: 34px; padding: 0 12px; border-radius: var(--r-ctl); }
+.ini-car-seta { width: 34px; height: 34px; margin-top: -17px; border-radius: var(--r-ctl); background: var(--surface); box-shadow: var(--sombra-flutua); border: 0; }
+.ini-car-seta.esq { left: -17px; } .ini-car-seta.dir { right: -17px; }
+.ini-car-bolinhas button::before { width: 6px; height: 6px; }
+.ini-car-bolinhas button.on::before { width: 16px; }
+.ini-trilho { height: 6px; }
+.ini-trilho.grosso { height: 7px; }
+.pz-linha { min-height: 56px; }
+.pz-ic { border-radius: var(--r-ctl); }

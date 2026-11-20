@@ -204,3 +204,12 @@
   .chat-pensando .chat-pensa-tx { -webkit-text-fill-color: currentColor; background: none; }
   .chat-status, .chat-acoes, .chat-campo-mais, .chat-chave::after { transition: none; }
 }
+
+/* ---------- visual calmo (src/notion.css): balões e campo com cantos menores, texto mais leve ---------- */
+.chat-menu { border-radius: var(--r-tile); padding: 5px; border-color: transparent; box-shadow: var(--sombra-flutua); }
+.chat-menu button { border-radius: var(--r-chip); }
+.chat-msg.eu p { border-radius: 14px 14px 4px 14px; padding: 9px 14px; font-size: 15.5px; font-weight: 400; }
+.chat-campo { border-radius: var(--r-xl); min-height: 52px; padding: 5px; border-color: var(--line-forte); box-shadow: var(--sombra-leve); }
+.chat-campo input { height: 40px; font-size: 16px; font-weight: 400; }
+.chat-vazio h2 { font-size: 24px; }
+.chat-vazio p { font-size: 18px; font-weight: 400; }

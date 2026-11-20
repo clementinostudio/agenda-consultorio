@@ -44,7 +44,7 @@
 .vz-head .link { color: var(--mode-text); font-weight: 800; font-size: 13.5px; }
 .vz-trilho { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding: 0 16px; margin: 0 -16px; padding: 2px 16px 6px; scrollbar-width: none; }
 .vz-trilho::-webkit-scrollbar { display: none; }
-.vz-card { flex: 0 0 158px; scroll-snap-align: start; display: grid; justify-items: start; gap: 2px; padding: 16px; border-radius: 26px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); text-align: left; transition: transform .15s, opacity .2s, border-color .2s, background .2s; animation: vz-entra .5s cubic-bezier(.2, .8, .2, 1) both; }
+.vz-card { flex: 0 0 158px; scroll-snap-align: start; display: grid; justify-items: start; gap: 2px; padding: 16px; border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); color: var(--fg); text-align: left; transition: transform .15s, opacity .2s, border-color .2s, background .2s; animation: vz-entra .5s cubic-bezier(.2, .8, .2, 1) both; }
 .vz-card:nth-child(2) { animation-delay: .06s; } .vz-card:nth-child(3) { animation-delay: .12s; } .vz-card:nth-child(4) { animation-delay: .18s; } .vz-card:nth-child(n+5) { animation-delay: .24s; }
 .vz-card .vz-cat { margin-bottom: 14px; }
 .vz-card-n { font-size: 15.5px; font-weight: 600; margin-bottom: 18px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -63,7 +63,7 @@
 .vz-card:not(.on), .c3-prox, .g4-foco { background-image: var(--brilho-cartao); }
 
 /* ---------- topo de tela: rótulo (ou setas do mês), número grande, apoio e gráfico ---------- */
-.vz-topo { position: relative; overflow: hidden; border-radius: 30px; border: 1px solid var(--line); padding: 12px 0 14px; text-align: center;
+.vz-topo { position: relative; overflow: hidden; border-radius: var(--r-card); border: 1px solid var(--line); padding: 12px 0 14px; text-align: center;
   background: radial-gradient(120% 85% at 50% 0%, color-mix(in srgb, var(--mode) 20%, transparent), transparent 72%), var(--surface); }
 .vz-topo.neg { background: radial-gradient(120% 85% at 50% 0%, color-mix(in srgb, var(--rose) 18%, transparent), transparent 72%), var(--surface); }
 .vz-topo-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; color: var(--muted); font-size: 14px; font-weight: 600; }
@@ -95,12 +95,12 @@
 
 
 /* ---------- Gastos ---------- */
-.g4-resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 14px 0; padding: 12px 6px; border-radius: 20px; background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.g4-resumo { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 14px 0; padding: 12px 6px; border-radius: var(--r-tile); background: color-mix(in srgb, var(--fg) 5%, transparent); }
 .g4-resumo span { display: grid; gap: 2px; }
 .g4-resumo small { color: var(--muted); font-size: 12px; font-weight: 700; }
 .g4-resumo b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .g4-resumo b.mais { color: var(--mint); } .g4-resumo b.menos { color: var(--rose); }
-.g4-foco { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 24px; background: var(--surface); border: 1px solid var(--line); animation: vz-entra .35s cubic-bezier(.2, .8, .2, 1) both; }
+.g4-foco { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); animation: vz-entra .35s cubic-bezier(.2, .8, .2, 1) both; }
 .g4-foco .mid { flex: 1; display: grid; gap: 2px; min-width: 0; }
 .g4-foco .mid b { font-size: 15px; } .g4-foco .mid small { color: var(--muted); font-size: 13px; line-height: 1.35; }
 .g4-foco-acts { display: flex; align-items: center; gap: 6px; flex: none; }
@@ -150,7 +150,7 @@
 .g4-assin-n b { font-family: var(--f-display); font-size: 24px; font-weight: 700; }
 
 /* ---------- tela inicial do lado pessoal (src/telas/pessoal.jsx) ---------- */
-.c3-saldo { position: relative; overflow: hidden; border-radius: 30px; border: 1px solid var(--line); padding: 16px 0 14px; text-align: center;
+.c3-saldo { position: relative; overflow: hidden; border-radius: var(--r-card); border: 1px solid var(--line); padding: 16px 0 14px; text-align: center;
   background: radial-gradient(120% 85% at 50% 0%, color-mix(in srgb, var(--mode) 20%, transparent), transparent 72%), var(--surface); }
 .c3-saldo.neg { background: radial-gradient(120% 85% at 50% 0%, color-mix(in srgb, var(--rose) 18%, transparent), transparent 72%), var(--surface); }
 .c3-saldo-lab { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14.5px; font-weight: 700; }
@@ -165,10 +165,10 @@
 .c3-saldo-g { margin-top: 12px; }
 .c3-saldo .ranges { margin-top: 2px; }
 
-.c3-prox { border-radius: 28px; border: 1px solid var(--line); background: var(--surface); padding: 16px; }
+.c3-prox { border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface); padding: 16px; }
 .c3-prox h3 { margin: 0 2px 12px; font-family: var(--f-display); font-weight: 600; font-size: 17px; }
 .c3-prox-g { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.c3-prox-c { display: grid; align-content: start; justify-items: start; gap: 2px; min-width: 0; padding: 16px; border-radius: 22px; background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); color: var(--fg); text-align: left; transition: transform .12s; }
+.c3-prox-c { display: grid; align-content: start; justify-items: start; gap: 2px; min-width: 0; padding: 16px; border-radius: var(--r-tile); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); color: var(--fg); text-align: left; transition: transform .12s; }
 .c3-prox-c:active { transform: scale(.97); }
 .c3-pilha { display: flex; align-items: flex-start; height: 50px; margin-bottom: 14px; padding-left: 12px; }
 .c3-pilha > span { display: block; position: relative; margin-left: -12px; z-index: calc(10 - var(--k)); border-radius: 50%; box-shadow: 0 0 0 3px var(--surface-2); animation: c3-bolha .45s cubic-bezier(.3, 1.5, .5, 1) both; animation-delay: calc(.15s + var(--k) * 70ms); }
@@ -195,3 +195,8 @@
   .vz-anel .cheio, .vz-linha > svg, .vz-ponto, .vz-ponto::after { animation: none !important; }
   .vz-anel .cheio { transition: none; }
 }
+
+/* ---------- visual calmo (src/notion.css) ---------- */
+.c2-btn { height: 36px; border-radius: var(--r-ctl); padding: 0 14px; }
+.c2-filtro { border-radius: var(--r-ctl); }
+.c2-filtro .ci { border-radius: var(--r-chip); }

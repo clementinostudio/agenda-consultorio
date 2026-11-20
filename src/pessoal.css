@@ -5,7 +5,7 @@
    ========================================================= */
 
 /* ---------- cartão (borda fina, raio grande e um brilho leve no topo no escuro) ---------- */
-.ps-card { position: relative; overflow: hidden; border-radius: 28px; border: 1px solid var(--line); box-shadow: var(--card-shadow); padding: 18px 18px 10px;
+.ps-card { position: relative; overflow: hidden; border-radius: var(--r-card); border: 1px solid var(--line); box-shadow: var(--card-shadow); padding: 18px 18px 10px;
   background: linear-gradient(180deg, var(--bg-glow), var(--surface) 46%); }
 .ps-card-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 0; background: none; color: var(--muted); font-size: 14.5px; font-weight: 600; text-align: left; }
 .ps-card-h > svg { width: 16px; height: 16px; flex: none; }
@@ -21,7 +21,7 @@
 
 /* uma categoria: ícone com anel, nome, o que sobra e o valor */
 .ps-cats-lista { display: flex; flex-direction: column; margin: 4px -8px 0; }
-.ps-cat { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border-radius: 18px; background: none; color: var(--fg); text-align: left; transition: background .15s, opacity .2s, transform .12s; }
+.ps-cat { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border-radius: var(--r-tile); background: none; color: var(--fg); text-align: left; transition: background .15s, opacity .2s, transform .12s; }
 .ps-cat:active { transform: scale(.985); }
 .ps-cat.on { background: color-mix(in srgb, var(--mode) 12%, transparent); }
 .ps-cat.apaga { opacity: .45; }
@@ -68,7 +68,7 @@
 .ps-saldo-g .ps-graf-leg { justify-content: center; }
 
 /* ---------- fluxo do mês: entrou × saiu ---------- */
-.ps-fluxo { display: grid; gap: 9px; margin: 16px 16px 0; padding: 14px 14px 12px; border-radius: 20px; background: color-mix(in srgb, var(--fg) 5%, transparent); text-align: left; }
+.ps-fluxo { display: grid; gap: 9px; margin: 16px 16px 0; padding: 14px 14px 12px; border-radius: var(--r-tile); background: color-mix(in srgb, var(--fg) 5%, transparent); text-align: left; }
 .ps-fluxo-l { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 700; }
 .ps-fluxo-t { height: 10px; border-radius: 999px; background: color-mix(in srgb, var(--fg) 7%, transparent); overflow: hidden; }
 .ps-fluxo-t i { display: block; height: 100%; min-width: 4px; border-radius: inherit; background: var(--mint); transform-origin: left center; animation: ps-cresce .8s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i, 0) * 90ms + .25s); }
@@ -116,7 +116,7 @@
 .ps-dia small { color: var(--muted); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* uma atividade */
-.ps-at { display: flex; align-items: center; gap: 14px; width: calc(100% + 16px); margin: 0 -8px; padding: 9px 8px; border-radius: 18px; background: none; color: var(--fg); text-align: left; transition: background .15s, transform .12s; }
+.ps-at { display: flex; align-items: center; gap: 14px; width: calc(100% + 16px); margin: 0 -8px; padding: 9px 8px; border-radius: var(--r-tile); background: none; color: var(--fg); text-align: left; transition: background .15s, transform .12s; }
 button.ps-at:active { transform: scale(.985); }
 @media (hover: hover) { button.ps-at:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); } }
 .ps-at.sel { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
@@ -153,14 +153,14 @@ button.ps-at:active { transform: scale(.985); }
 .big-amt.ps-valor .ps-valor-medida, .big-amt.ps-valor input { font-family: var(--f-display); font-size: min(50px, calc((100vw - 96px) / (var(--n, 4) * .68))); font-weight: 700; letter-spacing: -.035em; line-height: 1.2; }
 .big-amt.ps-valor .ps-valor-medida { display: block; visibility: hidden; white-space: pre; padding: 0 .06em; overflow: hidden; }
 .big-amt.ps-valor input { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; min-width: 0; }
-.ps-lanc-banco { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 18px; background: var(--surface-2); }
+.ps-lanc-banco { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-tile); background: var(--surface-2); }
 .ps-lanc-banco .ps-at-av, .ps-lanc-banco .txn-av { width: 36px; height: 36px; }
 .ps-lanc-banco > span:last-child { display: flex; flex-direction: column; min-width: 0; }
 .ps-lanc-banco b { font-size: 14.5px; }
 .ps-lanc-banco small { color: var(--muted); font-size: 12.5px; font-weight: 600; }
 
 /* ---------- painel do banco: saldo em contas, faturas e investimentos ---------- */
-.ps-bk { border-radius: 28px; padding: 4px 18px 14px; background: linear-gradient(180deg, var(--bg-glow), var(--surface) 40%); }
+.ps-bk { border-radius: var(--r-card); padding: 4px 18px 14px; background: linear-gradient(180deg, var(--bg-glow), var(--surface) 40%); }
 .ps-bk .panel-head .ps-bk-at { font-size: 12.5px; color: var(--muted); font-weight: 700; }
 .ps-bk-abas { display: flex; gap: 6px; margin: 2px -18px 8px; padding: 0 18px; overflow-x: auto; scrollbar-width: none; }
 .ps-bk-abas::-webkit-scrollbar { display: none; }
@@ -220,3 +220,15 @@ button.ps-at:active { transform: scale(.985); }
 .g4-regua-c.varias .txn-av { box-shadow: 0 0 0 2.5px var(--surface), 5px -4px 0 0 color-mix(in srgb, var(--fg) 14%, var(--surface)); }
 .g4-regua-c.atrasada.varias .txn-av { box-shadow: 0 0 0 2.5px var(--rose), 5px -4px 0 1px color-mix(in srgb, var(--rose) 30%, var(--surface)); }
 .g4-regua-c > em { right: -14px; top: -10px; box-shadow: 0 0 0 2px var(--surface); }
+
+/* ---------- visual calmo (src/notion.css): busca e filtros com cantos discretos ---------- */
+.ps-busca { height: 40px; border-radius: var(--r-ctl); padding-left: 12px; border-color: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.ps-busca input { font-size: 15px; font-weight: 400; }
+.ps-busca input::placeholder { font-weight: 400; }
+.ps-busca button { border-radius: var(--r-chip); }
+.ps-chips { gap: 4px; }
+.ps-chip, .ps-bk-abas button { height: 30px; padding: 0 10px; border-radius: var(--r-chip); border-color: transparent; font-weight: 500; color: var(--muted); transition: background-color .14s ease, color .14s ease; }
+@media (hover: hover) { .ps-chip:hover, .ps-bk-abas button:hover { background: var(--hover); color: var(--fg); } }
+.ps-chip.on, .ps-bk-abas button.on { background: var(--hover-2); border-color: transparent; color: var(--fg); }
+.ps-card { padding: 16px 16px 10px; }
+.ps-bk { background: var(--surface); }

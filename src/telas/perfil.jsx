@@ -5,7 +5,7 @@ import { createPortal, flushSync } from "react-dom";
 import { fmtNum, AVISOS_PADRAO, num, todayISO, liquidoMes, addDays, itensDoDia, idadeDe, termoDe, DIA_CURTO, I, brl, pushLigado, appInstalado, Avatar, ESCONDER, ConfirmButton, PhotoPicker, Field, PROFISSOES, Seg, ehAniversario, DURACOES, Toggle, soNumero, vibrar, BASE, lerJSON, K_PUSH_URL, motivoSemPush, K_PUSH, lerArquivo, FUNDOS, Cropper, pedidoInstalar, ehIOS , ajustarVibrar, limparPedidoInstalar, Ilustra, dm, useCamada, Marca, Confirmar } from "../App.jsx";
 import { DadosRecibo } from "./consultorio.jsx";
 import { AssinaturaPagina, useAssinatura, resumoAssinatura, TITULO_ASSIN, voltaAssin } from "./assinatura.jsx";
-import { GradeHorarios, LinkAgendamento, linkDo } from "./agendamento.jsx";
+import { GradeHorarios, LinkAgendamento, AgendaNoCelular, linkDo } from "./agendamento.jsx";
 import { gradeDo, resumoGrade, periodosIniciais } from "../horarios.js";
 import { linkSuporte } from "../plano.js";
 import { lerWhatsapp, mascaraWhatsapp, mostrarWhatsapp } from "../whatsapp.js";
@@ -200,7 +200,8 @@ function PerfilPage({ db, conta, tema, inicio: pedido, onClose, act, nuvem }) {
     ] },
     ...(consult ? [{ grupo: "Consultório", itens: [
       { id: "agenda", ic: <I.cal />, t: "Agenda", v: diasT.length ? `${diasTxt} · ${hIni}h às ${hFim}h` : "Escolha os dias em que atende" },
-      { id: "link", ic: <I.share />, t: "Link de agendamento", v: (db.pedidos || []).length ? `${db.pedidos.length} ${db.pedidos.length === 1 ? "pedido esperando" : "pedidos esperando"}` : linkDo(pf).ativo ? "O paciente escolhe o horário" : "Desligado" },
+      { id: "calendario", ic: <I.cal />, t: "Agenda no celular", v: pf.agendaCal && pf.agendaCal.token ? "Ligada no Google ou no iPhone" : "Ver as sessões no Google Agenda ou no iPhone" },
+      { id: "link", ic: <I.share />, t: "Link de agendamento e sua página", v: (db.pedidos || []).length ? `${db.pedidos.length} ${db.pedidos.length === 1 ? "pedido esperando" : "pedidos esperando"}` : linkDo(pf).ativo ? "O paciente escolhe o horário" : "Desligado" },
       { id: "dinheiro", ic: <I.wallet />, t: "Valores e metas", v: meta ? `Meta de ${brl(num(meta))}` : "Sem meta" },
       { id: "docs", ic: <I.receipt />, t: "Recibos e imposto", v: pf.doc && pf.doc.registro ? "Seus dados prontos para o recibo" : "CPF, registro e assinatura" },
     ] }] : []),
@@ -216,7 +217,7 @@ function PerfilPage({ db, conta, tema, inicio: pedido, onClose, act, nuvem }) {
   ];
   const conq = act.conquistas || [], nConq = conq.filter(c => c.feito).length, nivel = nivelDe(nConq);
   const resAssin = assin.situacao === "ok" ? resumoAssinatura(assin.a) : { texto: assin.situacao === "carregando" ? "Conferindo…" : assin.situacao === "rede" ? "Sem conexão agora" : assin.situacao === "erro" ? "Não deu para abrir agora" : "Precisa da sua conta" };
-  const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", link: "Link de agendamento", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos", trava: "Bloqueio do app" }[aba];
+  const titulo = (aba === "assinatura" && sub && TITULO_ASSIN[sub]) || { assinatura: "Assinatura", calendario: "Agenda no celular", link: "Link e sua página", conquistas: "Conquistas", dados: "Dados pessoais", pix: "Chave Pix", agenda: "Agenda", dinheiro: "Valores e metas", docs: "Recibos e imposto", avisos: "Avisos", visual: "Aparência e fundo", pessoal: "Como você usa o app", app: "Instalar e atalhos", trava: "Bloqueio do app" }[aba];
 
   return createPortal(
     <div className="perfil" data-mode={act.modo} role="dialog" aria-modal="true" aria-label={titulo || "Perfil"} ref={topo}>
@@ -283,6 +284,7 @@ function PerfilPage({ db, conta, tema, inicio: pedido, onClose, act, nuvem }) {
             </div>
             <div className="perfil-lista">
               {conta.uid && <WhatsappRow conta={conta} act={act} />}
+              <button className="perfil-row" onClick={act.meusDados}><i><I.down /></i><span><b>Baixar meus dados</b><small>Tudo num arquivo: {consult ? `${T.p}, sessões, cobranças e prontuários` : "gastos, contas e o resto"}</small></span><I.chev /></button>
               <button className="perfil-row" onClick={act.refazer}><i><I.repeat /></i><span><b>Refazer perguntas iniciais</b><small>Muda profissão, valores e jeito do app</small></span><I.chev /></button>
               <button className="perfil-row" onClick={act.verTour}><i><I.star /></i><span><b>Ver o tour de novo</b><small>Um passeio rápido pelo que tem nesta tela</small></span><I.chev /></button>
               <a className="perfil-row" href={linkSuporte()} target="_blank" rel="noopener"><i><I.chat /></i><span><b>Fale com a gente</b><small>Dúvidas, ideias ou problemas: direto no WhatsApp</small></span><I.chev /></a>
@@ -394,6 +396,7 @@ function PerfilPage({ db, conta, tema, inicio: pedido, onClose, act, nuvem }) {
         {aba === "conquistas" && <ConquistasPagina lista={conq} />}
 
         {aba === "link" && <LinkAgendamento db={db} conta={conta} act={act} />}
+        {aba === "calendario" && <AgendaNoCelular conta={conta} act={act} />}
 
         {aba === "assinatura" && <AssinaturaPagina s={assin} tela={sub} setTela={setSub} act={act} conta={conta} />}
 

@@ -105,7 +105,7 @@ export const WIDGETS = [
   { id: "contas", nome: "Contas a pagar", descricao: "As contas fixas que vencem logo", meia: true, ic: I.bill, precisa: c => c.pessoal, motivo: "Aparece com a área Pessoal ligada" },
   { id: "tetos", nome: "Tetos do mês", descricao: "Quanto já foi de cada teto por categoria", ic: Ic.escudo, precisa: c => c.pessoal && c.tetos > 0, motivo: "Aparece quando houver um teto por categoria" },
   { id: "caixinhas", nome: "Caixinhas", descricao: "O que você está guardando", ic: I.piggy, precisa: c => c.pessoal, motivo: "Aparece com a área Pessoal ligada" },
-  { id: "combustivel", nome: "Combustível agora", descricao: "O posto mais barato perto de você", ic: Ic.posto, precisa: () => true },
+  { id: "combustivel", nome: "Combustível agora", descricao: "O posto mais barato perto de você", ic: Ic.posto, precisa: c => c.pessoal, motivo: "Aparece com a área Pessoal ligada" },
   { id: "areas", nome: "Áreas do Avina", descricao: "Consultório, loja, casa, transporte e o resto", ic: I.grid, precisa: c => c.areas > 0, motivo: "Aparece quando houver outra área para abrir" },
 ];
 const POR_ID = Object.fromEntries(WIDGETS.map(w => [w.id, w]));

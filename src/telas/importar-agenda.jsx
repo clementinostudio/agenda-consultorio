@@ -90,7 +90,8 @@ function lerLista(txt, valorPadrao) {
   return linhas.map(l => lerLinha(l, valorPadrao)).filter(Boolean);
 }
 
-function ImportarAgendaSheet({ db, perfil, act, onClose }) {
+// primeira: aberta sozinha no primeiro minuto de quem atende ("Traga seus pacientes"), com a opção de cadastrar um por um
+function ImportarAgendaSheet({ db, perfil, act, onClose, primeira }) {
   const [passo, setPasso] = useState("escolher");
   const [texto, setTexto] = useState("");
   const [achados, setAchados] = useState([]);
@@ -121,11 +122,13 @@ function ImportarAgendaSheet({ db, perfil, act, onClose }) {
   };
 
   return (
-    <Sheet title="Trazer da agenda antiga" sub={`Seus ${T.p} entram com dia, horário e frequência. O arquivo é lido aqui no aparelho.`} onClose={onClose}>
+    <Sheet title={primeira ? `Traga seus ${T.p}` : "Trazer da agenda antiga"} sub={primeira ? `Em um minuto, a sua semana aparece montada: com dia, horário e frequência de cada ${T.s}.` : `Seus ${T.p} entram com dia, horário e frequência. O arquivo é lido aqui no aparelho.`} onClose={onClose}>
       {passo === "escolher" && <>
         <div className="perfil-lista">
+          {primeira && <button className="perfil-row" onClick={() => setPasso("colar")}><i><I.pencil /></i><span><b>Escrever ou colar uma lista</b><small>Um por linha: “Ana Souza, quinta, 14h, 150”</small></span><I.chev /></button>}
           <button className="perfil-row" onClick={() => arq.current && arq.current.click()}><i><I.cal /></i><span><b>Google Agenda, iPhone ou Outlook</b><small>Arquivo .ics exportado da agenda</small></span><I.chev /></button>
-          <button className="perfil-row" onClick={() => setPasso("colar")}><i><I.pencil /></i><span><b>Colar uma lista</b><small>Do bloco de notas ou de uma planilha</small></span><I.chev /></button>
+          {!primeira && <button className="perfil-row" onClick={() => setPasso("colar")}><i><I.pencil /></i><span><b>Colar uma lista</b><small>Do bloco de notas ou de uma planilha</small></span><I.chev /></button>}
+          {primeira && <button className="perfil-row" onClick={() => { onClose(); setTimeout(act.novoPaciente, 250); }}><i><I.plus /></i><span><b>Cadastrar um por um</b><small>Nome, valor, dia e horário</small></span><I.chev /></button>}
         </div>
         <input ref={arq} className="sr" type="file" accept=".ics,.csv,.txt,text/calendar,text/csv,text/plain" onChange={abrirArquivo} />
         {erro && <div className="error">{erro}</div>}
@@ -137,6 +140,7 @@ function ImportarAgendaSheet({ db, perfil, act, onClose }) {
             <li>Vem um .zip: abra e escolha aqui o arquivo <b>.ics</b> da sua agenda.</li>
           </ol>
         </details>
+        {primeira && <button className="btn text" onClick={onClose}>Agora não, depois eu faço</button>}
       </>}
 
       {passo === "colar" && <>

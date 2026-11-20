@@ -2,20 +2,14 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 
-// Fontes guardadas junto com o app (funcionam sem internet)
-import "@fontsource/manrope/400.css";
-import "@fontsource/manrope/500.css";
-import "@fontsource/manrope/600.css";
-import "@fontsource/manrope/700.css";
-import "@fontsource/manrope/800.css";
-import "@fontsource/sora/400.css";
-import "@fontsource/sora/500.css";
-import "@fontsource/sora/600.css";
-import "@fontsource/sora/700.css";
+// Fonte guardada junto com o app (funciona sem internet): Inter, a mesma do visual novo (src/notion.css)
+import "@fontsource-variable/inter/wght.css";
 
 import "./styles.css";
 import "./modais.css"; // modais: topo e botão à vista, sem rolar de lado
 import "./chat.css"; // a conversa com a Bolinha (chat) e o botão dela no computador
+import "./consultorio-extra.css"; // confirmação pelo paciente, sessão online, semana em grade e o topo do dia
+import "./notion.css"; // visual calmo e limpo (por último: ajusta o resto sem mexer em cada arquivo)
 import App from "./App.jsx";
 import AvisosSistema, { avisarNovaVersao } from "./avisos.jsx";
 import { noApp, chamarApp } from "./app-nativo.js";

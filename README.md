@@ -154,6 +154,15 @@ Para adicionar um fundo novo: coloque `meu-fundo.jpg` e `meu-fundo-mini.jpg` em 
 - **Para onde foi o dinheiro** (Gastos): compara com o mês anterior até o mesmo dia e mostra as categorias que mais subiram e onde economizou.
 - **Ilustrações 3D** (`public/ilustras/`): bomba de combustível, caixa de ferramentas, malas e pneu no Transporte (saindo dos cartões), carrinho em "Para onde foi o dinheiro", troféu = conquistas e metas, dinheiro = caixinhas, arquivo = organização, cadeados = privacidade, café = rotina leve e dia livre, iPad = o app em qualquer tela.
 
+- **Confirmação com um toque** (Agenda → Mandar confirmação, Fechar o dia): a mensagem leva o link `app.avina.com.br/agendar/?<endereço>&p=<paciente>&s=<data>`; o paciente toca em "Confirmo presença" ou "Preciso remarcar" e a agenda mostra sozinha (selos "Confirmou" e "Pediu para remarcar", fala no Início com o atalho de remarcar). O link nasce fechado para pedidos de horário se a pessoa nunca abriu o Link de agendamento. Respostas no servidor: `/link/confirmar` e `/link/pedidos` (veja `servidor-avisos/src/link.js`); regra em `src/link-regras.js`.
+- **Sessão online:** no cadastro do paciente, "Online" e o link da sala (Meet, Zoom, Jitsi). Vai na confirmação e aparece "Entrar" na agenda e no Início de 15 minutos antes até o fim da sessão.
+- **Declaração de comparecimento e contrato terapêutico em PDF** (ficha do paciente → Documentos): `pdfDeclaracao` e `pdfContrato` em `src/documentos-pdf.js`.
+- **Agenda no celular** (Perfil → Agenda no celular): endereço para assinar no Google Agenda, iPhone ou Outlook (`/link/agenda.ics`), com "Sessão" no título (ou as iniciais, se a pessoa escolher).
+- **Baixar meus dados** (Perfil → Conta): um .zip com CSVs, o JSON completo e, com o cofre aberto, os prontuários legíveis (`src/exportar.js`).
+- **Pix que se marca sozinho** (Open Finance + Pro do consultório): nome e valor batendo, a cobrança fica paga com Desfazer; só um dos dois batendo, o Início pergunta de quem é (`src/pix-auto.js`). Depende de `BANCO_ABERTO` = "todos" no `servidor-avisos/wrangler.jsonc`.
+- **Semana em grade no computador** (Agenda → Semana): arrastar a próxima sessão remarca (com Desfazer); clicar num horário vazio cadastra alguém ali.
+- **Página do profissional no link** (Perfil → Link e sua página): foto, registro, abordagem, online ou presencial e um texto curto, para usar como link na bio.
+
 **Banco de dados na nuvem (Supabase):** depois de rodar `bash conectar-nuvem.sh`, o login é de verdade e os dados ficam sincronizados entre celular e computador (veja abaixo). Sem isso, tudo fica só no aparelho, como antes.
 
 ### Avisos com o app fechado (servidor-avisos)

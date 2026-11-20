@@ -7,6 +7,8 @@ import { faseCortesia } from "./plano.js";
 import { valorDaSessao, lerNumero } from "./ferramentas-contas.js";
 import { porExtenso, cpfValido, fmtCPF, dataLonga } from "./documentos-pdf.js";
 import { pixCopiaECola } from "./loja-contas.js";
+import { pagadorDoExtrato, separarPix } from "./pix-auto.js";
+import { confirmacaoDe, confirmado } from "./link-regras.js";
 
 test("WhatsApp: aceita celular do Brasil em vários jeitos de escrever", () => {
   for (const n of ["(43) 98820-8714", "43988208714", "043 98820 8714", "+55 43 98820-8714", "5543988208714"])
@@ -78,4 +80,34 @@ test("Pix: código com valor e CRC", () => {
   assert.match(t, /^000201/);
   assert.match(t, /5406150\.00/);
   assert.match(t, /6304[0-9A-F]{4}$/);
+});
+
+test("Pix do banco: tira do texto só o nome de quem pagou", () => {
+  assert.equal(pagadorDoExtrato("PIX RECEBIDO - MARIA S SOUZA", "Pix recebido de Maria S Souza 123.456.789-00"), "maria souza");
+  assert.equal(pagadorDoExtrato("Transferência recebida", "TRANSF PIX RECEB JOAO DA SILVA ***.456.789-**"), "joao silva");
+  assert.equal(pagadorDoExtrato("Pix - Nu Pagamentos", ""), "");
+});
+
+test("Pix do banco: só marca sozinho com nome e valor batendo; o resto vira dúvida", () => {
+  const itens = [
+    { id: "t1", tipo: "entrada", valor: 150, data: "2026-11-20", desc: "Pix recebido", bruto: "PIX RECEBIDO ANA SOUZA" },
+    { id: "t2", tipo: "entrada", valor: 140, data: "2026-11-20", desc: "Pix recebido", bruto: "PIX RECEBIDO FULANO" },
+    { id: "t3", tipo: "saida", valor: 150, data: "2026-11-20", desc: "Pix enviado", bruto: "PIX ENVIADO ANA" },
+    { id: "t4", tipo: "entrada", valor: 99, data: "2026-11-20", desc: "Salário", bruto: "CREDITO SALARIO" },
+  ];
+  const casar = pre => pre.tid === "t1" ? [{ pid: "p1", ids: ["c1"], nota: 5 }] : pre.tid === "t2" ? [{ pid: "p2", ids: ["c2"], nota: 2 }] : [];
+  const r = separarPix(itens, casar);
+  assert.deepEqual(r.automaticos.map(a => [a.tid, a.pid, a.ids]), [["t1", "p1", ["c1"]]]);
+  assert.deepEqual(r.duvidas.map(d => d.tid), ["t2"]);
+  assert.equal(separarPix(itens, casar, { vistos: new Set(["t1", "t2"]) }).automaticos.length, 0);
+  assert.equal(separarPix(itens, casar, { desde: "2026-11-21" }).duvidas.length, 0);
+});
+
+test("Confirmação: a resposta do paciente e a marcação à mão", () => {
+  assert.equal(confirmacaoDe(true), "manual");
+  assert.equal(confirmacaoDe({ r: "sim", em: 1 }), "paciente");
+  assert.equal(confirmacaoDe({ r: "remarcar", em: 1 }), "remarcar");
+  assert.equal(confirmacaoDe(false), null);
+  assert.equal(confirmado({ r: "remarcar" }), false);
+  assert.equal(confirmado({ r: "sim" }), true);
 });

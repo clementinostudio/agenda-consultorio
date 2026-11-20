@@ -25,7 +25,7 @@ import { janelasDoDia } from "./horarios.js";
 import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCortesia, emLancamento } from "./plano.js";
 import { lerWhatsapp, mascaraWhatsapp } from "./whatsapp.js";
 import { K_ORIGEM } from "./origem.js";
-import { useLinkAgendamento, linkDo } from "./link.js";
+import { useLinkAgendamento, linkDo, confirmacaoDe, confirmado, enderecoConfirmar } from "./link.js";
 import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
 
@@ -363,6 +363,18 @@ function conversa(db, now, act, perfil) {
   const amanha = addDays(t, 1);
   const semConf = itensDoDia(db, amanha).filter(i => i.kind !== "log" && !(db.confirmados || {})[`${i.patient.id}:${amanha}`]);
   if (nm >= 12 * 60 && semConf.length) falas.push({ txt: <>Amanhã você tem {semConf.length === 1 ? `sessão com ${primeiro(semConf[0].patient.name)}` : `${semConf.length} sessões sem confirmação`}. Quer mandar a confirmação agora?</>, acao: { l: "Confirmar amanhã", ic: <I.send />, fn: () => act.confirmar(amanha) } });
+  // Pix do banco em dúvida (Open Finance): de quem é?
+  const pixP = (db.pixPendentes || [])[0];
+  if (pixP) falas.push({ txt: <>Chegou um Pix de <b>{brl(pixP.valor)}</b>{pixP.pagador ? <> de {pixP.pagador.replace(/\b\w/g, c => c.toUpperCase())}</> : null} ({dm(pixP.data)}). É pagamento de sessão?{(db.pixPendentes || []).length > 1 ? ` E mais ${db.pixPendentes.length - 1} para ver.` : ""}</>, acao: { l: "Ver de quem é", ic: <I.money />, fn: () => act.verPixPendente(pixP) } });
+  // Pediu para remarcar pelo link de confirmação (nos próximos 7 dias)
+  Object.entries(db.confirmados || {}).forEach(([k, v]) => {
+    if (confirmacaoDe(v) !== "remarcar") return;
+    const [pid, d] = k.split(":"), p = db.patients.find(x => x.id === pid && x.active);
+    if (!p || d < t || d > addDays(t, 7)) return;
+    const naProxima = p.nextDate === d;
+    falas.push({ txt: <><b>{primeiro(p.name)}</b> pediu para remarcar a sessão de {relativo(d).toLowerCase()}{relativo(d) === diaCurto(d) ? "" : ` (${dm(d)})`}. {naProxima ? "Escolha o novo horário e avise por mensagem." : ""}</>,
+      acao: naProxima ? { l: "Remarcar", ic: <I.repeat />, fn: () => act.openItem({ kind: "next", patient: p, date: d, time: p.time, modo: "move" }) } : { l: `Ver ${primeiro(p.name)}`, ic: <I.user />, fn: () => act.openPatient(p.id) } });
+  });
   // Registros pendentes
   const regs = registroPendente(db);
   if (regs.length) { const ns = [...new Set(regs.map(r => primeiro((db.patients.find(p => p.id === r.patientId) || { name: "?" }).name)))]; falas.push({ txt: <>Falta o registro {ns.length === 1 ? `da sessão de ${ns[0]}` : `das sessões de ${ns.slice(0, -1).join(", ")} e ${ns[ns.length - 1]}`}.</>, acao: { l: "Marcar registros", ic: <I.check />, fn: act.registros } }); }
@@ -2439,21 +2451,26 @@ function PendingCard({ p, act }) {
 // O topo do Início (consultório e pessoal), no jeito do app de celular: a foto, o modo, o olho e o "+" (anotar), e
 // embaixo a data e a saudação grande ("Boa noite, Felipe")
 const DIA_SEMANA_LONGO = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
-function TopoInicio({ conta, act, tema, modo, now }) {
+function TopoInicio({ conta, act, tema, modo, now, compacto }) {
   const d = now || new Date();
   const mais = modo === "pessoal" ? { l: "Anotar gasto ou entrada", fn: () => act.novoLanc("saida") } : modo === "consultorio" ? { l: `Novo ${TERMO.s}`, fn: act.novoPaciente } : null;
   const varios = act.modos && act.modos.length > 1;
   return (
-    <header className={"ini-topo" + (varios ? " com-modo" : "")}>
+    <header className={"ini-topo" + (varios ? " com-modo" : "") + (compacto ? " compacto" : "")}>
       <div className="ini-topo-l">
         <VoltarAoApp />
         <Avatar conta={conta} onClick={act.openSettings} />
         {varios && <ModeSwitch modo={modo} setModo={act.setModo} modos={act.modos} />}
       </div>
-      <div className="ini-topo-t">
-        <p className="ini-data">{DIA_SEMANA_LONGO[d.getDay()]}, {d.getDate()} de {MES_LONGO[d.getMonth()]}</p>
-        <h1 className="ini-ola">{ehAniversario(conta.perfil) ? "Feliz aniversário" : saudacao(d)}, {primeiro(conta.nome)}</h1>
-      </div>
+      {compacto
+        ? <div className="ini-topo-t">
+          <h1 className="ini-ola">{ehAniversario(conta.perfil) ? "Feliz aniversário" : saudacao(d)}, {primeiro(conta.nome)}</h1>
+          <p className="ini-data">{DIA_SEMANA_LONGO[d.getDay()].replace("-feira", "")}, {d.getDate()} de {MES_LONGO[d.getMonth()]}</p>
+        </div>
+        : <div className="ini-topo-t">
+          <p className="ini-data">{DIA_SEMANA_LONGO[d.getDay()]}, {d.getDate()} de {MES_LONGO[d.getMonth()]}</p>
+          <h1 className="ini-ola">{ehAniversario(conta.perfil) ? "Feliz aniversário" : saudacao(d)}, {primeiro(conta.nome)}</h1>
+        </div>}
       <div className="top-actions ini-topo-a">
         <button className="icon-btn" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button>
         <span className="nc"><button className="icon-btn" onClick={act.trocarTema} aria-label={tema.escuro ? "Usar modo claro" : "Usar modo escuro"}>{tema.escuro ? <I.sun /> : <I.moon />}</button></span>
@@ -2467,6 +2484,51 @@ function TopoInicio({ conta, act, tema, modo, now }) {
 const CarrosselInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.Carrossel })));
 const CartoesInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.CartoesInicio })));
 const PersonalizarInicio = lazy(() => import("./telas/inicio-cartoes.jsx").then(m => ({ default: m.PersonalizarInicio })));
+
+// O dia no topo do Início: quantas sessões, quanto entra, a próxima (com o "Entrar" da sala online) e a linha do dia
+function HojeConsultorio({ db, now, act, clima }) {
+  const t = todayISO(), nm = agoraMin(now);
+  const its = itensDoDia(db, t);
+  const sts = its.map(i => situacao(i, now));
+  const validos = its.filter((_, k) => sts[k] !== "missed");
+  const feitos = sts.filter(s => s === "done").length;
+  const total = soma(validos, i => i.kind === "log" ? i.session.price - i.session.sublet : liquido(i.patient));
+  const prox = its.find(i => i.kind === "next" && mins(i.time) + DURACAO_SESSAO > nm);
+  const jaComecou = prox && nm >= mins(prox.time);
+  const sala = prox && salaDe(prox.patient);
+  const pct = validos.length ? Math.round((feitos / validos.length) * 100) : 0;
+  return (
+    <section className="hoje" aria-label="Hoje no consultório">
+      <div className="hoje-cab">
+        <span className="hoje-rot">Hoje</span>
+        <span className="hoje-res num">{validos.length ? <>{feitos} de {validos.length} {validos.length === 1 ? "sessão" : "sessões"} · <b>{brl(total)}</b></> : feriado(t) ? `Feriado: ${feriado(t).name}` : "Sem sessões"}</span>
+      </div>
+      {validos.length > 0 && <div className="hoje-barra" aria-hidden="true"><i style={{ width: `${pct}%` }} /></div>}
+      {prox ? (
+        <div className={"hoje-prox" + (jaComecou ? " agora" : "")} style={corVars(prox.patient)}>
+          <button className="hoje-prox-main" onClick={() => act.openItem(prox)}>
+            <span className="hoje-hora num">{prox.time}</span>
+            <span className="hoje-quem">
+              <b>{prox.patient.name}</b>
+              <small>{jaComecou ? "Acontecendo agora" : `Próxima · em ${duracao(mins(prox.time) - nm)}`} · você recebe {brl(liquido(prox.patient))}</small>
+              <SeloConfirmacao v={(db.confirmados || {})[`${prox.patient.id}:${t}`]} online={!!prox.patient.online} />
+            </span>
+            <I.chev />
+          </button>
+          {sala && (horaDeEntrar(prox, now)
+            ? <a className="entrar-sala grande" href={sala} target="_blank" rel="noopener noreferrer" onClick={() => vibrar("toque")}><I.video /> Entrar na sessão</a>
+            : <a className="entrar-sala discreto" href={sala} target="_blank" rel="noopener noreferrer"><I.video /> Link da sala</a>)}
+        </div>
+      ) : <p className="hoje-vazio">{its.length ? "As sessões de hoje já passaram." : "Nenhuma sessão hoje. Bom descanso."}</p>}
+      {its.length > 1 && (
+        <div className="hoje-linha" role="list" aria-label="Sessões de hoje">
+          {its.map((i, k) => <button key={i.patient.id + i.time} role="listitem" className={"hoje-pt " + sts[k] + (prox && i === prox ? " prox" : "")} style={corVars(i.patient)} onClick={() => act.openItem(i)} aria-label={`${i.time}, ${i.patient.name}: ${ROTULO[sts[k]]}`}><span className="num">{i.time}</span><i>{primeiro(i.patient.name)}</i></button>)}
+        </div>
+      )}
+      {clima && <div className="hoje-clima">{clima}</div>}
+    </section>
+  );
+}
 
 function HomeTab({ db, conta, now, act, tema, avisos }) {
   const t = todayISO(), nm = agoraMin(now);
@@ -2484,20 +2546,6 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
         <button className="chip-btn" onClick={act.revisao}><I.chart />Revisão da semana</button>
       </div>
       {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
-      {prox && (
-        <button className="next" onClick={() => act.openItem(prox)}>
-          <div className="next-top">
-            <span className="rc-chip"><span className="rc-ic blue"><I.clock /></span>{nm >= mins(prox.time) ? "Acontecendo agora" : "Próxima sessão"}</span>
-            {nm < mins(prox.time) && <span className="countdown">em {duracao(mins(prox.time) - nm)}</span>}
-          </div>
-          <div className="next-big">
-            <span className="next-time num">{prox.time}</span>
-            <span style={{ minWidth: 0 }}><span className="next-name" style={{ display: "block" }}>{prox.patient.name}</span><span className="next-sub">{freqNome(prox.patient.freq)} · até {hhmm(mins(prox.time) + DURACAO_SESSAO)}</span></span>
-          </div>
-          <hr className="dash" />
-          <div className="rc-row" style={{ minHeight: 0, padding: "4px 0" }}><span className="l">Você recebe</span><span className="v pos"><Money v={liquido(prox.patient)} /></span></div>
-        </button>
-      )}
       <div className="acts narrow-only">
         <button className="act" onClick={act.novoPaciente}><i><I.plus /></i>{TERMO.S}</button>
         <button className="act" onClick={() => act.setTab("agenda")}><i><I.cal /></i>Agenda</button>
@@ -2507,13 +2555,13 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
   );
   return (
     <div className="page ini">
-      <TopoInicio conta={conta} act={act} tema={tema} modo="consultorio" now={now} />
+      <TopoInicio conta={conta} act={act} tema={tema} modo="consultorio" now={now} compacto />
       {avisos}
-      <WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} sessao={prox} />
+      <HojeConsultorio db={db} now={now} act={act} clima={<WeatherChip cidade={conta.perfil && conta.perfil.cidade} act={act} sessao={prox} />} />
       <Suspense fallback={<div className="ini-car-espera" />}><CarrosselInicio db={db} modo="consultorio" act={act} meta={conta.perfil && conta.perfil.meta} /></Suspense>
       <Suspense fallback={agora}>
         <CartoesInicio db={db} modo="consultorio" act={act} now={now}
-          antes={[{ id: "agora", el: agora, h: 380 + falas.length * 90 + atrasados.length * 190 + (prox ? 200 : 0) }]}
+          antes={[{ id: "agora", el: agora, h: 380 + falas.length * 90 + atrasados.length * 190 }]}
           depois={[{ id: "conquista", el: <ProximaConquista act={act} trilhas={["rotina", "consultorio", "metas", "app", "seguranca"]} />, h: 110 }]} />
       </Suspense>
     </div>
@@ -2589,6 +2637,25 @@ function WeekBar({ db, sel, setSel, vista, setVista, now }) {
   );
 }
 
+// Remarcou: o pedido de remarcar daquele paciente já foi atendido
+const semPedidoRemarcar = (conf, pid) => Object.fromEntries(Object.entries(conf || {}).filter(([k, v]) => !(k.startsWith(pid + ":") && confirmacaoDe(v) === "remarcar")));
+// Sessão online: o link da sala (só https) e a hora de mostrar o "Entrar" (15 min antes até o fim)
+const salaDe = p => p && p.online && /^https:\/\/\S+/.test(p.sala || "") ? p.sala : null;
+const horaDeEntrar = (it, now) => it.date === todayISO() && agoraMin(now) >= mins(it.time) - 15 && agoraMin(now) < mins(it.time) + DURACAO_SESSAO;
+// Selos da sessão na agenda: online e a confirmação (à mão ou do próprio paciente, pelo link)
+function SeloConfirmacao({ v, online }) {
+  const c = confirmacaoDe(v);
+  if (!c && !online) return null;
+  return (
+    <span className="selos">
+      {online && <span className="selo online"><I.video />Online</span>}
+      {c === "paciente" && <span className="selo ok"><I.check />Confirmou</span>}
+      {c === "manual" && <span className="selo ok"><I.check />Confirmado</span>}
+      {c === "remarcar" && <span className="selo alerta"><I.repeat />Pediu para remarcar</span>}
+    </span>
+  );
+}
+
 const ROTULO = { up: "você recebe", done: "Atendido", late: "Faltou marcar", missed: "Faltou", proj: "Previsto pela frequência" };
 const ICONE = { up: <I.clock />, done: <I.check />, late: <I.alert />, missed: <I.x />, proj: <I.repeat /> };
 
@@ -2630,9 +2697,10 @@ function Timeline({ db, iso, now, act }) {
                 <span className="tm num">{it.time}–{hhmm(l.ini + DURACAO_SESSAO)} · {DURACAO_SESSAO} min</span>
                 <span className={"st " + st}>{st === "up" ? <>{ROTULO.up} {brl(valor)}</> : st === "done" ? <>{ROTULO.done} · {brl(valor)}</> : st === "missed" && it.session.cobrada ? <>Faltou · cobrada {brl(valor)}</> : ROTULO[st]}</span>
                 {st === "done" && PERFIL.registro !== false && !it.session.registro && <span className="tm" style={{ color: "var(--amber)" }}>Registro pendente</span>}
-                {(st === "up" || st === "proj") && (db.confirmados || {})[`${p.id}:${it.date}`] && <span className="tm" style={{ color: "var(--mint)" }}>Confirmado</span>}
-                {st === "up" && chuvaPerto(it.date, it.time) && <span className="tm rainy">Chance de chuva {chuvaPerto(it.date, it.time).p}% · saia mais cedo</span>}
+                {(st === "up" || st === "proj") && <SeloConfirmacao v={(db.confirmados || {})[`${p.id}:${it.date}`]} online={!!p.online} />}
+                {st === "up" && !p.online && chuvaPerto(it.date, it.time) && <span className="tm rainy">Chance de chuva {chuvaPerto(it.date, it.time).p}% · saia mais cedo</span>}
               </button>
+              {st === "up" && salaDe(p) && horaDeEntrar(it, now) && <a className="entrar-sala" href={salaDe(p)} target="_blank" rel="noopener noreferrer" onClick={() => vibrar("toque")}><I.video /> Entrar</a>}
               <button className={"box " + st} disabled={!podeMarcar && it.kind !== "log"} onClick={() => podeMarcar ? act.rapido(p.id, "done") : act.openItem(it)} aria-label={podeMarcar ? `Marcar que ${primeiro(p.name)} veio` : "Ver detalhes"}>
                 {(st === "done" || st === "missed") && ICONE[st]}
               </button>
@@ -2647,23 +2715,136 @@ function Timeline({ db, iso, now, act }) {
   );
 }
 
+// A semana em grade (computador): um dia por coluna e as horas de cima para baixo, como num calendário.
+// Arrastar a próxima sessão de alguém remarca (com Desfazer); clicar num horário vazio cadastra alguém ali.
+const PX_HORA = 56, PASSO_MIN = 15;
+function SemanaGrade({ db, sel, setSel, now, act }) {
+  const t = todayISO(), ini = segunda(sel), nm = agoraMin(now);
+  const dias = Array.from({ length: 7 }, (_, i) => addDays(ini, i));
+  const porDia = dias.map(iso => itensDoDia(db, iso));
+  // as horas vão do início ao fim do expediente, e esticam se tiver sessão fora dele
+  const todos = porDia.flat().map(i => mins(i.time));
+  const hIni = Math.min(PERFIL.horaIni ?? 8, ...todos.map(m => Math.floor(m / 60)));
+  const hFim = Math.max(PERFIL.horaFim ?? 20, ...todos.map(m => Math.ceil((m + DURACAO_SESSAO) / 60)));
+  const horas = Array.from({ length: hFim - hIni }, (_, i) => hIni + i);
+  const corpo = useRef(null);
+  const [arr, setArr] = useState(null); // { it, x0, y0, dx, dy, moveu, alvo: { iso, min } }
+  const yDe = m => (m - hIni * 60) / 60 * PX_HORA;
+  const alvoDe = (x, y) => {
+    const r = corpo.current.getBoundingClientRect(), col = Math.min(6, Math.max(0, Math.floor((x - r.left) / (r.width / 7))));
+    const min = Math.round((hIni * 60 + (y - r.top) / PX_HORA * 60) / PASSO_MIN) * PASSO_MIN;
+    return { iso: dias[col], min: Math.min(hFim * 60 - DURACAO_SESSAO, Math.max(hIni * 60, min)) };
+  };
+  const podeArrastar = it => it.kind === "next" && it.date >= t;
+  const pegar = (e, it) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setArr({ it, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, moveu: false, alvo: null });
+  };
+  const mover = e => {
+    if (!arr) return;
+    const dx = e.clientX - arr.x0, dy = e.clientY - arr.y0, moveu = arr.moveu || Math.abs(dx) + Math.abs(dy) > 6;
+    setArr({ ...arr, dx, dy, moveu, alvo: moveu && podeArrastar(arr.it) ? alvoDe(e.clientX, e.clientY) : null });
+  };
+  const soltar = () => {
+    if (!arr) return;
+    const { it, moveu, alvo } = arr; setArr(null);
+    if (!moveu) return act.openItem(it);
+    if (alvo && (alvo.iso !== it.date || hhmm(alvo.min) !== it.time)) {
+      if (alvo.iso < t || (alvo.iso === t && alvo.min < nm)) { vibrar("aviso"); return act.toast("Escolha um horário daqui para a frente"); }
+      act.moverSessao(it.patient.id, alvo.iso, hhmm(alvo.min));
+    }
+  };
+  const clicarVazio = (e, iso) => {
+    if (e.target !== e.currentTarget) return;
+    const { min } = alvoDe(e.clientX, e.clientY);
+    if (iso < t) return;
+    act.novoPacienteEm(iso, hhmm(Math.floor(min / 30) * 30));
+  };
+  // sessões que se cruzam no mesmo dia dividem a largura
+  const faixas = itens => {
+    const out = []; let grupo = [], fim = -1;
+    const fecha = () => grupo.forEach((x, k) => out.push({ ...x, k, n: grupo.length }));
+    itens.forEach(it => { const a = mins(it.time); if (a >= fim && grupo.length) { fecha(); grupo = []; } grupo.push({ it, a }); fim = Math.max(fim, a + DURACAO_SESSAO); });
+    fecha();
+    return out;
+  };
+  return (
+    <section className="sg" aria-label="Semana em grade">
+      <div className="sg-cab">
+        <span />
+        {dias.map((iso, i) => {
+          const d = fromISO(iso), n = porDia[i].filter(x => situacao(x, now) !== "missed").length;
+          return (
+            <button key={iso} className={"sg-dia" + (iso === t ? " eh-hoje" : "") + (iso === sel ? " sel" : "") + (feriado(iso) ? " hol" : "")} onClick={() => setSel(iso)} title={feriado(iso) ? feriado(iso).name : undefined}>
+              <small>{SEMANA[i]}</small><b className="num">{d.getDate()}</b>{n > 0 && <em className="num">{n}</em>}
+            </button>
+          );
+        })}
+      </div>
+      <div className="sg-rolar">
+        <div className="sg-grade" style={{ height: horas.length * PX_HORA }}>
+          <div className="sg-horas">{horas.map(h => <span key={h} style={{ top: (h - hIni) * PX_HORA }}>{pad(h)}:00</span>)}</div>
+          <div className="sg-corpo" ref={corpo} onPointerMove={mover} onPointerUp={soltar} onPointerCancel={() => setArr(null)}>
+            {horas.map(h => <i key={h} className="sg-linha" style={{ top: (h - hIni) * PX_HORA }} />)}
+            {dias.map((iso, i) => (
+              <div key={iso} className={"sg-col" + (iso === t ? " eh-hoje" : "") + (iso < t ? " passado" : "") + (!(PERFIL.diasTrab || [1, 2, 3, 4, 5]).includes(fromISO(iso).getDay()) ? " folga" : "")} onClick={e => clicarVazio(e, iso)}>
+                {iso === t && nm >= hIni * 60 && nm <= hFim * 60 && <i className="sg-agora" style={{ top: yDe(nm) }} />}
+                {faixas(porDia[i]).map(({ it, k, n }) => {
+                  const st = situacao(it, now), p = it.patient, segurando = arr && arr.it === it && arr.moveu;
+                  const cf = confirmacaoDe((db.confirmados || {})[`${p.id}:${iso}`]);
+                  return (
+                    <button key={p.id + it.kind + it.time} className={"sg-ses " + st + (podeArrastar(it) ? " arrasta" : "") + (segurando ? " segurando" : "")}
+                      style={{ ...corVars(p), top: yDe(mins(it.time)), height: DURACAO_SESSAO / 60 * PX_HORA - 3, left: `calc(${(k / n) * 100}% + 2px)`, width: `calc(${100 / n}% - 4px)`, ...(segurando ? { transform: `translate(${arr.dx}px, ${arr.dy}px)` } : {}) }}
+                      onPointerDown={e => pegar(e, it)} aria-label={`${it.time}, ${p.name}: ${ROTULO[st]}${podeArrastar(it) ? ". Arraste para remarcar" : ""}`}>
+                      <b>{p.name}</b>
+                      <small className="num">{it.time}{p.online ? " · online" : ""}{cf === "paciente" || cf === "manual" ? " · ✓" : cf === "remarcar" ? " · remarcar" : ""}</small>
+                    </button>
+                  );
+                })}
+                {arr && arr.alvo && arr.alvo.iso === iso && <i className="sg-fantasma" style={{ top: yDe(arr.alvo.min), height: DURACAO_SESSAO / 60 * PX_HORA - 3 }}><span className="num">{hhmm(arr.alvo.min)}</span></i>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="sg-dica">Arraste a próxima sessão de alguém para remarcar. Clique num horário vazio para marcar alguém novo.</p>
+    </section>
+  );
+}
+
 function AgendaTab({ db, now, act, tema }) {
   const wide = useWide();
   const [sel, setSel] = useState(todayISO());
-  const [vista, setVista] = useState(() => window.matchMedia("(min-width: 900px)").matches ? "mes" : "semana");
+  const [vista, setVista] = useState(() => window.matchMedia("(min-width: 900px)").matches ? "grade" : "semana");
   const n = itensDoDia(db, sel).filter(i => i.kind !== "log" || i.session.status === "done").length;
+  const grade = wide && vista === "grade";
+  const ini = segunda(sel), fim = addDays(ini, 6);
+  const tituloSemana = fromISO(ini).getMonth() === fromISO(fim).getMonth() ? `${fromISO(ini).getDate()} a ${fromISO(fim).getDate()} de ${MES_LONGO[fromISO(fim).getMonth()]}` : `${dm(ini)} a ${dm(fim)}`;
   return (
     <div className="page">
-      <TopBar eyebrow={`${n ? `${n} ${n === 1 ? "sessão" : "sessões"}` : "Sem sessões"} ${sel === todayISO() ? "hoje" : "neste dia"}`} title="Agenda" act={act} tema={tema} mais={{ l: `Novo ${TERMO.s}`, f: act.novoPaciente }}
+      <TopBar eyebrow={grade ? tituloSemana : `${n ? `${n} ${n === 1 ? "sessão" : "sessões"}` : "Sem sessões"} ${sel === todayISO() ? "hoje" : "neste dia"}`} title="Agenda" act={act} tema={tema} mais={{ l: `Novo ${TERMO.s}`, f: act.novoPaciente }}
         extra={<button className="icon-btn" onClick={act.livres} aria-label="Horários livres para divulgar"><I.share /></button>} />
+      {wide && (
+        <div className="ag-barra">
+          <Seg value={vista === "grade" ? "grade" : "mes"} onChange={setVista} options={[{ v: "grade", l: "Semana" }, { v: "mes", l: "Mês e dia" }]} />
+          {grade && <div className="ag-nav">
+            <button className="mini" onClick={() => setSel(addDays(sel, -7))} aria-label="Semana anterior"><I.chevL /></button>
+            <button className="mini" onClick={() => setSel(todayISO())} disabled={segunda(todayISO()) === ini}>Hoje</button>
+            <button className="mini" onClick={() => setSel(addDays(sel, 7))} aria-label="Próxima semana"><I.chev /></button>
+          </div>}
+          {grade && <button className="chip-btn" onClick={() => act.confirmar(addDays(todayISO(), 1))}><I.send />Confirmar amanhã</button>}
+        </div>
+      )}
+      {grade ? <SemanaGrade db={db} sel={sel} setSel={setSel} now={now} act={act} /> :
       <div className="cols">
-        <div className="col"><WeekBar db={db} sel={sel} setSel={setSel} vista={vista} setVista={setVista} now={now} /></div>
+        <div className="col"><WeekBar db={db} sel={sel} setSel={setSel} vista={vista === "grade" ? (wide ? "mes" : "semana") : vista} setVista={setVista} now={now} /></div>
         <div className="col">
           <div className="day-head" style={wide ? { marginTop: 0 } : undefined}><h2>{relativo(sel)}</h2><span>{diaCurto(sel)}</span></div>
-          {sel > todayISO() && itensDoDia(db, sel).some(i => i.kind !== "log") && <div className="small-acts"><button className="chip-btn" onClick={() => act.confirmar(sel)}><I.send />Mandar confirmação</button></div>}
+          {sel >= todayISO() && itensDoDia(db, sel).some(i => i.kind !== "log") && <div className="small-acts"><button className="chip-btn" onClick={() => act.confirmar(sel)}><I.send />Mandar confirmação</button></div>}
           <Timeline db={db} iso={sel} now={now} act={act} />
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -2840,13 +3021,14 @@ function PixSessaoSheet({ db, pre, grupos, onClose, act }) {
   return (
     <Sheet title={`Pix de ${brlReal(pre.valor)} recebido`} sub={`${pre.pagador ? `De ${pre.pagador} · ` : ""}${pre.data === todayISO() ? "hoje" : dm(pre.data)}. É pagamento de sessão?`} onClose={onClose}>
       {grupos.map(g => { const p = pac(g.pid), n = g.ids.length; return (
-        <button key={g.pid} className="txn" onClick={() => (n ? act.pixPagou(g.ids, pre.data) : act.openCharge(db.charges.find(c => c.patientId === g.pid && !c.paid && !c.hidden).id))}>
+        <button key={g.pid} className="txn" onClick={() => (n ? act.pixPagou(g.ids, pre.data, pre.tid) : act.openCharge(db.charges.find(c => c.patientId === g.pid && !c.paid && !c.hidden).id))}>
           <span className="txn-av">{iniciais(p.name)}<i className="cdot" style={{ background: corDe(p).cor }} /></span>
           <span className="mid"><span className="nm">{p.name}</span><span className="sb">{n ? `${n === 1 ? "1 sessão" : `${n} sessões`} em aberto desde ${dm(g.desde)} · marcar como pago` : `${g.abertas} em aberto (${brl(g.total)}): o valor não bate, ver cobrança`}</span></span>
           <span className="amt pos">{n ? <I.check /> : <Money v={g.total} />}</span>
         </button>
       ); })}
       <button className="btn ghost" onClick={() => act.pixNaoSessao(pre)}>Não é de sessão{act.usaPessoal ? ": anotar como entrada" : ""}</button>
+      {pre.tid && <button className="btn text" onClick={() => { act.tirarPixPendente(pre.tid); onClose(); }}>Ignorar este Pix</button>}
     </Sheet>
   );
 }
@@ -2888,6 +3070,7 @@ function PatientSheet({ db, pid, onClose, act }) {
         <div><span>Já recebido</span><b className="num">{brl(recebido)}</b></div>
       </div>
       {p.phone && <div className="hint">WhatsApp: <span style={{ userSelect: "all", color: "var(--fg)" }}>{p.phone}</span></div>}
+      {salaDe(p) && <div className="note"><I.video /><span>Atendimento online. <a href={salaDe(p)} target="_blank" rel="noopener noreferrer">Abrir a sala</a> · <button type="button" className="link" onClick={() => copiarTexto(salaDe(p), act, "Link da sala copiado")}>copiar o link</button></span></div>}
       {reaj && (
         <div className="note amber"><I.money /><span>
           Há {reaj.meses} meses com o mesmo valor ({brlReal(p.price)}).{" "}
@@ -2907,6 +3090,7 @@ function PatientSheet({ db, pid, onClose, act }) {
       <div className="pac-acoes">
         <button className="pac-acao" onClick={() => act.abrirNotas(p.id)}><Ilustra n="cadeados" /><span><b>Prontuário</b><small>{nNotas ? `${nNotas} ${nNotas === 1 ? "registro" : "registros"} · trancado` : "Só você lê"}</small></span></button>
         <button className="pac-acao" onClick={() => act.abrirRecibo(p.id)}><Ilustra n="arquivo" /><span><b>Recibo</b><small>{recebido > 0 ? "PDF para o reembolso" : "Depois do 1º pagamento"}</small></span></button>
+        <button className="pac-acao" onClick={() => act.abrirDocumentos(p.id)}><span className="pac-acao-ic"><I.doc /></span><span><b>Documentos</b><small>Declaração e contrato</small></span></button>
       </div>
       <button className="btn" onClick={() => act.editPatient(p.id)}>Editar cadastro</button>
       <div className="panel">
@@ -2930,7 +3114,7 @@ function PatientForm({ initial, total = 0, perfil, pre, onSave, onClose }) {
   const pf = perfil || {};
   const [f, setF] = useState(() => initial
     ? { ...initial, color: corDe(initial).id, price: String(initial.price).replace(".", ","), sublet: String(initial.sublet).replace(".", ",") }
-    : { name: pre ? pre.name : "", phone: pre ? pre.phone : "", color: CORES[total % CORES.length].id, price: pf.valorPadrao ? fmtNum(pf.valorPadrao) : "", sublet: pf.subPadrao ? fmtNum(pf.subPadrao).replace(",00", "") : "", subletType: pf.subTipo || "fixed", freq: 7, time: "18:00", billing: "session", packageSize: 4, nextDate: todayISO(), active: true });
+    : { name: (pre && pre.name) || "", phone: (pre && pre.phone) || "", color: CORES[total % CORES.length].id, price: pf.valorPadrao ? fmtNum(pf.valorPadrao) : "", sublet: pf.subPadrao ? fmtNum(pf.subPadrao).replace(",00", "") : "", subletType: pf.subTipo || "fixed", freq: 7, time: (pre && pre.time) || "18:00", billing: "session", packageSize: 4, nextDate: (pre && pre.nextDate) || todayISO(), active: true });
   const [erro, setErro] = useState("");
   const up = (k, v) => setF(x => ({ ...x, [k]: v }));
   const price = num(f.price), sub = num(f.sublet);
@@ -2940,6 +3124,7 @@ function PatientForm({ initial, total = 0, perfil, pre, onSave, onClose }) {
     if (!f.name.trim()) return setErro(`Escreva o nome do ${TERMO.s}.`);
     if (!(price > 0)) return setErro("Falta o valor da sessão.");
     if (liq < 0) return setErro("A sublocação ficou maior que o valor da sessão.");
+    if (f.online && f.sala && !/^https:\/\/\S+\.\S+/.test(f.sala)) return setErro("O link da sala precisa começar com https://");
     const { outroPaga, ...semAux } = f;
     onSave({ ...semAux, pagadorNome: (f.pagadorNome || "").trim(), id: f.id || uid(), name: f.name.trim(), price, sublet: sub, packageSize: Number(f.packageSize) || 4, active: true, desde: f.desde || todayISO(), reajusteEm: initial && price !== initial.price ? todayISO() : f.reajusteEm });
   };
@@ -2968,6 +3153,11 @@ function PatientForm({ initial, total = 0, perfil, pre, onSave, onClose }) {
           </Field>
         </div>
         {price > 0 && <div className="note mint"><I.money /><span>Por sessão você recebe <b>{brl(liq)}</b>.</span></div>}
+        <div className="fields">
+          <Field label="Atendimento"><Seg value={f.online ? "online" : "presencial"} onChange={v => up("online", v === "online")} options={[{ v: "presencial", l: "Presencial" }, { v: "online", l: "Online" }]} /></Field>
+          {f.online && <Field label="Link da sala (Meet, Zoom, Jitsi…)" icon={<I.video />} htmlFor="f-sala"><input id="f-sala" type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={f.sala || ""} onChange={e => up("sala", e.target.value.trim())} placeholder="https://meet.google.com/abc-defg-hij" /></Field>}
+        </div>
+        {f.online && <div className="hint">O link vai junto na confirmação e, na hora da sessão, aparece um botão “Entrar” na agenda.</div>}
         <div className="fields">
           <Field label="Frequência"><Seg value={f.freq} onChange={v => up("freq", v)} options={FREQUENCIAS.map(x => ({ v: x.dias, l: x.nome }))} /></Field>
           <div className="field row2">
@@ -3995,6 +4185,8 @@ const ConviteCasaSheet = lazy(() => import("./telas/casa.jsx").then(m => ({ defa
 const ReciboSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.ReciboSheet })));
 const ImpostoSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.ImpostoSheet })));
 const NotasSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.NotasSheet })));
+const DocumentosSheet = lazy(() => import("./telas/consultorio.jsx").then(m => ({ default: m.DocumentosSheet })));
+const MeusDadosSheet = lazy(() => import("./telas/meus-dados.jsx").then(m => ({ default: m.MeusDadosSheet })));
 const BoletoSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.BoletoSheet })));
 const ImportarSheet = lazy(() => import("./telas/ferramentas.jsx").then(m => ({ default: m.ImportarSheet })));
 const ParceladoSheet = lazy(() => import("./telas/dinheiro.jsx").then(m => ({ default: m.ParceladoSheet })));
@@ -4060,6 +4252,21 @@ const registroPendente = db => PERFIL.registro === false ? [] : db.sessions.filt
 const semanaKey = iso => segunda(iso);
 
 // Horários livres nos próximos dias, dentro do horário de trabalho
+// As próximas sessões para o link (confirmação pelo paciente) e para a agenda do celular. nomes: "iniciais" põe as
+// iniciais do paciente no título do evento; sem isso, o título é só "Sessão" (quem vê a agenda não sabe quem é).
+function proximasDoLink(db, hoje, dias, nomes) {
+  const out = [];
+  for (let i = 0; i < dias && out.length < 400; i++) {
+    const iso = addDays(hoje, i);
+    itensDoDia(db, iso).forEach(it => {
+      if (it.kind === "log" || !it.patient.active) return;
+      const p = it.patient, sala = p.online && /^https:\/\//.test(p.sala || "") ? p.sala : undefined;
+      out.push({ p: p.id, d: iso, h: it.time, ...(sala ? { o: sala } : {}), ...(nomes === "iniciais" ? { t: `Sessão · ${iniciais(p.name)}` } : {}) });
+    });
+  }
+  return out;
+}
+
 function horariosLivres(db, inicio, nDias) {
   const out = [];
   for (let k = 0; k < nDias; k++) {
@@ -4276,6 +4483,10 @@ function useTema() {
    15. APP (depois do login)
    ========================================================= */
 I.minus = () => <Svg sw={2.2}><path d="M5 12h14"/></Svg>;
+I.video = () => <Svg><rect x="3" y="6.5" width="13" height="11" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3"/></Svg>;
+I.doc = () => <Svg><path d="M6.5 3h7.5l4.5 4.5V19a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M13.5 3v5h5M8.5 13h7M8.5 16.5h5"/></Svg>;
+I.download = () => <Svg><path d="M12 3.5V15M7.5 10.5L12 15l4.5-4.5"/><path d="M5 17.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-1.5"/></Svg>;
+I.calSync = () => <Svg><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M9 15.2a3 3 0 0 0 5.4.8M15 13.8a3 3 0 0 0-5.4-.8"/></Svg>;
 I.setaL = () => <Svg sw={2.2}><path d="M19 12H5M11 6l-6 6 6 6"/></Svg>;
 
 // conta nova (nada salvo ainda): começa vazia
@@ -4492,10 +4703,16 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   // bolinha de perfil de um desenho antigo: troca sozinha pela nova parecida (e a casa acompanha)
   useEffect(() => { const nova = avatarAtualizado(conta.foto); if (nova) onAtualizar({ foto: nova }); }, [conta.foto]);
   const linkAg = useLinkAgendamento({
-    conta, db, setDb, servidor: servidorAvisos(), horariosLivres, hoje: todayISO(),
+    conta, db, setDb, servidor: servidorAvisos(), horariosLivres, proximas: proximasDoLink, hoje: todayISO(),
     pushId: pushLigado() ? lerJSON(K_PUSH, {}).id : "",
-    onEndereco: endereco => onAtualizar({ perfil: { ...perfil, link: { ...linkDo(perfil), endereco } } }),
+    onEndereco: (endereco, extra) => onAtualizar({ perfil: { ...perfil, link: { ...(perfil.link || {}), endereco, ...(extra || {}) } } }),
     onPedidos: n => notify(n === 1 ? "Chegou um pedido de horário pelo seu link" : `Chegaram ${n} pedidos de horário pelo seu link`),
+    onRespostas: rs => {
+      const nome = r => { const p = db.patients.find(x => x.id === r.pid); return p ? primeiro(p.name) : "Um paciente"; };
+      const rem = rs.filter(r => r.r === "remarcar");
+      vibrar(rem.length ? "aviso" : "ok");
+      notify(rs.length > 1 ? `${rs.length} respostas de confirmação chegaram` : rem.length ? `${nome(rs[0])} pediu para remarcar a sessão de ${dm(rs[0].d)}` : `${nome(rs[0])} confirmou a sessão de ${dm(rs[0].d)}`);
+    },
   });
   // Avina Pro: o plano vem do servidor (que lê no Asaas). Sem servidor configurado (ou sem login), não há limite.
   const kPlano = `avina-plano:${conta.email}`;
@@ -4561,6 +4778,14 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   // quem já usava o app (ou entrou num aparelho novo) não vê o tour sozinho, só pelo Perfil
   const [tourVisto, setTourVisto] = useState(() => { const v = lerJSON(K.tour(conta.email), null); if (v || !pronto) return v; gravar(K.tour(conta.email), {}); return {}; });
   const fimTour = m => setTourVisto(v => { const n = { ...v, [m]: true }; gravar(K.tour(conta.email), n); return n; });
+  // Primeiro minuto de quem atende: logo depois do tour, oferece trazer os pacientes (da agenda antiga ou de uma lista)
+  // para a semana já aparecer montada. Aparece uma vez só, e só para quem ainda não tem ninguém cadastrado.
+  const kTrazer = `avina-trazer-pacientes:${conta.email}`;
+  useEffect(() => {
+    if (!usaConsultorio || modoEf !== "consultorio" || db.patients.length || !tourVisto || !tourVisto.consultorio || sheet || lerTexto(kTrazer)) return;
+    const t = setTimeout(() => { try { localStorage.setItem(kTrazer, "1"); } catch (e) {} setSheet({ type: "importar-agenda", primeira: true }); }, 900);
+    return () => clearTimeout(t);
+  }, [tourVisto, sheet, modoEf, db.patients.length]);
   // Barra de cima que aparece quando a página rola
   const [rolou, setRolou] = useState(false);
   // A barra de baixo fica sempre parada no lugar; só a de cima reage à rolagem
@@ -4817,6 +5042,49 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   }, [now, av.ativo, av.antecedencia, push]);
 
   const notify = (msg, undo) => { setToast({ msg, undo }); clearTimeout(tRef.current); tRef.current = setTimeout(() => setToast(null), undo ? 6000 : 2800); };
+
+  // Pix que se marca sozinho (Open Finance + Pro do consultório): busca os Pix recebidos dos últimos dias ao abrir
+  // e a cada 30 minutos. Nome e valor batendo com um paciente só: marca como pago (com Desfazer). Só um dos dois
+  // batendo: fica em db.pixPendentes e o Início pergunta de quem é. Cada Pix é olhado uma vez só.
+  const dbPix = useRef(db); dbPix.current = db;
+  const pixLigado = NUVEM && !!conta.uid && usaConsultorio && !noApp && (!libera || !!libera.consultorio);
+  useEffect(() => {
+    if (!pixLigado) return;
+    const kVistos = `avina-pix-vistos:${conta.email}`, kDesde = `avina-pix-desde:${conta.email}`;
+    if (!lerTexto(kDesde)) try { localStorage.setItem(kDesde, todayISO()); } catch (e) {} // só Pix daqui para a frente
+    let vivo = true, rodando = false, ultima = 0;
+    const olhar = async () => {
+      if (rodando || document.visibilityState !== "visible" || Date.now() - ultima < 10 * 60e3) return; // no máximo a cada 10 min
+      rodando = true; ultima = Date.now();
+      try {
+        const b = await import("./banco.js"), e = await b.estadoBanco();
+        if (!vivo || !e.ligado || !(e.bancos || []).length) return;
+        const { itens = [] } = await b.lancamentosBanco(5);
+        const { separarPix } = await import("./pix-auto.js");
+        const vistos = new Set(lerJSON(kVistos, []));
+        const r = separarPix(itens, pre => cobrancasDoPix(dbPix.current, pre), { vistos, desde: lerTexto(kDesde) });
+        if (!vivo || (!r.automaticos.length && !r.duvidas.length)) return;
+        gravar(kVistos, [...vistos, ...r.automaticos.map(a => a.tid), ...r.duvidas.map(d => d.tid)].slice(-500));
+        const pagos = new Map(); r.automaticos.forEach(a => a.ids.forEach(id => pagos.set(id, a.pre.data)));
+        const antes = dbPix.current.charges.filter(c => pagos.has(c.id)).map(c => ({ ...c }));
+        setDb(d => ({ ...d,
+          charges: pagos.size ? d.charges.map(c => pagos.has(c.id) && !c.paid ? { ...c, paid: true, paidAt: pagos.get(c.id), viaPix: true } : c) : d.charges,
+          pixPendentes: [...(d.pixPendentes || []), ...r.duvidas.map(x => x.pre)].slice(-20) }));
+        if (r.automaticos.length) {
+          const a = r.automaticos[0], p = dbPix.current.patients.find(x => x.id === a.pid);
+          vibrar("ok");
+          notify(r.automaticos.length > 1 ? `${r.automaticos.length} Pix recebidos: sessões marcadas como pagas` : `Pix de ${brlReal(a.pre.valor)} de ${p ? primeiro(p.name) : "um paciente"}: marquei como pago`,
+            () => setDb(d => ({ ...d, charges: d.charges.map(c => antes.find(x => x.id === c.id) || c) })));
+        } else notify(r.duvidas.length === 1 ? `Chegou um Pix de ${brlReal(r.duvidas[0].valor)}. Veja no Início de quem é.` : `Chegaram ${r.duvidas.length} Pix. Veja no Início de quem são.`);
+      } catch (e) { /* sem internet ou banco pedindo autorização: tenta na próxima */ }
+      finally { rodando = false; }
+    };
+    const t0 = setTimeout(olhar, 4000), t = setInterval(olhar, 30 * 60e3);
+    const ver = () => { if (document.visibilityState === "visible") olhar(); };
+    document.addEventListener("visibilitychange", ver);
+    return () => { vivo = false; clearTimeout(t0); clearInterval(t); document.removeEventListener("visibilitychange", ver); };
+  }, [pixLigado]);
+
   // Registra as conquistas novas. Na primeira vez (ou num aparelho novo sem nenhuma), guarda o que
   // já estava feito sem fazer festa, para não chover comemoração de uma vez.
   useEffect(() => {
@@ -4930,6 +5198,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     // Consultório: recibo, imposto e anotações
     abrirRecibo: (pid, cid) => setSheet({ type: "recibo", pid, cid }),
     abrirImposto: () => setSheet({ type: "imposto" }),
+    abrirDocumentos: pid => setSheet({ type: "documentos", pid }),
+    meusDados: () => setSheet({ type: "meus-dados" }),
     abrirNotas: (pid, sid) => setSheet({ type: "notas", pid, sid }),
     atualizarPaciente: (pid, campos) => setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, ...campos } : p) })),
     salvarDocProf: doc => onAtualizar({ perfil: { ...(conta.perfil || {}), doc } }),
@@ -5063,6 +5333,8 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     marcarRevisao: k => setDb(d => ({ ...d, revisoes: { ...(d.revisoes || {}), [k]: true } })),
     toggleRegistro: sid => setDb(d => ({ ...d, sessions: d.sessions.map(x => x.id === sid ? { ...x, registro: !x.registro } : x) })),
     setConfirmado: (pid, iso, v) => setDb(d => ({ ...d, confirmados: { ...(d.confirmados || {}), [`${pid}:${iso}`]: v } })),
+    // mandou a confirmação com o link: fica "esperando a resposta" (as antigas, de mais de 30 dias, saem)
+    setEnviada: (pid, iso) => setDb(d => { const lim = addDays(todayISO(), -30); const e = Object.fromEntries(Object.entries(d.enviadas || {}).filter(([k]) => k.split(":")[1] >= lim)); return { ...d, enviadas: { ...e, [`${pid}:${iso}`]: Date.now() } }; }),
     // Reajuste combinado: as próximas sessões já saem com o valor novo (as que já aconteceram ficam como estão)
     reajustar: (pid, valor) => {
       const antes = db.patients.find(p => p.id === pid); if (!antes) return;
@@ -5095,13 +5367,22 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       vibrar(ok ? "ok" : "toque");
       notify(ok ? `${primeiro(p.nome)} na agenda · ${dm(p.data)} às ${p.hora}` : "Pedido recusado");
     },
-    remarcar: (pid, data, hora) => { setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, nextDate: data, time: hora } : p) })); close(); notify(`Remarcado para ${dm(data)} às ${hora}`); },
+    remarcar: (pid, data, hora) => { setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, nextDate: data, time: hora } : p), confirmados: semPedidoRemarcar(d.confirmados, pid) })); close(); notify(`Remarcado para ${dm(data)} às ${hora}`); },
+    // Arrastar na semana em grade: muda a próxima sessão, com Desfazer
+    moverSessao: (pid, data, hora) => {
+      const antes = db.patients.find(p => p.id === pid); if (!antes || (antes.nextDate === data && antes.time === hora)) return;
+      const confAntes = db.confirmados;
+      setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, nextDate: data, time: hora } : p), confirmados: semPedidoRemarcar(d.confirmados, pid) }));
+      vibrar("ok");
+      notify(`${primeiro(antes.name)}: ${diaCurto(data)} às ${hora}`, () => setDb(d => ({ ...d, patients: d.patients.map(p => p.id === pid ? { ...p, nextDate: antes.nextDate, time: antes.time } : p), confirmados: confAntes })));
+    },
     desfazer: sid => { setDb(d => desfazer(d, sid)); close(); notify("Registro desfeito"); },
     setPago: (cid, pago) => (pago && vibrar("ok"), setDb(d => ({ ...d, charges: d.charges.map(c => c.id === cid ? { ...c, paid: pago, paidAt: pago ? todayISO() : null } : c) }))),
     openCharge: cid => setSheet({ type: "charge", cid }),
     openPatient: pid => setSheet({ type: "patient", pid }),
     editPatient: pid => setSheet({ type: "form", pid }),
     novoPaciente: () => { if (!limite("pac")) setSheet({ type: "form" }); },
+    novoPacienteEm: (data, hora) => { if (!limite("pac")) setSheet({ type: "form", pre: { nextDate: data, time: hora } }); },
     importarAgenda: () => setSheet({ type: "importar-agenda" }),
     importarPacientes: lista => {
       if (limite("pac", lista.filter(x => x.active).length)) return;
@@ -5110,7 +5391,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     },
     openSettings: aba => setSheet({ type: "settings", aba: typeof aba === "string" ? aba : null }),
     salvarPerfil: (patch, pix) => {
-      setDb(d => d.settings.pix === pix ? d : { ...d, settings: { ...d.settings, pix } });
+      if (pix !== undefined) setDb(d => d.settings.pix === pix ? d : { ...d, settings: { ...d.settings, pix } });
       onAtualizar(patch);
       if (patch.perfil) { const ms = modosDo(patch.perfil); if (!ms.includes(modoEf)) trocarModoSt(ms[0]); }
     },
@@ -5231,14 +5512,21 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       } catch (e) { vibrar("aviso"); notify(msgIA(e)); }
     },
     // O Pix pagou estas cobranças: ficam pagas na data do comprovante
-    pixPagou: (ids, data) => {
+    pixPagou: (ids, data, tid) => {
       const set = new Set(ids), antes = db.charges.filter(c => set.has(c.id)).map(c => ({ ...c }));
-      setDb(d => ({ ...d, charges: d.charges.map(c => set.has(c.id) ? { ...c, paid: true, paidAt: data || todayISO() } : c) }));
+      setDb(d => ({ ...d, charges: d.charges.map(c => set.has(c.id) ? { ...c, paid: true, paidAt: data || todayISO() } : c), ...(tid ? { pixPendentes: (d.pixPendentes || []).filter(x => x.tid !== tid) } : {}) }));
       close(); vibrar("ok");
       notify(ids.length === 1 ? "Marquei como pago" : `${ids.length} sessões marcadas como pagas`, () => setDb(d => ({ ...d, charges: d.charges.map(c => antes.find(a => a.id === c.id) || c) })));
     },
     // Pix que não era de sessão: segue como entrada no Pessoal
-    pixNaoSessao: pre => { if (usaPessoal && modo !== "pessoal") act.setModo("pessoal"); setSheet({ type: "lanc", tipo: "entrada", pre: { ...pre, daFoto: true }, n: Date.now() }); },
+    // Pix do banco que ficou em dúvida: abre a pergunta "é de quem?" (ou, se não bate mais com ninguém, tira da lista)
+    verPixPendente: pre => {
+      const grupos = cobrancasDoPix(db, pre);
+      if (grupos.length) return setSheet({ type: "pix-sessao", pre, grupos, n: Date.now() });
+      act.tirarPixPendente(pre.tid); notify("Esse Pix não bate mais com nenhuma cobrança em aberto");
+    },
+    tirarPixPendente: tid => setDb(d => ({ ...d, pixPendentes: (d.pixPendentes || []).filter(x => x.tid !== tid) })),
+    pixNaoSessao: pre => { if (pre && pre.tid) act.tirarPixPendente(pre.tid); if (usaPessoal && modo !== "pessoal") act.setModo("pessoal"); setSheet({ type: "lanc", tipo: "entrada", pre: { ...pre, daFoto: true }, n: Date.now() }); },
     // PDF compartilhado: boleto (acha o código no texto) ou comprovante (a 1ª página vira foto para a IA)
     lerPdf: async blob => {
       clearTimeout(tRef.current); setToast({ msg: "Abrindo o PDF…" });
@@ -5542,13 +5830,15 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "livres" && <Suspense fallback={null}><LivresSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "pro" && <Suspense fallback={null}><ProSheet motivo={sheet.motivo} sugerido={sheet.sugerido} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "pedidos" && <Suspense fallback={null}><PedidosSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
-      {sheet && sheet.type === "importar-agenda" && <Suspense fallback={null}><ImportarAgendaSheet db={db} perfil={perfil} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "importar-agenda" && <Suspense fallback={null}><ImportarAgendaSheet db={db} perfil={perfil} onClose={close} act={act} primeira={!!sheet.primeira} /></Suspense>}
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
       {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} casa={casa.casa && casa.membros.length > 1 ? casa : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "transp-gasto" && <Suspense fallback={null}><GastoTransporteSheet key={sheet.n} veiculos={veiculosDe(db)} veiculoId={sheet.veiculoId || (sheet.inicial && sheet.inicial.veiculoId) || veicAtual} sub0={sheet.sub} manut0={sheet.manut} inicial={sheet.inicial} precos={precosGuardados()} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "recibo" && <Suspense fallback={null}><ReciboSheet key={sheet.pid + (sheet.cid || "")} db={db} conta={conta} pid={sheet.pid} cid={sheet.cid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "imposto" && <Suspense fallback={null}><ImpostoSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "documentos" && <Suspense fallback={null}><DocumentosSheet key={sheet.pid} db={db} conta={conta} pid={sheet.pid} onClose={close} act={act} /></Suspense>}
+      {sheet && sheet.type === "meus-dados" && <Suspense fallback={null}><MeusDadosSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "notas" && <Suspense fallback={null}><NotasSheet key={sheet.pid + (sheet.sid || "")} db={db} pid={sheet.pid} sid={sheet.sid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "casa-gasto" && <Suspense fallback={null}><GastoCasaSheet key={sheet.n} casa={casa} inicial={sheet.inicial} pre={sheet.pre} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "casa-nota" && <Suspense fallback={null}><NotaSheet key={sheet.n} casa={casa} servidor={servidorAvisos()} onClose={close} act={act} /></Suspense>}

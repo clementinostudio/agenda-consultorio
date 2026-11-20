@@ -1,8 +1,8 @@
-// Parte do app carregada sob demanda: recibo em PDF, relatório para o imposto e anotações de sessão trancadas.
+// Parte do app carregada sob demanda: recibo em PDF, declaração e contrato, relatório para o imposto e anotações de sessão trancadas.
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { I, Sheet, Field, Toggle, ConfirmButton, brl, brlReal, todayISO, MES_LONGO, pad, dm, fromISO, PERFIL, termoDe, vibrar, Ilustra } from "../App.jsx";
+import { I, Sheet, Field, Toggle, Seg, ConfirmButton, brl, brlReal, todayISO, addDays, MES_LONGO, DIA_LONGO, pad, dm, fromISO, mins, hhmm, num, fmtNum, PERFIL, termoDe, vibrar, Ilustra } from "../App.jsx";
 import { aberto, criarCofre, destrancar, trancar, abrirTexto, fecharCofre, mexeu, trocarSenha, novoCodigo, comRecuperacao, senhaDoCodigo } from "../cofre.js";
-import { porExtenso, fmtCPF, cpfValido, dataLonga, novoPDF, pdfRecibo, pdfProntuario } from "../documentos-pdf.js";
+import { porExtenso, fmtCPF, cpfValido, dataLonga, novoPDF, pdfRecibo, pdfProntuario, pdfDeclaracao, textoDeclaracao, pdfContrato } from "../documentos-pdf.js";
 export { porExtenso, fmtCPF, cpfValido, pdfRecibo };
 
 /* ---------- números e documentos ---------- */
@@ -59,7 +59,7 @@ function AssinaturaPad({ valor, onChange }) {
   return (
     <div className="assin">
       <canvas ref={cv} className="assin-pad" onPointerDown={ini} onPointerMove={mov} onPointerUp={fim} onPointerCancel={fim} aria-label="Assine aqui com o dedo" />
-      <small>Assine com o dedo no quadro (fica só nos seus recibos)</small>
+      <small>Assine com o dedo no quadro (fica só nos seus recibos e documentos)</small>
       <div className="btn-row"><button type="button" className="btn ghost" onClick={limpar}>Limpar</button><button type="button" className="btn" onClick={pronto}><I.check /> Usar assinatura</button></div>
     </div>
   );
@@ -95,6 +95,24 @@ export function DadosRecibo({ conta, act, compacto }) {
   );
 }
 
+// Seus dados no PDF (recibo, declaração e contrato): os mesmos do Perfil → Recibos e imposto
+const profDoc = conta => { const pf = conta.perfil || {}, doc = pf.doc || {}; return { nome: doc.nome || conta.nome, profissao: pf.profissao, conselho: conselhoDe(pf.profissao), registro: doc.registro, cpf: doc.cpf, endereco: doc.endereco }; };
+
+// O quadro "Seus dados" das folhas de documentos: aberto para quem ainda não preencheu, e fica aberto até fechar (dá tempo de assinar)
+function SeusDados({ conta, act, onde, para }) {
+  const pf = conta.perfil || {}, doc = pf.doc || {};
+  const falta = !doc.nome || !doc.registro || !doc.cpf;
+  const [ver, setVer] = useState(() => falta || !doc.assinatura);
+  if (!ver) return <button className="link" onClick={() => setVer(true)}><I.pencil /> Mudar seus dados ou a assinatura</button>;
+  return (
+    <div className="panel recibo-dados">
+      <div className="panel-head"><h3>Seus dados {onde}</h3>{!falta && <button className="link" onClick={() => setVer(false)}>Pronto</button>}</div>
+      {falta && <div className="hint">Preencha uma vez: nome completo, CPF e {conselhoDe(pf.profissao)}. Ficam guardados para {para}.</div>}
+      <DadosRecibo conta={conta} act={act} compacto />
+    </div>
+  );
+}
+
 /* ---------- recibo de um ou mais pagamentos ---------- */
 // O recibo de algumas cobranças pagas (escolhidos) de um paciente: o valor, as datas, o texto e o que vai no PDF.
 // A folha do site e o pedido "reciboPdf" do app de celular montam do mesmo jeito
@@ -108,8 +126,7 @@ export function montarRecibo({ db, conta, p, escolhidos, servico, cpfPac, outroP
   const texto = `Recebi de ${pagador.nome}${pagador.cpf ? `, CPF ${fmtCPF(pagador.cpf)},` : ""} a quantia de ${brlReal(valor)} (${porExtenso(valor)}), referente a ${datas.length ? ses : "atendimento"} de ${servico.trim() || "atendimento"}${quando}`
     + (outroPaga && pagNome.trim() ? `, ${datas.length === 1 ? "prestada" : "prestadas"} a ${p.name}${soDigitos(cpfPac) ? `, CPF ${fmtCPF(cpfPac)}` : ""}` : "") + ".";
   const dataRecibo = escolhidos.length ? escolhidos.map(c => c.paidAt).sort().slice(-1)[0] : todayISO();
-  const pdf = { valor, texto, data: dataRecibo, cidade: pf.cidade, assinatura: doc.assinatura,
-    prof: { nome: doc.nome || conta.nome, profissao: pf.profissao, conselho: conselhoDe(pf.profissao), registro: doc.registro, cpf: doc.cpf, endereco: doc.endereco } };
+  const pdf = { valor, texto, data: dataRecibo, cidade: pf.cidade, assinatura: doc.assinatura, prof: profDoc(conta) };
   return { valor, datas, texto, dataRecibo, pdf };
 }
 export const nomeDoRecibo = (p, mes) => `Recibo ${p.name.split(" ")[0]} ${MES_LONGO[Number(mes.slice(5)) - 1]} ${mes.slice(0, 4)}.pdf`;
@@ -127,12 +144,9 @@ export function ReciboSheet({ db, conta, pid, cid, onClose, act }) {
   const [pagNome, setPagNome] = useState((p && p.pagadorNome) || "");
   const [pagCpf, setPagCpf] = useState(p && p.pagadorCpf ? fmtCPF(p.pagadorCpf) : "");
   const [servico, setServico] = useState(servicoPadrao(PERFIL.profissao));
-  // quem ainda não preencheu os dados vê o quadro aberto, e ele fica aberto até fechar (dá tempo de assinar)
-  const [verDados, setVerDados] = useState(() => { const d = (conta.perfil || {}).doc || {}; return !d.nome || !d.registro || !d.cpf || !d.assinatura; });
   const [gerando, setGerando] = useState("");
   if (!p) return null;
   const pf = conta.perfil || {}, doc = pf.doc || {};
-  const faltaProf = !doc.nome || !doc.registro || !doc.cpf;
   const escolhidos = doMes.filter(c => marcados.has(c.id));
   const trocarMes = m => { setMes(m); setMarcados(new Set(todos.filter(c => c.paidAt.startsWith(m)).map(c => c.id))); };
   const marcar = id => setMarcados(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -187,17 +201,154 @@ export function ReciboSheet({ db, conta, pid, cid, onClose, act }) {
           {doc.assinatura ? <img src={doc.assinatura} alt="" /> : <i className="assin-falta">sem assinatura</i>}
           <small>{doc.nome || conta.nome}{doc.registro ? ` · ${conselhoDe(pf.profissao)} ${doc.registro}` : ""}</small>
         </div>
-        {verDados ? <div className="panel recibo-dados">
-          <div className="panel-head"><h3>Seus dados no recibo</h3>{!faltaProf && <button className="link" onClick={() => setVerDados(false)}>Pronto</button>}</div>
-          {faltaProf && <div className="hint">Preencha uma vez: nome completo, CPF e {conselhoDe(pf.profissao)}. Ficam guardados para todos os recibos.</div>}
-          <DadosRecibo conta={conta} act={act} compacto />
-        </div> : <button className="link" onClick={() => setVerDados(true)}><I.pencil /> Mudar seus dados ou a assinatura</button>}
+        <SeusDados conta={conta} act={act} onde="no recibo" para="todos os recibos" />
         <div className="btn-row">
           <button className="btn" disabled={!escolhidos.length || !!gerando} onClick={() => gerar("enviar")}><I.send /> {gerando === "enviar" ? "Gerando…" : "Enviar PDF"}</button>
           <button className="btn ghost" disabled={!escolhidos.length || !!gerando} onClick={() => gerar("baixar")}><I.down /> Baixar</button>
         </div>
         <div className="hint">Serve para o reembolso do plano de saúde e para {p.name.split(" ")[0]} guardar. Para o Imposto de Renda, emita também no app Receita Saúde: o relatório do imposto, no Perfil, mostra o que digitar lá.</div>
       </>}
+    </Sheet>
+  );
+}
+
+/* ---------- declaração de comparecimento e contrato terapêutico ---------- */
+const PARA_QUE = [{ v: "trabalho", l: "Trabalho", t: "apresentar no trabalho" }, { v: "escola", l: "Escola ou faculdade", t: "apresentar na escola ou faculdade" }, { v: "outro", l: "Outro" }];
+const FREQ_CONTRATO = { 7: "semanal", 14: "quinzenal", 28: "mensal" };
+const nomeArquivo = (tipo, p) => `${tipo} ${p.name.split(" ")[0]} ${dataBR(todayISO()).replace(/\//g, "-")}.pdf`;
+
+export function DocumentosSheet({ db, conta, pid, onClose, act }) {
+  const p = db.patients.find(x => x.id === pid);
+  const pf = conta.perfil || {}, doc = pf.doc || {};
+  const dur = Number(pf.duracao) || 50;
+  const [aba, setAba] = useState("declaracao");
+  const [gerando, setGerando] = useState("");
+
+  // declaração: as sessões realizadas nos últimos 90 dias, da mais nova para a mais velha
+  const feitas = useMemo(() => {
+    const desde = addDays(todayISO(), -90);
+    return db.sessions.filter(s => s.patientId === pid && s.status === "done" && s.date >= desde)
+      .sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+  }, [db, pid]);
+  const [marcadas, setMarcadas] = useState(() => new Set(feitas.length ? [feitas[0].id] : []));
+  const [para, setPara] = useState("trabalho");
+  const [outro, setOutro] = useState("");
+  const [comHora, setComHora] = useState(true);
+  const [semTipo, setSemTipo] = useState(false);
+
+  // contrato: vem preenchido com o cadastro, o perfil e o Pix
+  const f0 = pf.falta || { cobrar: true, horas: 24 };
+  const [valor, setValor] = useState(p && p.price ? fmtNum(p.price) : "");
+  const [freq, setFreq] = useState(p && p.freq ? FREQ_CONTRATO[p.freq] || `a cada ${p.freq} dias` : "semanal");
+  const [duracao, setDuracao] = useState(String(dur));
+  const [modalidade, setModalidade] = useState(p && p.online ? "online" : "presencial");
+  const [sala, setSala] = useState((p && p.sala) || "");
+  const [pagamento, setPagamento] = useState(p && p.billing === "package" ? `a cada ${p.packageSize} sessões` : "por sessão, no dia do atendimento");
+  const [cobrar, setCobrar] = useState(!!f0.cobrar);
+  const [horas, setHoras] = useState(String(f0.horas || 24));
+  const [reajuste, setReajuste] = useState("anual, pela inflação (IPCA)");
+  const [extras, setExtras] = useState("");
+  const [comResp, setComResp] = useState(!!(p && p.pagadorNome));
+  const [respNome, setRespNome] = useState((p && p.pagadorNome) || "");
+  const [respCpf, setRespCpf] = useState(p && p.pagadorCpf ? fmtCPF(p.pagadorCpf) : "");
+  if (!p) return null;
+  const nome = p.name.split(" ")[0];
+  const psi = !pf.profissao || pf.profissao === "Psicologia";
+
+  const marcar = id => setMarcadas(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const finalidade = para === "outro" ? outro.trim() : (PARA_QUE.find(x => x.v === para) || {}).t || "";
+  const declaracao = {
+    prof: profDoc(conta), paciente: { nome: p.name, cpf: p.cpf || "" },
+    sessoes: feitas.filter(s => marcadas.has(s.id)).map(s => ({ data: s.date, inicio: s.time || "", fim: s.time ? hhmm(mins(s.time) + dur) : "" })),
+    finalidade, mostrarHorario: comHora, ocultarTipo: semTipo, cidade: pf.cidade, data: todayISO(), assinatura: doc.assinatura };
+  const prev = textoDeclaracao(declaracao);
+
+  const contrato = () => ({
+    prof: profDoc(conta), paciente: { nome: p.name, cpf: p.cpf || "", responsavel: comResp && respNome.trim() ? { nome: respNome.trim(), cpf: soDigitos(respCpf) } : null },
+    valor: num(valor), frequencia: freq, duracao: Number(duracao) || dur, modalidade, sala: modalidade === "presencial" ? "" : sala.trim(),
+    pagamento: pagamento.trim(), pix: (db.settings && db.settings.pix) || "", faltas: { cobrar, horas: Number(horas) || 24 }, reajuste: reajuste.trim(),
+    cidade: pf.cidade, data: todayISO(), assinatura: doc.assinatura, extras: extras.trim() });
+
+  // gera e manda pelo celular (WhatsApp, e-mail); no computador, ou se não der para compartilhar, baixa
+  const gerar = async (modo, tipo) => {
+    setGerando(modo);
+    try {
+      const blob = tipo === "declaracao" ? await pdfDeclaracao(declaracao) : await pdfContrato(contrato());
+      const dec = tipo === "declaracao";
+      const arq = nomeArquivo(dec ? "Declaração de comparecimento" : "Contrato terapêutico", p);
+      const r = modo === "baixar" ? (baixar(blob, arq), "baixou") : await compartilhar(blob, arq, "application/pdf", `${dec ? "Declaração" : "Contrato"} de ${p.name}`);
+      if (r !== "cancelou") act.toast(r === "baixou" ? (dec ? "Declaração salva nos downloads" : "Contrato salvo nos downloads") : dec ? "Declaração enviada" : "Contrato enviado");
+    } catch (e) { act.toast("Não consegui gerar o PDF. Tente de novo."); }
+    setGerando("");
+  };
+  const botoes = (tipo, rotulo, pode = true) => (
+    <div className="btn-row">
+      <button className="btn" disabled={!pode || !!gerando} onClick={() => gerar("enviar", tipo)}><I.send /> {gerando === "enviar" ? "Gerando…" : rotulo}</button>
+      <button className="btn ghost" disabled={!pode || !!gerando} onClick={() => gerar("baixar", tipo)}><I.down /> Baixar</button>
+    </div>
+  );
+
+  return (
+    <Sheet title="Documentos" sub={p.name} onClose={onClose}>
+      <Seg value={aba} onChange={setAba} options={[{ v: "declaracao", l: "Declaração" }, { v: "contrato", l: "Contrato" }]} />
+
+      {aba === "declaracao" ? <>
+        <div className="hint">Para {nome} mostrar no trabalho ou na escola que veio à sessão. Diz só as datas: nada sobre o que foi conversado.</div>
+        {feitas.length === 0 ? <div className="empty com-ilustra"><Ilustra n="arquivo" /><b>Nenhuma sessão realizada nos últimos 90 dias</b>Quando você marcar uma sessão de {nome} como feita, ela aparece aqui.</div> : <>
+          <h3 className="section-title">Sessões<small>{marcadas.size === 1 ? "1 escolhida" : `${marcadas.size} escolhidas`}</small></h3>
+          <div className="recibo-pags" role="group" aria-label="Sessões na declaração">
+            {feitas.map(s => (
+              <button key={s.id} type="button" className={"recibo-pag" + (marcadas.has(s.id) ? " on" : "")} aria-pressed={marcadas.has(s.id)} onClick={() => marcar(s.id)}>
+                <span className={"box " + (marcadas.has(s.id) ? "done" : "up")}>{marcadas.has(s.id) && <I.check />}</span>
+                <span className="mid"><b>{dataLonga(s.date)}</b><small>{DIA_LONGO[fromISO(s.date).getDay()]}{s.time ? ` · ${s.time} às ${hhmm(mins(s.time) + dur)}` : ""}</small></span>
+              </button>
+            ))}
+          </div>
+          <h3 className="section-title">Para quê?</h3>
+          <div className="chips" role="radiogroup" aria-label="Para quê">
+            {PARA_QUE.map(x => <button key={x.v} type="button" role="radio" aria-checked={para === x.v} className={"fchip" + (para === x.v ? " on" : "")} onClick={() => setPara(x.v)}>{x.l}</button>)}
+          </div>
+          {para === "outro" && <div className="fields"><Field label="Para quê? (opcional)" htmlFor="dc-para"><input id="dc-para" value={outro} onChange={e => setOutro(e.target.value)} placeholder="Ex.: apresentar no curso de inglês" /></Field></div>}
+          <Toggle on={comHora} onClick={() => setComHora(!comHora)}>Mostrar o horário</Toggle>
+          <Toggle on={semTipo} onClick={() => setSemTipo(!semTipo)}>{psi ? "Não dizer que é atendimento psicológico" : "Não dizer o tipo de atendimento"}</Toggle>
+          {semTipo && <div className="hint">Fica escrito "atendimento profissional". Seu {conselhoDe(pf.profissao)} continua embaixo da assinatura.</div>}
+          <div className="recibo-prev" aria-label="Como a declaração vai ficar">
+            <div className="recibo-prev-top"><b>DECLARAÇÃO DE COMPARECIMENTO</b></div>
+            <p>{marcadas.size ? prev.abertura : "Escolha pelo menos uma sessão."}</p>
+            {prev.datas.map(t => <p key={t}>• {t}</p>)}
+            <p>{prev.fecho}</p>
+            <p className="dir">{pf.cidade ? pf.cidade + ", " : ""}{dataLonga(todayISO())}.</p>
+            {doc.assinatura ? <img src={doc.assinatura} alt="" /> : <i className="assin-falta">sem assinatura</i>}
+            <small>{doc.nome || conta.nome}{doc.registro ? ` · ${conselhoDe(pf.profissao)} ${doc.registro}` : ""}</small>
+          </div>
+        </>}
+      </> : <>
+        <div className="hint">Um modelo simples com o que vocês combinaram. Confira, ajuste o que precisar e envie para {comResp ? "o responsável" : nome} assinar.</div>
+        <div className="fields">
+          <Field label="Valor da sessão (R$)" htmlFor="ct-valor"><input id="ct-valor" inputMode="decimal" value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00" /></Field>
+          <Field label="Duração da sessão (minutos)" htmlFor="ct-dur"><input id="ct-dur" inputMode="numeric" value={duracao} onChange={e => setDuracao(e.target.value.replace(/\D/g, ""))} /></Field>
+        </div>
+        <Field label="Frequência"><Seg value={freq} onChange={setFreq} options={[...new Set(["semanal", "quinzenal", "mensal", freq])].map(v => ({ v, l: v[0].toUpperCase() + v.slice(1) }))} /></Field>
+        <Field label="Formato"><Seg value={modalidade} onChange={setModalidade} options={[{ v: "presencial", l: "Presencial" }, { v: "online", l: "Online" }, { v: "presencial e online", l: "Os dois" }]} /></Field>
+        {modalidade !== "presencial" && <div className="fields"><Field label="Link da sala online (opcional)" htmlFor="ct-sala"><input id="ct-sala" inputMode="url" value={sala} onChange={e => setSala(e.target.value)} placeholder="https://meet.google.com/…" /></Field></div>}
+        <div className="fields">
+          <Field label="Quando paga" htmlFor="ct-pag"><input id="ct-pag" value={pagamento} onChange={e => setPagamento(e.target.value)} placeholder="por sessão, no dia do atendimento" /></Field>
+        </div>
+        <Toggle on={cobrar} onClick={() => setCobrar(!cobrar)}>Cobrar falta sem aviso</Toggle>
+        {cobrar && <div className="fields"><Field label="Aviso mínimo para não cobrar (horas)" htmlFor="ct-horas"><input id="ct-horas" inputMode="numeric" value={horas} onChange={e => setHoras(e.target.value.replace(/\D/g, ""))} /></Field></div>}
+        <div className="fields"><Field label="Reajuste" htmlFor="ct-reaj"><input id="ct-reaj" value={reajuste} onChange={e => setReajuste(e.target.value)} /></Field></div>
+        <Toggle on={comResp} onClick={() => setComResp(!comResp)}>Quem assina é o responsável (menor de idade)</Toggle>
+        {comResp && <div className="fields">
+          <Field label="Nome do responsável" htmlFor="ct-rn"><input id="ct-rn" value={respNome} onChange={e => setRespNome(e.target.value)} placeholder="Nome completo" /></Field>
+          <Field label="CPF do responsável" htmlFor="ct-rc"><input id="ct-rc" inputMode="numeric" value={respCpf} onChange={e => setRespCpf(fmtCPF(e.target.value))} placeholder="000.000.000-00" /></Field>
+        </div>}
+        <label className="ficha-campo"><b>Outros combinados (opcional)</b><textarea className="msg" value={extras} onChange={e => setExtras(e.target.value)} placeholder="Um combinado por linha. Ex.: férias em janeiro, sem sessões." /></label>
+        {!(db.settings && db.settings.pix) && <div className="hint">Coloque sua chave Pix em Ajustes e ela entra sozinha no contrato.</div>}
+        <div className="note"><I.receipt /><span>O contrato já fala de sigilo, de como encerrar e de mensagens fora da sessão. Leia antes de enviar.</span></div>
+      </>}
+
+      <SeusDados conta={conta} act={act} onde="nos documentos" para="recibos, declarações e contratos" />
+      {aba === "declaracao" ? feitas.length > 0 && botoes("declaracao", "Gerar declaração", marcadas.size > 0) : botoes("contrato", "Gerar contrato", comResp ? !!respNome.trim() : true)}
     </Sheet>
   );
 }

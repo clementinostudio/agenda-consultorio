@@ -3,13 +3,34 @@ import React, { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import PORQUINHO from "../assets/porquinho.webp";
 import { createPortal, flushSync } from "react-dom";
 import { todayISO, addDays, PERFIL, itensDoDia, registroPendente, contaDinheiro, Sheet, diaCurto, I, iniciais, corDe, relativo, brl, dm, copiarTexto, mensagem, Money, soma, fromISO, segunda, feriado, vencimento, semanaKey, horariosLivres, DIA_LONGO, hTxt, Seg, primeiro, Ilustra } from "../App.jsx";
+import { confirmacaoDe, enderecoConfirmar } from "../link.js";
 
 const waLink = (phone, txt) => { const d = (phone || "").replace(/\D/g, ""); const f = d.length >= 10 && d.length <= 11 ? "55" + d : d; return `https://wa.me/${f}?text=${encodeURIComponent(txt)}`; };
 
-const msgConfirma = (p, iso, time) => `Oi, ${primeiro(p.name)}! Tudo bem? Confirmando nossa sessão ${iso === addDays(todayISO(), 1) ? "amanhã" : `de ${DIA_LONGO[fromISO(iso).getDay()]}`} (${dm(iso)}) às ${time}. Até lá!`;
+// A mensagem de confirmação: com o link do Avina, o paciente responde com um toque ("Confirmo" ou "Preciso remarcar")
+// e a agenda mostra sozinha. Sessão online leva o link da sala.
+const salaDe = p => p && p.online && /^https:\/\/\S+/.test(p.sala || "") ? p.sala : null;
+const msgConfirma = (p, iso, time, endereco) => {
+  const quando = iso === addDays(todayISO(), 1) ? "amanhã" : iso === todayISO() ? "hoje" : `de ${DIA_LONGO[fromISO(iso).getDay()]}`;
+  const url = enderecoConfirmar(endereco, p.id, iso), sala = salaDe(p);
+  return `Oi, ${primeiro(p.name)}! Tudo bem? Confirmando nossa sessão ${quando} (${dm(iso)}) às ${time}${sala ? ", online" : ""}.`
+    + (url ? `\n\nConfirme por aqui, é um toque: ${url}` : "")
+    + (sala ? `\n\nLink da sala: ${sala}` : "")
+    + (url ? "" : " Até lá!");
+};
+// O link precisa existir para o paciente responder: na primeira vez, cria (fechado para pedidos de horário)
+function useEnderecoLink(act) {
+  const L = act.link || {};
+  const [end, setEnd] = useState(L.endereco || null);
+  useEffect(() => { if (L.endereco) setEnd(L.endereco); }, [L.endereco]);
+  useEffect(() => { if (!L.endereco && L.pode && L.publicar) L.publicar(true, { fechado: true }).then(e => e && setEnd(e)).catch(() => {}); }, []);
+  return end;
+}
+const ROT_CONF = { paciente: "confirmou pelo link", manual: "confirmado", remarcar: "pediu para remarcar" };
 
 function FecharDia({ db, conta, onClose, act }) {
   const t = todayISO();
+  const endereco = useEnderecoLink(act);
   const amanha = addDays(t, 1);
   const etapas = ["sessoes", ...(PERFIL.registro === false ? [] : ["registros"]), "cobrancas", "amanha", ...(PERFIL.pessoal !== false ? ["gastos"] : []), "fim"];
   const [i, setI] = useState(0);
@@ -58,13 +79,13 @@ function FecharDia({ db, conta, onClose, act }) {
         ? <div className="note"><I.sun /><span>Amanhã está livre de sessões.</span></div>
         : <><div className="hint">Mande a confirmação agora e tire isso da cabeça.</div>
           <div className="panel">{amanhaIts.map(x => {
-            const ok = db.confirmados[`${x.patient.id}:${amanha}`];
-            const txt = msgConfirma(x.patient, amanha, x.time);
+            const c = confirmacaoDe((db.confirmados || {})[`${x.patient.id}:${amanha}`]);
+            const txt = msgConfirma(x.patient, amanha, x.time, endereco);
             return (
               <div className="txn" key={x.patient.id}>
                 <span className="txn-av">{iniciais(x.patient.name)}</span>
-                <span className="mid"><span className="nm">{x.patient.name}</span><span className="sb">{x.time}{ok && <span className="chip mint">Confirmado</span>}</span></span>
-                <button className="bub-act" onClick={() => { copiarTexto(txt, act, "Confirmação copiada"); act.setConfirmado(x.patient.id, amanha, true); }}><I.copy />Copiar</button>
+                <span className="mid"><span className="nm">{x.patient.name}</span><span className="sb">{x.time}{c && <span className={"chip " + (c === "remarcar" ? "amber" : "mint")}>{ROT_CONF[c]}</span>}</span></span>
+                <button className="bub-act" onClick={() => { copiarTexto(txt, act, "Confirmação copiada"); if (!endereco && !c) act.setConfirmado(x.patient.id, amanha, true); }}><I.copy />Copiar</button>
               </div>);
           })}</div></>)}
       {e === "gastos" && <>
@@ -128,32 +149,44 @@ function RevisaoSheet({ db, onClose, act }) {
 
 function ConfirmSheet({ db, iso, onClose, act }) {
   const its = itensDoDia(db, iso).filter(i => i.kind !== "log");
-  const conf = db.confirmados || {};
-  const feitos = its.filter(x => conf[`${x.patient.id}:${iso}`]).length;
+  const conf = db.confirmados || {}, enviadas = db.enviadas || {};
+  const endereco = useEnderecoLink(act);
+  const estado = x => confirmacaoDe(conf[`${x.patient.id}:${iso}`]);
+  const feitos = its.filter(x => ["paciente", "manual"].includes(estado(x))).length;
+  const remarcar = its.filter(x => estado(x) === "remarcar").length;
+  // com o link, mandar não é confirmar: quem confirma é o paciente (a agenda mostra sozinha quando ele responder)
+  const enviar = x => endereco ? act.setEnviada(x.patient.id, iso) : act.setConfirmado(x.patient.id, iso, true);
   return (
     <Sheet title={`Confirmar ${relativo(iso).toLowerCase()}`} sub={`${relativo(iso).toLowerCase() === diaCurto(iso).toLowerCase() ? "" : diaCurto(iso) + " · "}${its.length} ${its.length === 1 ? "sessão" : "sessões"}`} onClose={onClose}>
       {its.length === 0 && <div className="empty">Nenhuma sessão nesse dia.</div>}
       {its.length > 0 && (
         <div className="conf-prog" aria-live="polite">
-          <span><b>{feitos} de {its.length}</b> {feitos === its.length ? "confirmadas. Tudo certo!" : "confirmadas"}</span>
+          <span><b>{feitos} de {its.length}</b> {feitos === its.length ? "confirmadas. Tudo certo!" : "confirmadas"}{remarcar ? ` · ${remarcar} ${remarcar === 1 ? "pediu" : "pediram"} para remarcar` : ""}</span>
           <div className="conf-bar"><i style={{ width: `${(feitos / its.length) * 100}%` }} /></div>
         </div>
       )}
+      {its.length > 0 && endereco && <div className="note mint"><I.check /><span>A mensagem leva um link: o paciente toca em <b>Confirmo</b> ou <b>Preciso remarcar</b>, e a agenda atualiza sozinha.</span></div>}
       <div className="conf-lista">
         {its.map(x => {
-          const ok = !!conf[`${x.patient.id}:${iso}`], txt = msgConfirma(x.patient, iso, x.time);
+          const c = estado(x), ok = c === "paciente" || c === "manual", foi = !!enviadas[`${x.patient.id}:${iso}`];
+          const txt = msgConfirma(x.patient, iso, x.time, endereco);
+          const sub = c ? ROT_CONF[c] : foi ? "enviado, esperando a resposta" : "";
           return (
-            <div className={"conf-item" + (ok ? " ok" : "")} key={x.patient.id}>
+            <div className={"conf-item" + (ok ? " ok" : "") + (c === "remarcar" ? " rem" : "")} key={x.patient.id}>
               <div className="conf-top">
                 <span className="txn-av">{iniciais(x.patient.name)}<i className="cdot" style={{ background: corDe(x.patient).cor }} /></span>
-                <span className="mid"><b>{x.patient.name}</b><small>{x.time}{ok ? " · confirmado" : ""}</small></span>
+                <span className="mid"><b>{x.patient.name}</b><small>{x.time}{salaDe(x.patient) ? " · online" : ""}{sub ? ` · ${sub}` : ""}</small></span>
                 <button className={"box " + (ok ? "done" : "up")} onClick={() => act.setConfirmado(x.patient.id, iso, !ok)} aria-label={ok ? "Desmarcar confirmação" : "Marcar como confirmado"}>{ok && <I.check />}</button>
               </div>
-              <p className="conf-msg">{txt}</p>
-              <div className="conf-acoes">
-                <a className="conf-wa" href={waLink(x.patient.phone, txt)} target="_blank" rel="noopener noreferrer" onClick={() => act.setConfirmado(x.patient.id, iso, true)}><I.send /> {ok ? "Enviar de novo" : "Enviar no WhatsApp"}</a>
-                <button className="conf-copy" onClick={() => { copiarTexto(txt, act, "Confirmação copiada"); act.setConfirmado(x.patient.id, iso, true); }} aria-label="Copiar mensagem"><I.copy /></button>
-              </div>
+              {c === "remarcar"
+                ? <div className="conf-acoes">{x.patient.nextDate === iso ? <button className="conf-wa" onClick={() => act.openItem({ kind: "next", patient: x.patient, date: iso, time: x.time, modo: "move" })}><I.repeat /> Escolher outro horário</button> : <button className="conf-wa" onClick={() => act.openPatient(x.patient.id)}><I.user /> Ver {primeiro(x.patient.name)}</button>}</div>
+                : <>
+                  <p className="conf-msg">{txt}</p>
+                  <div className="conf-acoes">
+                    <a className="conf-wa" href={waLink(x.patient.phone, txt)} target="_blank" rel="noopener noreferrer" onClick={() => enviar(x)}><I.send /> {foi || ok ? "Enviar de novo" : "Enviar no WhatsApp"}</a>
+                    <button className="conf-copy" onClick={() => { copiarTexto(txt, act, "Confirmação copiada"); enviar(x); }} aria-label="Copiar mensagem"><I.copy /></button>
+                  </div>
+                </>}
             </div>
           );
         })}

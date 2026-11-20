@@ -7,7 +7,7 @@
 /* ---------- grade ---------- */
 .c2-grade { display: flex; flex-direction: column; gap: 14px; }
 .c2-col { display: contents; }
-.c2 .panel { border-radius: 26px; padding: 6px 18px 16px; }
+.c2 .panel { border-radius: var(--r-card); padding: 6px 18px 16px; }
 .c2 .panel-head small { color: var(--muted); font-size: 12.5px; font-weight: 700; }
 @media (min-width: 900px) {
   .c2-grade { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
@@ -25,7 +25,7 @@
 
 /* ---------- o mês: total grande, comparação e a linha ---------- */
 .c2-mes {
-  position: relative; overflow: hidden; border-radius: 30px; border: 1px solid var(--line); padding: 12px 0 0;
+  position: relative; overflow: hidden; border-radius: var(--r-card); border: 1px solid var(--line); padding: 12px 0 0;
   background: radial-gradient(120% 85% at 50% 0%, color-mix(in srgb, var(--mode) 20%, transparent), transparent 72%), var(--surface);
   text-align: center;
 }
@@ -44,7 +44,7 @@
 
 
 /* ---------- quem deve quanto ---------- */
-.c2-saldo { background: var(--surface); border: 1px solid var(--line); border-radius: 26px; padding: 16px 18px; display: grid; gap: 12px; }
+.c2-saldo { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px 18px; display: grid; gap: 12px; }
 .c2-saldo-topo { display: flex; align-items: center; gap: 14px; }
 .c2-saldo-tx { display: grid; gap: 4px; min-width: 0; }
 .c2-saldo-t { font-family: var(--f-display); font-size: 17px; font-weight: 500; line-height: 1.3; }
@@ -57,7 +57,7 @@
 
 /* ---------- atalhos ---------- */
 .c2-acoes { display: grid; grid-template-columns: 1.35fr 1fr 1fr; gap: 10px; }
-.c2-acao { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 10px; min-height: 84px; padding: 14px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); text-align: left; font-weight: 800; font-size: 14px; line-height: 1.2; transition: transform .12s, background .15s; }
+.c2-acao { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 10px; min-height: 84px; padding: 14px; border-radius: var(--r-tile); background: var(--surface); border: 1px solid var(--line); color: var(--fg); text-align: left; font-weight: 800; font-size: 14px; line-height: 1.2; transition: transform .12s, background .15s; }
 .c2-acao svg { width: 22px; height: 22px; color: var(--mode-text, var(--mode)); }
 .c2-acao.principal { background: var(--mode); border-color: transparent; color: var(--mode-ink); }
 .c2-acao.principal svg { color: currentColor; }
@@ -98,7 +98,7 @@
 .c2-gente-p.vaga .casa-av { border: 2px dashed color-mix(in srgb, var(--fg) 22%, transparent); background: none; color: var(--muted); }
 .c2-gente-p.vaga small { color: var(--muted); }
 .c2-convite { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.c2-convite-b { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 18px; background: var(--surface-2); color: var(--fg); text-align: left; transition: transform .12s, background .15s; }
+.c2-convite-b { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: var(--r-tile); background: var(--surface-2); color: var(--fg); text-align: left; transition: transform .12s, background .15s; }
 .c2-convite-b svg { width: 20px; height: 20px; flex: none; color: var(--mode-text, var(--mode)); }
 .c2-convite-b span { display: grid; gap: 1px; min-width: 0; }
 .c2-convite-b b { font-size: 14px; }
@@ -156,12 +156,12 @@
 .casa-estimado.passou .casa-limite-barra i { background: var(--rose); }
 .casa-estimado .link-in { padding: 0; background: none; border: 0; color: var(--mode-text); font: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
 .casa-estimado.passou .link-in { color: var(--rose); }
-.casa-limite-form { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-radius: 14px; background: var(--surface-2); }
+.casa-limite-form { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border-radius: var(--r-ctl); background: var(--surface-2); }
 .casa-limite-form label { font-weight: 700; font-size: 14px; white-space: nowrap; }
 .casa-limite-form input { flex: 1; min-width: 0; border: 0; background: none; color: var(--fg); font: inherit; font-size: 16px; font-variant-numeric: tabular-nums; outline: none; padding: 6px 0; }
 .casa-limite-form .link { padding: 6px 4px; color: var(--muted); font-weight: 700; font-size: 13px; white-space: nowrap; }
 /* quantidade com − e + (no painel do item) */
-.casa-qtd { display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 14px; border-radius: 16px; background: var(--surface-2); }
+.casa-qtd { display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 14px; border-radius: var(--r-ctl); background: var(--surface-2); }
 .casa-qtd span { flex: 1; font-weight: 700; }
 .casa-qtd button { width: 44px; height: 44px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); color: var(--fg); font-size: 22px; font-weight: 700; line-height: 1; }
 .casa-qtd button:disabled { opacity: .35; }
@@ -169,7 +169,7 @@
 /* painel das listas prontas */
 .casa-prontas-t { font-size: 13px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 4px; }
 .casa-prontas-aviso { color: var(--muted); font-size: 12.5px; }
-.casa-pronta { display: flex; align-items: center; gap: 10px; padding: 10px 4px 10px 14px; border-radius: 16px; background: var(--surface-2); }
+.casa-pronta { display: flex; align-items: center; gap: 10px; padding: 10px 4px 10px 14px; border-radius: var(--r-ctl); background: var(--surface-2); }
 .casa-pronta span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .casa-pronta small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -184,7 +184,7 @@
 .mercado-barra i { display: block; height: 100%; border-radius: inherit; background: var(--mode); transition: width .3s ease; }
 .mercado-lista { flex: 1; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 6px; padding: 12px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); width: 100%; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
 .mercado-secao { display: flex; flex-direction: column; gap: 6px; }
-.mercado-item { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 62px; padding: 10px 14px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--card-shadow); color: var(--fg); font: inherit; text-align: left; }
+.mercado-item { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 62px; padding: 10px 14px; border-radius: var(--r-tile); background: var(--card); border: 1px solid var(--line); box-shadow: var(--card-shadow); color: var(--fg); font: inherit; text-align: left; }
 .mercado-box { flex: none; width: 34px; height: 34px; border-radius: 11px; border: 2.5px solid var(--mode); display: grid; place-items: center; color: var(--mode-ink); }
 .mercado-box svg { width: 20px; height: 20px; }
 .mercado-t { flex: 1; min-width: 0; font-size: 19px; font-weight: 600; line-height: 1.25; }
@@ -203,10 +203,14 @@
 .mercado-rodape > * { width: 100%; max-width: 640px; margin: 0 auto; }
 .mercado-rodape .btn svg { width: 18px; height: 18px; flex: none; }
 .mercado-conta { display: flex; gap: 8px; }
-.mercado-conta span { flex: 1; display: flex; flex-direction: column; padding: 8px 12px; border-radius: 14px; background: var(--surface-2); }
+.mercado-conta span { flex: 1; display: flex; flex-direction: column; padding: 8px 12px; border-radius: var(--r-ctl); background: var(--surface-2); }
 .mercado-conta small { color: var(--muted); font-size: 12px; font-weight: 700; }
 .mercado-conta b { font-size: 17px; }
 .mercado-rodape.passou .mercado-conta span:last-child { background: var(--rose-soft); }
 .mercado-rodape.passou .mercado-conta span:last-child b, .mercado-rodape.passou .mercado-conta span:last-child small { color: var(--rose); }
 /* no mercado, o aviso de baixo ("Desfazer", limite) sobe para não tapar os totais */
 .shell:has(.mercado) .toast { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+
+/* ---------- visual calmo (src/notion.css) ---------- */
+.c2-ajuste { height: 34px; border-radius: var(--r-ctl); font-weight: 500; }
+@media (hover: hover) { .c2-ajuste:hover { background: var(--hover); color: var(--fg); } }

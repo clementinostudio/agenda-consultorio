@@ -19,7 +19,7 @@
 .tr .cols .conq-prox { margin-top: 0; }
 
 /* ---------- cartão e cabeçalho ---------- */
-.tr-cartao { position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 18px; border-radius: 28px;
+.tr-cartao { position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 18px; border-radius: var(--r-card);
   background: var(--surface); background-image: var(--brilho-cartao); border: 1px solid var(--line); box-shadow: var(--card-shadow); color: var(--fg);
   animation: tr-entra .45s cubic-bezier(.2, .8, .2, 1) both; }
 .tr-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; color: var(--muted); font-size: 15px; font-weight: 600; }
@@ -62,7 +62,7 @@
 .tr-veic-tx { max-width: 340px; margin: 2px 0 6px; color: var(--muted); font-size: 14px; font-weight: 600; line-height: 1.45; }
 .tr-escolher { width: auto; padding: 0 22px; }
 /* os números do veículo, lado a lado com um risquinho entre eles */
-.tr-nums { align-self: stretch; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); margin-top: 14px; padding: 14px 4px; border-radius: 24px;
+.tr-nums { align-self: stretch; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); margin-top: 14px; padding: 14px 4px; border-radius: var(--r-card);
   background: var(--surface); background-image: var(--brilho-cartao); border: 1px solid var(--line); box-shadow: var(--card-shadow); animation: tr-entra .45s cubic-bezier(.2, .8, .2, 1) .05s both; }
 .tr-nums > div { display: grid; gap: 2px; min-width: 0; padding: 0 8px; }
 .tr-nums > div + div { border-left: 1px solid var(--line-forte); }
@@ -145,14 +145,14 @@
 
 /* ---------- combustível ---------- */
 .tr-precos { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
-.tr-preco { position: relative; display: grid; gap: 2px; min-width: 0; padding: 12px 14px; border-radius: 18px; background: var(--surface-2); border: 1.5px solid transparent; }
+.tr-preco { position: relative; display: grid; gap: 2px; min-width: 0; padding: 12px 14px; border-radius: var(--r-tile); background: var(--surface-2); border: 1.5px solid transparent; }
 .tr-preco small { color: var(--muted); font-size: 12.5px; font-weight: 700; }
 .tr-preco b { font-family: var(--f-display); font-weight: 700; font-size: 21px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tr-preco.melhor { border-color: color-mix(in srgb, var(--mint) 55%, transparent); background: color-mix(in srgb, var(--mint) 10%, var(--surface-2)); }
 .tr-preco.melhor small { color: var(--mint); }
 .tr-preco em { position: absolute; top: 12px; right: 12px; font-style: normal; font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--mint); }
 .tr-fonte { margin: -4px 0 0; color: var(--faint); font-size: 12px; font-weight: 600; }
-.tr-dica { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 18px; background: var(--surface-2); color: var(--muted); font-size: 13.5px; font-weight: 600; line-height: 1.45; }
+.tr-dica { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: var(--r-tile); background: var(--surface-2); color: var(--muted); font-size: 13.5px; font-weight: 600; line-height: 1.45; }
 .tr-dica > svg { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--dc, var(--muted)); }
 .tr-dica b { color: var(--fg); font-weight: 800; }
 .tr-dica.bom { --dc: var(--mint); background: color-mix(in srgb, var(--mint) 9%, var(--surface-2)); }
@@ -182,19 +182,19 @@ button.tr-item:disabled { opacity: 1; cursor: default; }
 .tr-custo-v > span:last-child { color: var(--muted); font-size: 13.5px; font-weight: 600; }
 .tr-custo .tr-valor { font-size: 36px; }
 .tr-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.tr-trio > div { display: grid; gap: 2px; min-width: 0; padding: 10px 12px; border-radius: 16px; background: var(--surface-2); }
+.tr-trio > div { display: grid; gap: 2px; min-width: 0; padding: 10px 12px; border-radius: var(--r-ctl); background: var(--surface-2); }
 .tr-trio b { font-family: var(--f-display); font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tr-trio small { color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tr-bloco { display: grid; gap: 10px; padding: 14px; border-radius: 20px; background: var(--surface-2); }
+.tr-bloco { display: grid; gap: 10px; padding: 14px; border-radius: var(--r-tile); background: var(--surface-2); }
 .tr-bloco-t { font-size: 15px; font-weight: 800; }
 .tr-bloco > .tr-tx { margin-bottom: -4px; }
 .tr-app-in { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .tr-app-in > *, .tr-viagem-in > * { min-width: 0; }
-.tr-app-in .tr-campo { height: 46px; padding: 0 14px; border-radius: 14px; background: var(--surface); border-color: var(--line); }
+.tr-app-in .tr-campo { height: 46px; padding: 0 14px; border-radius: var(--r-ctl); background: var(--surface); border-color: var(--line); }
 .tr-app-in .tr-campo:focus-within { border-color: var(--mode); }
 .tr-app-in .tr-campo input { font-size: 16px; }
 .tr-vs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.tr-vs > div { display: grid; gap: 1px; padding: 10px; border-radius: 14px; background: var(--surface); border: 1.5px solid transparent; text-align: center; }
+.tr-vs > div { display: grid; gap: 1px; padding: 10px; border-radius: var(--r-ctl); background: var(--surface); border: 1.5px solid transparent; text-align: center; }
 .tr-vs > div.ganha { border-color: var(--mint); }
 .tr-vs b { font-family: var(--f-display); font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
 .tr-vs > div.ganha b { color: var(--mint); }
@@ -202,13 +202,13 @@ button.tr-item:disabled { opacity: 1; cursor: default; }
 
 /* ---------- viagem ---------- */
 .tr-viagem-in { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.tr-campo { display: flex; align-items: center; gap: 6px; height: 52px; padding: 0 16px; border-radius: 18px; background: var(--surface-2); border: 1.5px solid transparent; transition: border-color .15s; }
+.tr-campo { display: flex; align-items: center; gap: 6px; height: 52px; padding: 0 16px; border-radius: var(--r-tile); background: var(--surface-2); border: 1.5px solid transparent; transition: border-color .15s; }
 .tr-campo:focus-within { border-color: var(--mode); }
 .tr-campo input { flex: 1; min-width: 0; padding: 0; border: 0; outline: 0; background: none; color: var(--fg); font: inherit; font-size: 17px; font-weight: 800; }
 .tr-campo input::placeholder { color: var(--faint); font-weight: 600; }
 .tr-campo span { color: var(--muted); font-size: 14px; font-weight: 700; }
 .tr-viagem .toggle { width: auto; height: 52px; padding: 0 14px 0 16px; gap: 10px; white-space: nowrap; }
-.tr-res { display: grid; gap: 2px; padding: 14px 16px; border-radius: 18px; background: color-mix(in srgb, var(--mode) 12%, transparent); animation: tr-entra .3s ease both; }
+.tr-res { display: grid; gap: 2px; padding: 14px 16px; border-radius: var(--r-tile); background: color-mix(in srgb, var(--mode) 12%, transparent); animation: tr-entra .3s ease both; }
 .tr-res b { font-family: var(--f-display); font-weight: 700; font-size: 28px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .tr-res span { color: var(--muted); font-size: 13px; font-weight: 600; }
 
@@ -240,3 +240,11 @@ button.tr-item:disabled { opacity: 1; cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .tr-cartao, .tr-nums, .tr-acoes, .tr-palco, .tr-barras i, .tr-seg, .tr-prog i, .tr-res { animation: none !important; }
 }
+
+/* ---------- visual calmo (src/notion.css): chips e botões com cantos discretos ---------- */
+.tr-cartao { padding: 16px; }
+.tr-chip { height: 38px; border-radius: var(--r-ctl); border-width: 1px; }
+.tr-chip.mais { border-width: 1px; }
+.tr-btn, .tr-filtro { border-radius: var(--r-ctl); }
+.tr-filtro { height: 30px; border-width: 1px; }
+.tr-fipe, .tr-pill { border-radius: 4px; }

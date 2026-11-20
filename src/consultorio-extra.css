@@ -1,0 +1,123 @@
+/* Consultório: confirmação pelo paciente, sessão online, a semana em grade (computador) e o topo do dia no Início.
+   Só usa as variáveis do tema (styles.css / notion.css), então acompanha o claro e o escuro sozinho. */
+
+/* ---------- selos da sessão (online, confirmou, pediu para remarcar) ---------- */
+.selos{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.selo{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:600;line-height:1;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.selo svg{width:13px;height:13px;flex:none}
+.selo.ok{background:var(--mint-soft);color:var(--mint)}
+.selo.alerta{background:var(--amber-soft);color:var(--amber)}
+.selo.online{background:var(--accent-soft);color:var(--accent-ink)}
+
+/* ---------- botão de entrar na sala online ---------- */
+.entrar-sala{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:34px;padding:0 13px;border-radius:8px;background:var(--mode);color:var(--mode-ink);font-weight:600;font-size:13.5px;text-decoration:none;white-space:nowrap;flex:none;align-self:center;margin-right:8px;transition:transform .12s ease,filter .15s ease}
+.entrar-sala svg{width:16px;height:16px}
+.entrar-sala:hover{filter:brightness(1.08)}
+.entrar-sala:active{transform:scale(.97)}
+.entrar-sala.grande{height:42px;width:100%;margin:0;font-size:15px;animation:entrar-pulso 2.4s ease-in-out infinite}
+.entrar-sala.discreto{background:transparent;color:var(--mode-text);height:30px;padding:0 4px;margin:0;align-self:flex-start;font-weight:600}
+.entrar-sala.discreto:hover{text-decoration:underline;filter:none}
+@keyframes entrar-pulso{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--mode) 40%,transparent)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--mode) 0%,transparent)}}
+
+/* ---------- topo do Início do consultório: saudação numa linha ---------- */
+.ini-topo.compacto .ini-topo-t{display:flex;flex-direction:column;gap:2px}
+.ini-topo.compacto .ini-ola{font-size:22px;line-height:1.2;letter-spacing:-.015em;margin:0}
+.ini-topo.compacto .ini-data{margin:0;font-size:13.5px;color:var(--muted);text-transform:none}
+
+/* ---------- cartão "Hoje" ---------- */
+.hoje{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card,12px);padding:14px 14px 12px;display:flex;flex-direction:column;gap:10px;margin:14px 0;box-shadow:var(--card-shadow);animation:hoje-entra .45s cubic-bezier(.2,.8,.2,1) both}
+@keyframes hoje-entra{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.hoje-cab{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.hoje-rot{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.hoje-res{font-size:13.5px;color:var(--muted);text-align:right}
+.hoje-res b{color:var(--fg);font-weight:600}
+.hoje-barra{height:4px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.hoje-barra i{display:block;height:100%;border-radius:4px;background:var(--mode);transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.hoje-prox{display:flex;flex-direction:column;gap:8px}
+.hoje-prox-main{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:10px;margin:0 -10px;width:calc(100% + 20px);border-radius:10px;transition:background .15s ease}
+.hoje-prox-main:hover{background:var(--surface-2)}
+.hoje-prox-main > svg{width:18px;height:18px;color:var(--faint);flex:none}
+.hoje-hora{font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1;padding-left:10px;border-left:3px solid var(--pc);flex:none}
+.hoje-prox.agora .hoje-hora{color:var(--mode-text)}
+.hoje-quem{display:flex;flex-direction:column;min-width:0;flex:1}
+.hoje-quem b{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hoje-quem small{font-size:13px;color:var(--muted);margin-top:2px}
+.hoje-quem .selos{margin-top:6px}
+.hoje-vazio{margin:0;color:var(--muted);font-size:14.5px}
+.hoje-linha{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -2px;padding:2px}
+.hoje-linha::-webkit-scrollbar{display:none}
+.hoje-pt{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 9px;border-radius:8px;background:var(--surface-2);border:1px solid transparent;flex:none;font-size:12.5px;line-height:1.15;transition:background .15s ease,border-color .15s ease,transform .12s ease}
+.hoje-pt span{font-weight:600}
+.hoje-pt i{font-style:normal;color:var(--muted);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hoje-pt::before{content:"";width:14px;height:3px;border-radius:2px;background:var(--pc);margin-bottom:3px}
+.hoje-pt:hover{border-color:var(--line-forte)}
+.hoje-pt:active{transform:scale(.97)}
+.hoje-pt.done{opacity:.55}
+.hoje-pt.missed{opacity:.4;text-decoration:line-through}
+.hoje-pt.late{background:var(--amber-soft)}
+.hoje-pt.prox{border-color:var(--mode);background:color-mix(in srgb,var(--mode) 10%,var(--surface))}
+.hoje-clima{display:flex}
+.hoje-clima > *{margin:0 !important}
+
+/* ---------- confirmação: quem pediu para remarcar ---------- */
+.conf-item.rem{border-color:color-mix(in srgb,var(--amber) 45%,transparent);background:var(--amber-soft)}
+
+/* ---------- barra da agenda no computador (Semana | Mês e dia) ---------- */
+.ag-barra{display:flex;align-items:center;gap:10px;margin:-4px 0 14px;flex-wrap:wrap}
+.ag-barra .seg{width:auto;min-width:240px}
+.ag-nav{display:flex;align-items:center;gap:4px}
+.ag-barra .chip-btn{margin-left:auto}
+
+/* ---------- semana em grade ---------- */
+.sg{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card,12px);overflow:hidden;box-shadow:var(--card-shadow);animation:hoje-entra .4s cubic-bezier(.2,.8,.2,1) both}
+.sg-cab,.sg-grade{display:grid;grid-template-columns:56px 1fr}
+.sg-cab{grid-template-columns:56px repeat(7,1fr);border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);z-index:2}
+.sg-dia{display:flex;align-items:baseline;justify-content:center;gap:6px;padding:10px 4px;border-left:1px solid var(--line);color:var(--muted);transition:background .15s ease}
+.sg-dia:hover{background:var(--surface-2)}
+.sg-dia small{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.sg-dia b{font-size:17px;font-weight:600;color:var(--fg)}
+.sg-dia em{font-style:normal;font-size:11px;font-weight:700;min-width:18px;height:18px;line-height:18px;border-radius:9px;background:var(--surface-2);color:var(--muted);padding:0 5px}
+.sg-dia.eh-hoje b{background:var(--now);color:#fff;border-radius:7px;padding:1px 7px}
+.sg-dia.sel{background:var(--surface-2)}
+.sg-dia.hol small,.sg-dia.hol b{color:var(--rose)}
+.sg-dia.eh-hoje.hol b{color:#fff}
+.sg-rolar{max-height:calc(100vh - 250px);overflow-y:auto;overscroll-behavior:contain}
+.sg-horas{position:relative;border-right:1px solid var(--line)}
+.sg-horas span{position:absolute;right:8px;transform:translateY(-50%);font-size:11px;font-weight:500;color:var(--faint);font-variant-numeric:tabular-nums}
+.sg-horas span:first-child{transform:none;top:4px !important}
+.sg-corpo{position:relative;display:grid;grid-template-columns:repeat(7,1fr);touch-action:none}
+.sg-linha{position:absolute;left:0;right:0;height:1px;background:var(--line);pointer-events:none}
+.sg-col{position:relative;border-left:1px solid var(--line);cursor:copy;transition:background .15s ease}
+.sg-col:first-child{border-left:0}
+.sg-col:hover{background:color-mix(in srgb,var(--fg) 2.5%,transparent)}
+.sg-col.passado{cursor:default;background:color-mix(in srgb,var(--fg) 1.5%,transparent)}
+.sg-col.folga{background:repeating-linear-gradient(135deg,transparent 0 9px,color-mix(in srgb,var(--fg) 3%,transparent) 9px 10px)}
+.sg-col.eh-hoje{background:color-mix(in srgb,var(--mode) 4%,transparent)}
+.sg-agora{position:absolute;left:-1px;right:0;height:2px;background:var(--now);z-index:3;pointer-events:none}
+.sg-agora::before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--now)}
+.sg-ses{position:absolute;display:flex;flex-direction:column;align-items:flex-start;gap:1px;overflow:hidden;text-align:left;padding:5px 7px 4px 9px;border-radius:7px;font-size:12.5px;line-height:1.2;
+  background:color-mix(in srgb,var(--pc) 16%,var(--card));color:var(--fg);border-left:3px solid var(--pc);z-index:1;cursor:pointer;
+  transition:box-shadow .15s ease,transform .18s cubic-bezier(.2,.8,.2,1),opacity .15s ease}
+.sg-ses b{font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sg-ses small{color:var(--muted);font-size:11.5px;white-space:nowrap}
+.sg-ses:hover{box-shadow:0 2px 10px rgba(0,0,0,.12);z-index:2}
+.sg-ses.arrasta{cursor:grab}
+.sg-ses.segurando{cursor:grabbing;opacity:.85;box-shadow:0 10px 26px rgba(0,0,0,.22);z-index:5;transition:none}
+.sg-ses.done{opacity:.6}
+.sg-ses.missed{opacity:.4;text-decoration:line-through}
+.sg-ses.proj{background:transparent;border:1px dashed color-mix(in srgb,var(--pc) 60%,transparent);border-left:3px solid color-mix(in srgb,var(--pc) 55%,transparent)}
+.sg-ses.late{background:var(--amber-soft);border-left-color:var(--amber)}
+.sg-fantasma{position:absolute;left:2px;right:2px;border-radius:7px;border:2px dashed var(--mode);background:color-mix(in srgb,var(--mode) 10%,transparent);pointer-events:none;z-index:4}
+.sg-fantasma span{position:absolute;top:3px;right:6px;font-size:11px;font-weight:700;color:var(--mode-text);font-style:normal}
+.sg-dica{margin:0;padding:9px 14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--faint)}
+
+@media (prefers-reduced-motion:reduce){
+  .hoje,.sg{animation:none}
+  .entrar-sala.grande{animation:none}
+  .hoje-barra i,.sg-ses{transition:none}
+}
+
+/* ---------- ficha do paciente: o botão Documentos (ícone no lugar da ilustração) ---------- */
+.pac-acao .pac-acao-ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;flex:none;background:var(--accent-soft);color:var(--accent-ink)}
+.pac-acao .pac-acao-ic svg{width:21px;height:21px}
+.pac-acoes > .pac-acao:nth-child(3):last-child{grid-column:1/-1}

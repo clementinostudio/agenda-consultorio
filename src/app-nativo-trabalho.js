@@ -116,7 +116,7 @@ export function retratoConsultorio(db, perfil, linkAg, libera, hoje) {
         if (c && !c.hidden) { it.cid = c.id; it.paga = !!c.paid; }
         if (s.status === "done" && regPendente && !s.registro) it.reg = false;
         if (s.date === ultimaData[p.id]) it.desfaz = true; // só a última do paciente dá para desfazer (como no site)
-      } else if (conf[`${p.id}:${i.date}`]) it.conf = true;
+      } else if (conf[`${p.id}:${i.date}`] === true || (conf[`${p.id}:${i.date}`] || {}).r === "sim") it.conf = true;
       itens.push(it);
     });
   }

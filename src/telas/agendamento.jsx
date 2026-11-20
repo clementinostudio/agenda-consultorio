@@ -1,9 +1,9 @@
 // Link de agendamento: o paciente vê os horários livres e pede um; você aprova com um toque.
 // O paciente abre a página public/agendar/ (sem login); os horários e os pedidos passam pelo servidor (src/link.js).
 import React, { useState, useEffect } from "react";
-import { I, Field, Seg, Toggle, Sheet, todayISO, fromISO, pad, DIA_CURTO, DIA_LONGO, diaCurto, horariosLivres, primeiro, iniciais, copiarTexto, vibrar, termoDe } from "../App.jsx";
+import { I, Field, Seg, Toggle, Sheet, todayISO, fromISO, pad, DIA_CURTO, DIA_LONGO, diaCurto, horariosLivres, primeiro, iniciais, copiarTexto, vibrar, termoDe, servidorAvisos } from "../App.jsx";
 import { PERIODOS, NOME_PERIODO, MODELOS, periodosDo } from "../horarios.js";
-import { linkDo, enderecoLink, recadoDoPedido } from "../link.js";
+import { linkDo, enderecoLink, recadoDoPedido, registroDe, enderecoAgendaIcs, linkGoogleAgenda, linkAgendaApple, novoTokenAgenda } from "../link.js";
 const waLink = (phone, txt) => { const d = String(phone || "").replace(/\D/g, ""); const f = d.length >= 10 && d.length <= 11 ? "55" + d : d; return `https://wa.me/${f}?text=${encodeURIComponent(txt)}`; };
 const hhmm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
 
@@ -151,6 +151,8 @@ function LinkAgendamento({ db, conta, act }) {
       {(db.pedidos || []).length > 0 && <h3 className="section-title">Pedidos <small>{db.pedidos.length}</small></h3>}
       <PedidosLista db={db} conta={conta} act={act} />
 
+      <PaginaDoLink conta={conta} cfg={cfg} salvar={salvar} url={url} />
+
       <h3 className="section-title">Regras</h3>
       <div className="fields">
         <Field label="Quem pode pedir"><Seg value={cfg.quem} onChange={v => salvar({ quem: v })} options={[{ v: "todos", l: "Novos e atuais" }, { v: "pacientes", l: "Só remarcar" }]} /></Field>
@@ -163,4 +165,79 @@ function LinkAgendamento({ db, conta, act }) {
   );
 }
 
-export { GradeHorarios, LinkAgendamento, PedidosSheet, linkDo };
+export { GradeHorarios, LinkAgendamento, PedidosSheet, AgendaNoCelular, linkDo };
+
+// A página do link vira o "link na bio": foto, registro, abordagem, online ou presencial e um texto curto.
+// Salva sozinho (espera a pessoa parar de digitar) e o link publica de novo.
+function PaginaDoLink({ conta, cfg, salvar, url }) {
+  const pg = cfg.pagina || {}, pf = conta.perfil || {};
+  const [abordagem, setAbordagem] = useState(pg.abordagem || "");
+  const [bio, setBio] = useState(pg.bio || "");
+  const primeira = React.useRef(true);
+  useEffect(() => {
+    if (primeira.current) { primeira.current = false; return; }
+    const t = setTimeout(() => salvar({ pagina: { ...pg, abordagem: abordagem.trim().slice(0, 60), bio: bio.trim().slice(0, 400) } }), 600);
+    return () => clearTimeout(t);
+  }, [abordagem, bio]);
+  const muda = patch => salvar({ pagina: { ...pg, abordagem: abordagem.trim(), bio: bio.trim(), ...patch } });
+  const registro = registroDe(pf);
+  const temFoto = typeof conta.foto === "string" && conta.foto.startsWith("data:image/");
+  return (
+    <>
+      <h3 className="section-title">Sua página <small>o que aparece no link</small></h3>
+      <div className="hint">Coloque o link na bio do Instagram: quem chega vê quem você é e já escolhe um horário.</div>
+      <div className="fields">
+        <Field label="Abordagem ou especialidade" htmlFor="pg-ab"><input id="pg-ab" value={abordagem} maxLength={60} onChange={e => setAbordagem(e.target.value)} placeholder="Ex.: Terapia cognitivo-comportamental · adultos" /></Field>
+        <Field label="Como você atende"><Seg value={pg.modalidade || ""} onChange={v => muda({ modalidade: v })} options={[{ v: "presencial", l: "Presencial" }, { v: "online", l: "Online" }, { v: "ambos", l: "Os dois" }]} /></Field>
+        <Field label={`Sobre você (${400 - bio.length} letras sobrando)`} htmlFor="pg-bio"><textarea id="pg-bio" className="msg" rows={4} maxLength={400} value={bio} onChange={e => setBio(e.target.value)} placeholder="Duas ou três frases: com quem você trabalha e como é o seu jeito de atender." /></Field>
+      </div>
+      {temFoto ? <Toggle on={pg.foto !== false} onClick={() => muda({ foto: pg.foto === false })}>Mostrar minha foto</Toggle> : <div className="hint">Sem foto de perfil: aparecem as suas iniciais. A foto se troca em Perfil, Dados pessoais.</div>}
+      {registro ? <Toggle on={pg.registro !== false} onClick={() => muda({ registro: pg.registro === false })}>Mostrar o registro ({registro})</Toggle> : <div className="hint">Para mostrar o seu registro (CRP), preencha em Perfil, Recibos e imposto.</div>}
+      {pf.cidade && <Toggle on={pg.cidade !== false} onClick={() => muda({ cidade: pg.cidade === false })}>Mostrar a cidade ({pf.cidade})</Toggle>}
+      {url && <a className="btn ghost" href={url} target="_blank" rel="noopener"><I.eye /> Ver a página</a>}
+    </>
+  );
+}
+
+// Agenda no celular: um endereço para assinar no Google Agenda, no iPhone ou no Outlook. As sessões aparecem como
+// "Sessão" (sem o nome do paciente, a menos que a pessoa escolha as iniciais) e atualizam sozinhas.
+function AgendaNoCelular({ conta, act }) {
+  const pf = conta.perfil || {}, cal = pf.agendaCal || {}, L = act.link || {};
+  const [erro, setErro] = useState("");
+  const [indo, setIndo] = useState(false);
+  const ics = enderecoAgendaIcs(servidorAvisos(), L.endereco, cal.token);
+  const salvarCal = patch => act.salvarPerfil({ perfil: { ...pf, agendaCal: { ...cal, ...patch } } }, undefined);
+  const ligar = async () => {
+    setIndo(true); setErro("");
+    try {
+      // o link nasce fechado para pedidos (só confirmação e agenda), se ainda não existia. Salva o endereço e o token
+      // juntos: dois salvamentos seguidos do perfil fariam o segundo apagar o primeiro
+      const novo = !L.endereco, end = L.endereco || await L.publicar(true, { fechado: true });
+      const link = { ...(pf.link || {}), endereco: end, ...(novo && !(pf.link && "ativo" in pf.link) ? { ativo: false } : {}) };
+      act.salvarPerfil({ perfil: { ...pf, link, agendaCal: { ...cal, token: cal.token || novoTokenAgenda() } } }, undefined);
+      vibrar("ok");
+    } catch (e) { setErro(e.message); } finally { setIndo(false); }
+  };
+  if (!L.pode) return <div className="stack"><div className="note"><I.cloud /><span>A agenda no celular precisa da sua conta com login (com a cópia na nuvem) e de internet.</span></div></div>;
+  if (!ics) return (
+    <div className="stack">
+      <div className="note"><I.cal /><span>Suas sessões aparecem no Google Agenda, no calendário do iPhone ou no Outlook, junto com o resto do seu dia. Mudou aqui, muda lá sozinho.</span></div>
+      <div className="hint">Por privacidade, cada sessão aparece só como “Sessão”, sem o nome de quem você atende. Sessão online leva o link da sala.</div>
+      {erro && <div className="error" role="alert">{erro}</div>}
+      <button className="btn" disabled={indo} onClick={ligar}><I.cal /> {indo ? "Ligando…" : "Ligar a agenda no celular"}</button>
+    </div>
+  );
+  return (
+    <div className="stack">
+      <div className="note mint"><I.check /><span>Pronto. Escolha onde quer ver as sessões: o calendário atualiza sozinho (o Google pode levar algumas horas para buscar as mudanças).</span></div>
+      <div className="btn-row">
+        <a className="btn ghost" href={linkGoogleAgenda(ics)} target="_blank" rel="noopener"><I.cal /> Google Agenda</a>
+        <a className="btn ghost" href={linkAgendaApple(ics)}><I.cal /> iPhone ou Mac</a>
+      </div>
+      <button className="btn ghost" onClick={() => copiarTexto(ics, act, "Endereço copiado")}><I.copy /> Copiar o endereço (Outlook e outros)</button>
+      <div className="fields"><Field label="O que aparece em cada sessão"><Seg value={cal.nomes === "iniciais" ? "iniciais" : "sessao"} onChange={v => salvarCal({ nomes: v === "iniciais" ? "iniciais" : null })} options={[{ v: "sessao", l: "Só “Sessão”" }, { v: "iniciais", l: "Sessão e as iniciais" }]} /></Field></div>
+      <div className="hint">No Google Agenda pelo computador: Outras agendas, “+”, “Do URL” e cole o endereço. O endereço é secreto: quem tiver ele vê os horários.</div>
+      <button className="btn text" onClick={() => salvarCal({ token: novoTokenAgenda() })}>Trocar o endereço (o antigo para de funcionar)</button>
+    </div>
+  );
+}
