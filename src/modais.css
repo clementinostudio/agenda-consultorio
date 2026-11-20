@@ -32,11 +32,7 @@
 .sheet-head h2 { font-size: 21px; }
 .sheet-x { flex: none; }
 
-/* ---------- o botão principal fica sempre à vista embaixo ---------- */
-.sheet .stack > .btn.mode, .sheet .stack > form > .btn[type=submit], .sheet form.stack > .btn[type=submit] {
-  position: sticky; bottom: 0; z-index: 4;
-  box-shadow: 0 0 0 10px var(--sheet-bg), 0 46px 0 10px var(--sheet-bg), 0 -22px 22px 2px var(--sheet-bg);
-}
+/* ---------- o botão principal fica no fim do formulário (preso embaixo, ele tapava o que vinha depois) ---------- */
 /* desativado (falta preencher): cor apagada, mas sem transparência, para não deixar ver o que passa por trás */
 .sheet .stack > .btn.mode:disabled { opacity: 1; background: color-mix(in srgb, var(--mode) 32%, var(--surface-2)); color: color-mix(in srgb, var(--mode-ink) 55%, var(--surface-2)); }
 

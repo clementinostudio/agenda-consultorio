@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { I, Sheet, Field, Seg, Toggle, Money, brl, brlReal, num, soNumero, fmtNum, uid, todayISO, MES_LONGO, pad, dm, relativo, vibrar, Ilustra, lerArquivo, servidorAvisos, ConfirmButton, TopBar, ProximaConquista, ESCONDER } from "../App.jsx";
 import { veiculosDe, lancTransp, SUBS, subInfo, subDe, MANUTENCOES, FOTOS, FOTO_MOTO, NOME_CARROCERIA, carroceria, fotoDoVeiculo, COMBUSTIVEIS, gastosTransporte, estatisticasCombustivel, kmAtual, proximaTrocaOleo, proximoRodizio, DOCS_VEICULO, docsVeiculo, umAnoDepois, custoReal, valorFipe, postos, carroOuApp, precosCombustivel, etanolOuGasolina, fipe, ufDaCidade, montarGastoTransp, fipeDoMes } from "../transporte.js";
 import { useContagem } from "./visual.jsx";
+import { AcoesAzuis, ListaAcoes } from "../blocos.jsx";
 import { PostoBaratoSheet } from "./postos.jsx";
 import { combDoVeiculo } from "../postos.js";
 import { noApp, chamarApp } from "../app-nativo.js";
@@ -64,11 +65,11 @@ function FotoVeiculo({ v, grande }) {
 function Veiculo({ vs, v, comb, km, doMes, noAno, onTrocar, act }) {
   const toque = useRef(null);
   if (!v) return (
-    <section className="tr-veic">
+    <section className="tr-veic tr-heroi vazio">
       <div className="transp-palco tr-palco"><i className="transp-luz" aria-hidden="true" /><FotoVeiculo v={null} grande /><i className="transp-chao" aria-hidden="true" /></div>
       <h2>Escolha o seu veículo</h2>
       <p className="tr-veic-tx">Carro, moto, bike ou só apps e ônibus: eu acompanho o consumo, lembro da troca de óleo e do IPVA e mostro quanto ele custa de verdade.</p>
-      <button className="btn mode tr-escolher" onClick={() => act.abrirVeiculo("novo")}><I.car /> Escolher o meu veículo</button>
+      <button className="btn tr-escolher" onClick={() => act.abrirVeiculo("novo")}><I.car /> Escolher o meu veículo</button>
     </section>
   );
   const i = vs.findIndex(x => x.id === v.id);
@@ -92,7 +93,7 @@ function Veiculo({ vs, v, comb, km, doMes, noAno, onTrocar, act }) {
   } else nums = [{ v: brl(doMes.total), r: "no mês" }, { v: brl(noAno), r: `em ${todayISO().slice(0, 4)}` }];
   nums = nums.filter(Boolean);
   return (
-    <section className="tr-veic">
+    <section className="tr-veic tr-heroi">
       {vs.length > 1 && (
         <div className="tr-chips" role="tablist" aria-label="Seus veículos">
           {vs.map(x => (
@@ -129,32 +130,25 @@ function Veiculo({ vs, v, comb, km, doMes, noAno, onTrocar, act }) {
   );
 }
 
-/* ---------- As ações rápidas, em botões redondos como os atalhos dos apps de banco ---------- */
+/* ---------- As ações rápidas, nos botões azuis do visual novo (src/blocos.jsx) ---------- */
 function Acoes({ v, act, onPosto }) {
   const id = v && v.id, tipo = v ? v.tipo : "carro";
   const gasto = sub => () => act.abrirGastoTransp({ sub, veiculoId: id });
+  const item = (l, ic, f) => ({ id: l, l, ic, f });
   const lista = tipo === "nenhum" ? [
-    ["Corrida", "#6366F1", <Ic.app />, gasto("app")],
-    ["Ônibus e metrô", "#06B6D4", <Ic.publico />, gasto("publico")],
-    ["Outro gasto", null, <I.plus />, gasto("outros")],
+    item("Corrida de app", Ic.app, gasto("app")),
+    item("Ônibus e metrô", Ic.publico, gasto("publico")),
+    item("Outro gasto", I.plus, gasto("outros")),
   ] : tipo === "bike" ? [
-    ["Manutenção", "#EF4444", <Ic.manutencao />, gasto("manutencao")],
-    ["Outro gasto", null, <I.plus />, gasto("outros")],
+    item("Manutenção", Ic.manutencao, gasto("manutencao")),
+    item("Outro gasto", I.plus, gasto("outros")),
   ] : [
-    ["Abastecer", "#F59E0B", <Ic.combustivel />, gasto("combustivel")],
-    ["Manutenção", "#EF4444", <Ic.manutencao />, gasto("manutencao")],
-    ["Outro gasto", null, <I.plus />, gasto("estacionamento")],
-    ["Posto barato", "var(--mint)", <Ic.local />, onPosto],
+    item("Abastecer", Ic.combustivel, gasto("combustivel")),
+    item("Manutenção", Ic.manutencao, gasto("manutencao")),
+    item("Posto mais barato", Ic.local, onPosto),
+    item("Estacionar e outros", I.plus, gasto("estacionamento")),
   ];
-  return (
-    <div className="tr-acoes" role="group" aria-label="Anotar">
-      {lista.map(([t, cor, ic, f]) => (
-        <button key={t} type="button" className={"tr-acao" + (cor ? "" : " modo")} style={cor ? { "--c": cor } : undefined} onClick={f}>
-          <i aria-hidden="true">{ic}</i>{t}
-        </button>
-      ))}
-    </div>
-  );
+  return <AcoesAzuis itens={lista} className="tr-az-acoes" />;
 }
 
 /* ---------- O gasto do mês: o número grande, a comparação, os 6 meses e a divisão por tipo ---------- */
@@ -445,24 +439,12 @@ function GastosDoMes({ g, mes, off, filtro, setFiltro, act }) {
 
 /* ---------- Ajustes: o veículo, outro veículo e o teto do mês ---------- */
 function Ajustes({ v, act }) {
-  return (
-    <section className="tr-cartao tr-ajustes" aria-label="Ajustes do transporte">
-      {v && (
-        <button type="button" className="tr-ajuste" onClick={() => act.abrirVeiculo(v.id)}>
-          <i aria-hidden="true"><I.pencil /></i>
-          <span className="mid"><b>Editar {nomeChip(v)}</b><small>{v.tipo === "nenhum" ? "Nome e tipo" : "Foto, consumo, Tabela FIPE e vencimentos"}</small></span><I.chev />
-        </button>
-      )}
-      <button type="button" className="tr-ajuste" onClick={() => act.abrirVeiculo("novo")}>
-        <i aria-hidden="true"><I.plus /></i>
-        <span className="mid"><b>{v ? "Adicionar outro veículo" : "Escolher o meu veículo"}</b><small>Carro, moto, bike ou apps e ônibus</small></span><I.chev />
-      </button>
-      <button type="button" className="tr-ajuste" onClick={() => act.abrirTeto("transporte")}>
-        <i aria-hidden="true"><I.gauge /></i>
-        <span className="mid"><b>Teto de gastos com transporte</b><small>Um limite para o mês</small></span><I.chev />
-      </button>
-    </section>
-  );
+  const itens = [
+    v && { id: "editar", l: `Editar ${nomeChip(v)}`, d: v.tipo === "nenhum" ? "Nome e tipo" : "Foto, consumo, Tabela FIPE e vencimentos", ic: I.pencil, f: () => act.abrirVeiculo(v.id) },
+    { id: "novo", l: v ? "Adicionar outro veículo" : "Escolher o meu veículo", d: "Carro, moto, bike ou apps e ônibus", ic: I.plus, f: () => act.abrirVeiculo("novo") },
+    { id: "teto", l: "Teto de gastos com transporte", d: "Um limite para o mês", ic: I.gauge, f: () => act.abrirTeto("transporte") },
+  ].filter(Boolean);
+  return <ListaAcoes titulo="Ajustes" itens={itens} className="tr-az-ajustes" />;
 }
 
 export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
@@ -481,7 +463,7 @@ export function TransporteTab({ db, act, tema, perfil, atual, onTrocar }) {
   const comb = useMemo(() => estatisticasCombustivel(db, v), [db, v]);
   const km = kmAtual(db, v);
   const oleo = proximaTrocaOleo(db, v, hoje), rodizio = proximoRodizio(db, v, hoje), docs = docsVeiculo(v, hoje);
-  const temCarro = temMotor(v);
+  const temCarro = !!v && temMotor(v); // sem veículo escolhido, a tela fica só com o essencial
   // Preço médio da semana (ANP) na sua cidade
   const [anp, setAnp] = useState({ st: "carregando" });
   useEffect(() => {
@@ -610,6 +592,17 @@ async function fotoDoCarro(file) {
   c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL("image/jpeg", .82);
 }
+// Um bloco da página do veículo: número, título, explicação curta e o conteúdo num cartão (como no Perfil)
+function Secao({ n, titulo, sub, children }) {
+  return (
+    <section className="vs-sec">
+      <h3 className="vs-sec-t"><i aria-hidden="true">{n}</i>{titulo}</h3>
+      {sub && <p className="vs-sec-sub">{sub}</p>}
+      <div className="vs-sec-c">{children}</div>
+    </section>
+  );
+}
+
 export function VeiculoSheet({ veiculo, db, onSave, onDelete, onClose }) {
   const km0 = kmAtual(db, veiculo);
   const v0 = veiculo || {};
@@ -635,56 +628,68 @@ export function VeiculoSheet({ veiculo, db, onSave, onDelete, onClose }) {
   const achado = carroceria(fipeV && fipeV.modelo) || carroceria(nome);
   const info = tipo !== "carro" || propria ? null : foto === "auto" ? (achado ? FOTOS.find(f => f[0] === achado) || [achado, NOME_CARROCERIA[achado] || achado] : null) : FOTOS.find(f => f[0] === foto);
   return (
-    <Sheet title={veiculo ? "Seu veículo" : veiculosDe(db).length ? "Novo veículo" : "Escolha o seu veículo"} sub="Fica só com você, para deixar a tela com a sua cara." onClose={onClose}>
-      <div className="transp-palco mini"><FotoVeiculo v={veiculoTela} grande /><i className="transp-chao" aria-hidden="true" /></div>
-      <Seg value={tipo} onChange={t => { setTipo(t); if (!propria) setFoto("auto"); }} options={[{ v: "carro", l: "Carro" }, { v: "moto", l: "Moto" }, { v: "bike", l: "Bike" }, { v: "nenhum", l: "Sem veículo" }]} />
-      <div className="transp-fotos" role="radiogroup" aria-label="Foto do veículo">
-        {tipo === "carro" && <button type="button" role="radio" aria-checked={foto === "auto"} className={"auto" + (foto === "auto" ? " on" : "")} onClick={() => setFoto("auto")}><Ilustra n={desenhoAuto[2]} /><small>Automático</small></button>}
-        {tipo === "carro" && FOTOS.map(([k, n, arquivo]) => (
-          <button key={k} type="button" role="radio" aria-checked={foto === k} className={foto === k ? "on" : ""} onClick={() => setFoto(k)}><Ilustra n={arquivo} /><small>{n}</small></button>
-        ))}
-        {tipo === "moto" && <button type="button" role="radio" aria-checked={!propria} className={!propria ? "on" : ""} onClick={() => setFoto("auto")}><Ilustra n={FOTO_MOTO[2]} /><small>Desenho</small></button>}
-        {tipo === "bike" && <button type="button" role="radio" aria-checked={!propria} className={!propria ? "on" : ""} onClick={() => setFoto("auto")}><span className="emoji">{EMOJI[tipo]}</span><small>Ícone</small></button>}
-        {tipo !== "nenhum" && <button type="button" role="radio" aria-checked={String(foto).startsWith("data:")} className={String(foto).startsWith("data:") ? "on" : ""} onClick={() => arq.current && arq.current.click()}>
-          {String(foto).startsWith("data:") ? <img src={foto} alt="" /> : <span className="emoji"><I.camera /></span>}<small>Foto minha</small>
-        </button>}
-        <input ref={arq} type="file" accept="image/*" hidden onChange={escolherFoto} />
-      </div>
-      {tipo === "carro" && !propria && <div className="transp-tipo-info" aria-live="polite">
-        {info ? <>
-          <b>{foto === "auto" ? "Pelo modelo, o seu é: " : ""}{info[1]}</b>
-          {info[3] ? <span>{info[3]} Ex.: {info[4]}.</span> : <span>Ainda não tenho o desenho desse tipo, então uso o mais parecido.</span>}
-        </> : <span>No automático, eu descubro o tipo do carro pelo modelo da FIPE (ou pelo apelido). Se preferir, toque no desenho que mais parece com o seu.</span>}
-      </div>}
-      {erro && <div className="error">{erro}</div>}
-      <div className="fields">
-        <Field label="Apelido" htmlFor="v-nome"><input id="v-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder={tipo === "nenhum" ? "Ex.: Uber e metrô" : "Ex.: Meu Onix, Bolinha azul"} autoComplete="off" /></Field>
-      </div>
-      {temMotor && <>
-        <Field label="Combustível">
-          <div className="transp-subs">{COMBUSTIVEIS.map(([k, n]) => <button key={k} type="button" className={combustivel === k ? "on" : ""} onClick={() => setCombustivel(k)}>{n}</button>)}</div>
-        </Field>
-        <div className="fields duas">
-          <Field label="Consumo (km/l)" htmlFor="v-c"><input id="v-c" inputMode="decimal" value={consumo} onChange={e => setConsumo(soNumero(e.target.value))} placeholder="Ex.: 11,5" /></Field>
-          <Field label="Km no painel" htmlFor="v-km"><input id="v-km" inputMode="numeric" value={km} onChange={e => setKm(e.target.value.replace(/\D/g, ""))} placeholder="Ex.: 45300" /></Field>
-        </div>
-        <Field label="Troca de óleo a cada">
-          <div className="transp-subs">
-            {[5000, 7500, 10000, 15000].map(k => <button key={k} type="button" className={oleoKm === k ? "on" : ""} onClick={() => setOleoKm(k)}>{k.toLocaleString("pt-BR")} km</button>)}
-            {[6, 12].map(m => <button key={"m" + m} type="button" className={oleoMeses === m ? "on" : ""} onClick={() => setOleoMeses(m)}>ou {m} meses</button>)}
-          </div>
-        </Field>
-        <h3 className="section-title">IPVA, licenciamento e seguro</h3>
-        <div className="transp-docs-form">
-          {DOCS_VEICULO.map(([k, n]) => (
-            <div key={k} className="fields duas">
-              <Field label={`${n}: vence em`} htmlFor={`vd-${k}`}><input id={`vd-${k}`} type="date" value={docs[k].data} onChange={e => upDoc(k, "data", e.target.value)} /></Field>
-              <Field label="Valor (R$)" htmlFor={`vv-${k}`}><input id={`vv-${k}`} inputMode="decimal" value={docs[k].valor} onChange={e => upDoc(k, "valor", soNumero(e.target.value))} placeholder="Opcional" /></Field>
-            </div>
+    <Sheet title={veiculo ? "Seu veículo" : veiculosDe(db).length ? "Novo veículo" : "Escolha o seu veículo"} onClose={onClose}>
+      {/* o desenho em destaque, com o tipo logo embaixo */}
+      <div className="vs-heroi">
+        <div className="transp-palco mini"><FotoVeiculo v={veiculoTela} grande /><i className="transp-chao" aria-hidden="true" /></div>
+        <b className="vs-heroi-nome">{nome.trim() || (fipeV && fipeV.modelo) || (tipo === "nenhum" ? "Apps e transporte público" : TIPO_NOME[tipo])}</b>
+        <div className="az-abas vs-tipos" role="tablist" aria-label="Tipo">
+          {[["carro", "Carro"], ["moto", "Moto"], ["bike", "Bike"], ["nenhum", "Nenhum"]].map(([k, l]) => (
+            <button key={k} type="button" role="tab" aria-selected={tipo === k} className={tipo === k ? "on" : ""} onClick={() => { if (k !== tipo) { setTipo(k); if (!propria) setFoto("auto"); vibrar("toque"); } }}>{l}</button>
           ))}
         </div>
-        <BuscaFipe tipo={tipo === "moto" ? "motos" : "carros"} valor={fipeV} onEscolher={f => { setFipeV(f); if (!nome.trim() && f) setNome(f.modelo.split(" ").slice(0, 2).join(" ")); if (f && /alcool|etanol|flex/i.test(f.combustivel || "") && combustivel === "flex") setCombustivel(/flex/i.test(f.combustivel) ? "flex" : "etanol"); }} />
+      </div>
+      {erro && <div className="error">{erro}</div>}
+
+      <Secao n="1" titulo="Nome" sub={temMotor ? "Puxando da Tabela FIPE, eu já preencho o nome e acompanho o valor do carro." : null}>
+        <div className="fields">
+          <Field label="Apelido" htmlFor="v-nome"><input id="v-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder={tipo === "nenhum" ? "Ex.: Uber e metrô" : "Ex.: Meu Onix, Bolinha azul"} autoComplete="off" /></Field>
+        </div>
+        {temMotor && <BuscaFipe tipo={tipo === "moto" ? "motos" : "carros"} valor={fipeV} onEscolher={f => { setFipeV(f); if (!nome.trim() && f) setNome(f.modelo.split(" ").slice(0, 2).join(" ")); if (f && /alcool|etanol|flex/i.test(f.combustivel || "") && combustivel === "flex") setCombustivel(/flex/i.test(f.combustivel) ? "flex" : "etanol"); }} />}
+      </Secao>
+
+      {tipo !== "nenhum" && (
+        <Secao n="2" titulo="Aparência" sub={tipo === "carro" && !propria ? (info ? `${foto === "auto" ? "Pelo modelo, o seu é: " : ""}${info[1]}` : "No automático, eu descubro o tipo pelo modelo. Ou toque no que mais parece com o seu.") : null}>
+          <div className="transp-fotos" role="radiogroup" aria-label="Foto do veículo">
+            {tipo === "carro" && <button type="button" role="radio" aria-checked={foto === "auto"} className={"auto" + (foto === "auto" ? " on" : "")} onClick={() => setFoto("auto")}><Ilustra n={desenhoAuto[2]} /><small>Automático</small></button>}
+            {tipo === "carro" && FOTOS.map(([k, n, arquivo]) => (
+              <button key={k} type="button" role="radio" aria-checked={foto === k} className={foto === k ? "on" : ""} onClick={() => setFoto(k)}><Ilustra n={arquivo} /><small>{n}</small></button>
+            ))}
+            {tipo === "moto" && <button type="button" role="radio" aria-checked={!propria} className={!propria ? "on" : ""} onClick={() => setFoto("auto")}><Ilustra n={FOTO_MOTO[2]} /><small>Desenho</small></button>}
+            {tipo === "bike" && <button type="button" role="radio" aria-checked={!propria} className={!propria ? "on" : ""} onClick={() => setFoto("auto")}><span className="emoji">{EMOJI[tipo]}</span><small>Ícone</small></button>}
+            <button type="button" role="radio" aria-checked={propria} className={propria ? "on" : ""} onClick={() => arq.current && arq.current.click()}>
+              {propria ? <img src={foto} alt="" /> : <span className="emoji"><I.camera /></span>}<small>Foto minha</small>
+            </button>
+            <input ref={arq} type="file" accept="image/*" hidden onChange={escolherFoto} />
+          </div>
+        </Secao>
+      )}
+
+      {temMotor && <>
+        <Secao n="3" titulo="Consumo" sub="Com isso eu calculo o custo por km e quanto sai uma viagem.">
+          <div className="vs-chips" role="radiogroup" aria-label="Combustível">{COMBUSTIVEIS.map(([k, n]) => <button key={k} type="button" role="radio" aria-checked={combustivel === k} className={combustivel === k ? "on" : ""} onClick={() => setCombustivel(k)}>{n}</button>)}</div>
+          <div className="fields">
+            <Field label="Consumo (km por litro)" htmlFor="v-c"><input id="v-c" inputMode="decimal" value={consumo} onChange={e => setConsumo(soNumero(e.target.value))} placeholder="Ex.: 11,5" /></Field>
+            <Field label="Km no painel hoje" htmlFor="v-km"><input id="v-km" inputMode="numeric" value={km} onChange={e => setKm(e.target.value.replace(/\D/g, ""))} placeholder="Ex.: 45300" /></Field>
+          </div>
+        </Secao>
+        <Secao n="4" titulo="Troca de óleo" sub="Eu aviso o que chegar primeiro: a quilometragem ou o tempo.">
+          <div className="vs-linha"><span>A cada</span><div className="vs-chips">{[5000, 7500, 10000, 15000].map(k => <button key={k} type="button" className={oleoKm === k ? "on" : ""} onClick={() => setOleoKm(k)}>{k.toLocaleString("pt-BR")} km</button>)}</div></div>
+          <div className="vs-linha"><span>ou a cada</span><div className="vs-chips">{[6, 12].map(m => <button key={m} type="button" className={oleoMeses === m ? "on" : ""} onClick={() => setOleoMeses(m)}>{m} meses</button>)}</div></div>
+        </Secao>
+        <Secao n="5" titulo="Vencimentos" sub="Eu aviso uma semana antes e no dia. O valor é opcional.">
+          {DOCS_VEICULO.map(([k, n]) => (
+            <div key={k} className="vs-doc">
+              <b>{n}</b>
+              <div className="fields duas">
+                <Field label="Vence em" htmlFor={`vd-${k}`}><input id={`vd-${k}`} type="date" value={docs[k].data} onChange={e => upDoc(k, "data", e.target.value)} /></Field>
+                <Field label="Valor (R$)" htmlFor={`vv-${k}`}><input id={`vv-${k}`} inputMode="decimal" value={docs[k].valor} onChange={e => upDoc(k, "valor", soNumero(e.target.value))} placeholder="Opcional" /></Field>
+              </div>
+            </div>
+          ))}
+        </Secao>
       </>}
+      <p className="vs-priv"><I.lock /> Fica só com você.</p>
       <button className="btn mode" onClick={() => {
         const docsOk = temMotor ? Object.fromEntries(DOCS_VEICULO.filter(([k]) => docs[k].data).map(([k]) => [k, { data: docs[k].data, valor: num(docs[k].valor) || 0 }])) : {};
         // histórico da FIPE: guarda o valor do mês (troca de carro zera o histórico)

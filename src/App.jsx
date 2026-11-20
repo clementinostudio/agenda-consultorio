@@ -28,7 +28,7 @@ import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCor
 import { lerWhatsapp, mascaraWhatsapp } from "./whatsapp.js";
 import { K_ORIGEM } from "./origem.js";
 import { useLinkAgendamento, confirmacaoDe } from "./link.js";
-import { AcoesAzuis, CartaoSaldo, GradeAtalhos, CartaoNovidade, CartaoResumo, ListaAcoes, noPeriodo } from "./blocos.jsx";
+import { AcoesAzuis, CarrosselSaldo, SeloPro, GradeAtalhos, CartaoNovidade, CartaoResumo, ListaAcoes, noPeriodo } from "./blocos.jsx";
 import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
 import { Svg, Marca, I } from "./icones.jsx";
@@ -1516,6 +1516,25 @@ function Avatar({ conta, onClick, label = "Sua conta e ajustes" }) {
   const inner = conta.foto ? <img src={conta.foto} alt="" /> : iniciais(conta.nome);
   return onClick ? <button className="me" onClick={onClick} aria-label={label}>{inner}</button> : <span className="me" aria-hidden="true">{inner}</span>;
 }
+// Moldura de fogo (desenho animado) em volta da foto de quem assina o PRO: as chamas dançam atrás da foto.
+// Com "reduzir movimento" ligado no aparelho, ficam paradas (src/azul.css).
+const CHAMAS = [-118, -88, -58, -29, 0, 29, 58, 88, 118];
+function MolduraFogo({ children }) {
+  return (
+    <span className="pro-fogo">
+      <svg className="pro-fogo-chamas" viewBox="0 0 64 64" aria-hidden="true">
+        {CHAMAS.map((a, k) => { const alta = Math.abs(a) < 40; return (
+          <g key={a} transform={`rotate(${a} 32 32)`}>
+            <path className="fl fora" style={{ "--d": `${(k % 3) * -0.23}s` }} d={alta ? "M32 15C26 11 27 5 32 -1C37 5 38 11 32 15Z" : "M32 15C27.5 12 28 7 32 3C36 7 36.5 12 32 15Z"} />
+            <path className="fl dentro" style={{ "--d": `${(k % 3) * -0.23 - 0.1}s` }} d={alta ? "M32 15C29 12 29.5 8 32 4.5C34.5 8 35 12 32 15Z" : "M32 15C29.8 13 30 10 32 7.5C34 10 34.2 13 32 15Z"} />
+          </g>
+        ); })}
+      </svg>
+      {children}
+      <em className="pro-fogo-selo" aria-hidden="true">PRO</em>
+    </span>
+  );
+}
 // Lê um arquivo de imagem do aparelho
 const lerArquivo = file => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
 
@@ -2435,12 +2454,22 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
     ];
   };
   const pf = conta.perfil || {}, temLink = !!(pf.link && pf.link.endereco), temCal = !!(pf.agendaCal && pf.agendaCal.token);
+  // os cartões do carrossel do topo: o que entrou, o que falta receber, as sessões de hoje e o que foi atendido no mês
+  const nMes = MES_LONGO[now.getMonth()], abertas = cs.filter(c => !c.paid).length;
+  const deHoje = itensDoDia(db, t), feitasMes = db.sessions.filter(s => s.status === "done" && (s.date || "").startsWith(ch));
+  const cartoesSaldo = [
+    { id: "recebido", rotulo: `Recebido em ${nMes}`, valor: recebidoMes, ic: I.wallet, sub: aReceber > 0 ? `${brl(aReceber)} a receber` : "Nada a receber agora", onClick: () => act.setTab("fin") },
+    { id: "receber", rotulo: "A receber", valor: aReceber, ic: I.money, sub: abertas ? `${abertas} ${abertas === 1 ? "cobrança aberta" : "cobranças abertas"}` : "Tudo recebido", onClick: () => act.setTab("fin") },
+    { id: "hoje", rotulo: "Sessões hoje", texto: String(deHoje.length), ic: I.cal, sub: prox ? `A próxima é às ${prox.time}` : deHoje.length ? "As de hoje já passaram" : "Dia livre na agenda", onClick: () => act.setTab("agenda") },
+    { id: "mes", rotulo: `Atendido em ${nMes}`, valor: soma(feitasMes, x => x.price - (x.sublet || 0)), ic: I.chart, sub: `${feitasMes.length} ${feitasMes.length === 1 ? "sessão atendida" : "sessões atendidas"}`, onClick: () => act.setTab("fin") },
+  ];
   return (
     <div className="page ini az-ini">
       <TopoInicio conta={conta} act={act} tema={tema} modo="consultorio" now={now} compacto />
       {avisos}
       <AcoesAzuis itens={acoes} />
-      <CartaoSaldo act={act} rotulo={`Recebido em ${MES_LONGO[now.getMonth()]}`} valor={recebidoMes} sub={aReceber > 0 ? `${brl(aReceber)} a receber` : "Nada a receber agora"} onClick={() => act.setTab("fin")} />
+      {act.plano && act.plano.pro && <SeloPro onClick={() => act.openSettings("assinatura")} />}
+      <CarrosselSaldo act={act} cartoes={cartoesSaldo} />
       <GradeAtalhos itens={atalhos} />
       {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
       <HojeConsultorio db={db} now={now} act={act} clima={<WeatherChip cidade={pf.cidade} act={act} sessao={prox} />} />
@@ -5669,7 +5698,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {sheet && sheet.type === "importar-agenda" && <Suspense fallback={null}><ImportarAgendaSheet db={db} perfil={perfil} onClose={close} act={act} primeira={!!sheet.primeira} /></Suspense>}
       {sheet && sheet.type === "registros" && <Suspense fallback={null}><RegistrosSheet db={db} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "espera" && <EsperaSheet key={sheet.id || "nova"} inicial={sheet.id ? db.espera.find(e => e.id === sheet.id) : null} onSave={act.salvarEspera} onDelete={act.tirarEspera} onClose={close} />}
-      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onVoz={act.falarGasto} onFoto={servidorAvisos() ? act.lerComprovante : null} casa={casa.casa && casa.membros.length > 1 ? casa : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
+      {sheet && sheet.type === "lanc" && <Suspense fallback={null}><LancSheet key={sheet.id || sheet.tipo + (sheet.n || "")} inicial={lancSel} pre={sheet.pre} tipo={sheet.tipo || "saida"} viagem={db.pessoal.viagem} onLogo={act.salvarLogo} onFoto={servidorAvisos() ? act.lerComprovante : null} casa={casa.casa && casa.membros.length > 1 ? casa : null} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "transp-gasto" && <Suspense fallback={null}><GastoTransporteSheet key={sheet.n} veiculos={veiculosDe(db)} veiculoId={sheet.veiculoId || (sheet.inicial && sheet.inicial.veiculoId) || veicAtual} sub0={sheet.sub} manut0={sheet.manut} inicial={sheet.inicial} precos={precosGuardados()} onSave={act.salvarLanc} onDelete={act.apagarLanc} onClose={close} /></Suspense>}
       {sheet && sheet.type === "recibo" && <Suspense fallback={null}><ReciboSheet key={sheet.pid + (sheet.cid || "")} db={db} conta={conta} pid={sheet.pid} cid={sheet.cid} onClose={close} act={act} /></Suspense>}
       {sheet && sheet.type === "imposto" && <Suspense fallback={null}><ImpostoSheet db={db} conta={conta} onClose={close} act={act} /></Suspense>}
@@ -5735,7 +5764,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
             {doisModos && <button type="button" className="mode-pill cab-modo" onClick={() => { vibrar("toque"); setSheet({ type: "modo" }); }} aria-label={`Área: ${NOME_MODO[modoEf]}. Trocar`}><span className="mode-dot" />{NOME_MODO[modoEf]}<I.chevD /></button>}
             {modoEf === "loja" && <button className="icon-btn cab-ic" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>}
             {modoEf !== "loja" && <button className="icon-btn cab-ic cab-sino" onClick={() => { vibrar("toque"); setAlertas(true); }} aria-label={nAlertas ? `Alertas: ${nAlertas} pedem atenção` : "Alertas"}><I.bell />{nAlertas > 0 && <i className="cab-ponto" />}</button>}
-            <Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes" />
+            {souPro ? <MolduraFogo><Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes (assinante PRO)" /></MolduraFogo> : <Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes" />}
           </div>
         </div>
       </header>

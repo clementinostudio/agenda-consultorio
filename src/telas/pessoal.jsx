@@ -2,15 +2,15 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, useDeferredValue } from "react";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
 import { ViagemAviso } from "./dinheiro.jsx";
-import { AcoesAzuis, CartaoSaldo, GradeAtalhos, CartaoResumo, noPeriodo } from "../blocos.jsx";
+import { AcoesAzuis, CarrosselSaldo, SeloPro, GradeAtalhos, CartaoResumo, noPeriodo } from "../blocos.jsx";
 import { CartoesInicio } from "./inicio-cartoes.jsx";
 import { CatBolinha, Topo, Comparacao } from "./visual.jsx";
 import { SeloBanco, nomeBanco } from "./bancos.jsx";
 import { resumoPessoal, GraficoLinha, BarraCategorias, LinhaCategoria, MES_ABREV, diaMes, eixoDoMes, LancRow, acumuladoMes, diasDoMes } from "./resumo.jsx";
 import "../pessoal.css";
 import { buscarMarcas, palpitesDeSite, logoDoSite, marcaPorId as marcaId, normalizar } from "../marcas.js";
-import { logoPropria, lerArquivo, IA_CONVERSA } from "../App.jsx";
-import { todayISO, addDays, MES_LONGO, TopoInicio, ESCONDER, I, Money, brl, pad, soma, TopBar, catDe, catVars, CatIcon, fromISO, MarcaLogo, acharMarca, fmtNum, interpretarFala, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, Seg, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, contaDinheiro, CalBadge, tetosAlerta, Ilustra, Confirmar, vibrar } from "../App.jsx";
+import { logoPropria, lerArquivo } from "../App.jsx";
+import { todayISO, addDays, MES_LONGO, TopoInicio, ESCONDER, I, Money, brl, pad, soma, TopBar, catDe, catVars, CatIcon, fromISO, MarcaLogo, acharMarca, fmtNum, CAT_ENTRADA, CATEGORIAS, num, Sheet, brlReal, soNumero, Field, uid, ConfirmButton, Toggle, iniciais, itensDoDia, PERFIL, situacaoConta, diffDias, vencimento, ESTILO, contaDinheiro, CalBadge, tetosAlerta, Ilustra, Confirmar, vibrar } from "../App.jsx";
 import { saldos as saldosCasa } from "../casa.js";
 
 /* ---------- Logo enquanto digita: sugere as empresas parecidas (mesmo com erro de digitação),
@@ -368,13 +368,26 @@ function PessoalHome({ db, conta, now, act, tema, avisos }) {
       { t: "Contas a pagar no mês", rotN: "Contas", n: abertas.length, v: soma(abertas, c => c.valor), cor: "vermelho" },
     ];
   };
+  // os cartões do carrossel do topo: o que sobrou, quanto dá para gastar hoje, as contas e o que saiu
+  const nMes = MES_LONGO[now.getMonth()], pg = podeGastar(db);
+  const guardado = soma(P.caixinhas || [], c => (c.banco && typeof c.banco.valor === "number" ? c.banco.valor : soma(c.movs || [], m => m.valor))); // sem o rendimento estimado
+  const cartoes = [
+    { id: "sobrou", rotulo: r.sobra >= 0 ? `Sobrou em ${nMes}` : `Passou do que entrou em ${nMes}`, valor: Math.abs(r.sobra), neg: r.sobra < 0, ic: I.wallet,
+      sub: r.aPagar > 0 ? `${brl(r.aPagar)} em contas a pagar` : "Todas as contas do mês pagas", onClick: () => act.setTab("p-gastos") },
+    { id: "hoje", rotulo: "Hoje você pode gastar", valor: Math.max(0, pg.hoje), neg: pg.hoje < 0, ic: I.target,
+      sub: pg.restam > 0 ? `Uns ${brl(pg.porDia)} por dia até o fim do mês` : "Último dia do mês", onClick: () => act.setTab("p-gastos") },
+    { id: "contas", rotulo: "Contas a pagar", valor: r.aPagar, ic: I.bill,
+      sub: r.abertas.length ? `${r.abertas.length} ${r.abertas.length === 1 ? "conta aberta" : "contas abertas"} em ${nMes}` : "Nenhuma conta aberta", onClick: () => act.setTab("p-contas") },
+    { id: "saiu", rotulo: `Saiu em ${nMes}`, valor: r.saiu, ic: I.chart, sub: `Entrou ${brl(r.entrou)}`, onClick: () => act.setTab("p-gastos") },
+    ...(guardado > 0 ? [{ id: "caixinhas", rotulo: "Nas caixinhas", valor: guardado, ic: I.piggy, sub: "O que você está guardando", onClick: () => act.abrirCaixinha() }] : []),
+  ];
   return (
     <div className="page ini az-ini">
       <TopoInicio conta={conta} act={act} tema={tema} modo="pessoal" now={now} compacto />
       {avisos}
       <AcoesAzuis itens={acoes} />
-      <CartaoSaldo act={act} rotulo={r.sobra >= 0 ? `Sobrou em ${MES_LONGO[now.getMonth()]}` : `Passou do que entrou em ${MES_LONGO[now.getMonth()]}`} valor={Math.abs(r.sobra)} neg={r.sobra < 0}
-        sub={r.aPagar > 0 ? `${brl(r.aPagar)} em contas a pagar` : "Todas as contas do mês pagas"} onClick={() => act.setTab("p-gastos")} />
+      {act.plano && act.plano.pro && <SeloPro onClick={() => act.openSettings("assinatura")} />}
+      <CarrosselSaldo act={act} cartoes={cartoes} />
       <ViagemAviso db={db} act={act} />
       <GradeAtalhos itens={atalhos} />
       <CasaCartao casa={act.casa} onAbrir={act.abrirCasa} />
@@ -514,9 +527,14 @@ function GastosTab({ db, act, tema }) {
   const catsVer = todasCats || cats.length <= 5 ? cats : cats.filter((c, k) => k < 4 || c[0] === cat);
   return (
     <div className="page g4">
-      <TopBar eyebrow={`${nomeMes} de ${m.getFullYear()}`} title="Gastos" act={act} tema={tema} mais={{ l: "Anotar gasto ou entrada", f: () => act.novoLanc("saida") }} />
+      <TopBar eyebrow={`${nomeMes} de ${m.getFullYear()}`} title="Gastos" act={act} tema={tema} />
       <div className="cols">
         <div className="col">
+          <AcoesAzuis tres itens={[
+            { id: "gasto", l: "Anotar gasto", ic: I.receipt, f: () => act.novoLanc("saida") },
+            { id: "entrada", l: "Anotar entrada", ic: I.plus, f: () => act.novoLanc("entrada") },
+            { id: "importar", l: "Importar extrato", ic: I.upload, f: act.importar },
+          ]} />
           <Topo rotulo={<>Saiu em <b>{nomeMes}</b>{ano}</>} valor={r.saiu} nav={{ ant: () => mudarMes(off - 1), prox: () => mudarMes(off + 1), podeProx: true }}
             apoio={<Comparacao agora={atual ? agoraAte : r.saiu} antes={atual ? antAte : serieB[nA - 1] || 0} nomeAnt={MES_LONGO[pm.getMonth()]} ateDia={atual ? hojeD : null} />}>
             {temGraf ? <div className="ps-topo-g"><GraficoLinha key={chave} n={nM} altura={128}
@@ -678,9 +696,13 @@ function ContasTab({ db, act, tema }) {
   );
   return (
     <div className="page g4" style={{ maxWidth: 820 }}>
-      <TopBar eyebrow={`${MES_LONGO[fromISO(t).getMonth()]} · ${pagas.length} de ${contas.length} pagas`} title="Contas fixas" act={act} tema={tema} mais={{ l: "Nova conta", f: () => act.novaConta() }}
-        extra={<button className="icon-btn" onClick={act.lerBoleto} aria-label="Ler boleto"><I.scan /></button>} />
+      <TopBar eyebrow={`${MES_LONGO[fromISO(t).getMonth()]} · ${pagas.length} de ${contas.length} pagas`} title="Contas fixas" act={act} tema={tema} />
       <div className="stack">
+        <AcoesAzuis tres itens={[
+          { id: "nova", l: "Nova conta fixa", ic: I.plus, f: () => act.novaConta() },
+          { id: "boleto", l: "Ler boleto", ic: I.scan, f: act.lerBoleto },
+          { id: "teto", l: "Tetos do mês", ic: I.gauge, f: () => act.abrirTeto() },
+        ]} />
         <Topo rotulo={<>Falta pagar em <b>{MES_LONGO[fromISO(t).getMonth()]}</b></>} valor={falta}
           apoio={contas.length ? <span>{brl(pago)} de {brl(total)} já pagos</span> : <span>Nenhuma conta fixa ainda</span>}>
           {contas.length > 0 && <div className="g4-prog" role="img" aria-label={`${Math.round((pago / (total || 1)) * 100)}% pago`}><i style={{ width: `${(pago / (total || 1)) * 100}%` }} /></div>}
@@ -750,7 +772,7 @@ function CasaCartao({ casa, onAbrir }) {
   );
 }
 
-function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onVoz, onFoto, onSave, onDelete, onClose, onLogo }) {
+function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onFoto, onSave, onDelete, onClose, onLogo }) {
   const [dividir, setDividir] = useState(false);
   const fotoRef = useRef(null);
   const cot = useCotacoes();
@@ -765,18 +787,7 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onVoz, onFoto, onS
   const efDesc = escolhaEfetiva(desc, escolha);
   useEffect(() => { if (!cat && tipo === "saida" && efDesc && efDesc.cat && CATEGORIAS.some(c => c.id === efDesc.cat)) setCat(efDesc.cat); }, [efDesc && efDesc.cat]);
   const [data, setData] = useState(inicial ? inicial.data : pre ? pre.data || addDays(todayISO(), -(pre.off || 0)) : todayISO());
-  const [frase, setFrase] = useState("");
-  const [entendi, setEntendi] = useState(null);
-  const aplicar = txt => {
-    setFrase(txt);
-    if (!txt.trim()) { setEntendi(null); return; }
-    const r = interpretarFala(txt);
-    setTipo(r.tipo); setCat(r.cat); setData(addDays(todayISO(), -r.off));
-    if (r.moeda) { setMoeda(r.moeda); setIof(!!r.iof || r.tipo === "entrada"); if (r.valorOrig) setValor(fmtNum(r.valorOrig)); }
-    else { if (!viagem) setMoeda("BRL"); if (r.valor) setValor(fmtNum(r.valor)); }
-    if (r.desc) { setDesc(r.desc); setEscolha(null); }
-    setEntendi(r);
-  };
+  const [verMoedas, setVerMoedas] = useState(false);
   const lista = tipo === "entrada" ? CAT_ENTRADA : CATEGORIAS;
   const v = num(valor);
   const fora = moeda !== "BRL";
@@ -788,31 +799,40 @@ function LancSheet({ inicial, pre, tipo: tipo0, viagem, casa, onVoz, onFoto, onS
   const ok = v > 0 && cat && lista.some(c => c.id === cat);
   return (
     <Sheet title={inicial ? "Editar lançamento" : tipo === "entrada" ? "Nova entrada" : "Novo gasto"} onClose={onClose}>
-      {!inicial && <>
-        <div className="voice">
-          <input id="l-frase" value={frase} onChange={e => aplicar(e.target.value)} placeholder={IA_CONVERSA ? 'Fale ou escreva: "gastei 32 na padaria"' : 'Escreva: "gastei 32 na padaria"'} enterKeyHint="done" autoComplete="off" aria-label="Descreva o gasto em uma frase" />
-          {onFoto && <button type="button" className="mic foto" onClick={() => fotoRef.current && fotoRef.current.click()} aria-label="Foto do comprovante"><I.camera /></button>}
-          {IA_CONVERSA && onVoz && <button type="button" className="mic" onClick={onVoz} aria-label="Falar"><I.mic /></button>}
-          {onFoto && <input ref={fotoRef} type="file" accept="image/*" hidden onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onFoto(f); }} />}
-        </div>
-        {pre && pre.daFoto && <div className="voice-ok"><I.check /><span>Li a foto: {pre.tipo === "entrada" ? "entrada" : "gasto"} de {brlReal(pre.valor)}{pre.desc ? ` em ${pre.desc}` : ""}. Confira e salve.</span></div>}
-        {entendi && entendi.valor > 0 && <div className="voice-ok"><I.check /><span>Entendi: {entendi.tipo === "entrada" ? "entrada" : "gasto"} de {entendi.moeda ? `${fmtMoeda(entendi.valorOrig, entendi.moeda)} (${brlReal(entendi.valor)})` : brlReal(entendi.valor)} em {catDe(entendi.cat).nome}{entendi.off ? (entendi.off === 1 ? ", ontem" : ", anteontem") : ", hoje"}. Confira e salve.</span></div>}
-      </>}
-      <Seg big value={tipo} onChange={x => { setTipo(x); setCat(null); }} options={[{ v: "saida", l: "Gasto" }, { v: "entrada", l: "Entrada" }]} />
-      {/* o campo tem a largura do número (medida por uma cópia escondida): o "R$" fica colado nele, e os dois juntos no centro */}
-      <label className={"big-amt ps-valor" + (tipo === "entrada" ? " in" : "")} htmlFor="l-valor"><span>{simb}</span>
-        <span className="ps-valor-campo" style={{ "--n": Math.max(4, (valor || "0,00").length) }}><span className="ps-valor-medida" aria-hidden="true">{valor || "0,00"}</span>
-          <input id="l-valor" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" autoFocus={!inicial} placeholder="0,00" value={valor} onChange={e => setValor(soNumero(e.target.value))} aria-label="Valor" /></span>
-      </label>
-      {inicial && nomeBanco(inicial.banco) && <div className="ps-lanc-banco"><span className="ps-at-av"><MarcaLogo marca={(acharMarca(nomeBanco(inicial.banco)) || {}).id} nome={nomeBanco(inicial.banco)} className="txn-av" /></span><span><b>{nomeBanco(inicial.banco)}</b><small>Veio do banco pelo Open Finance. Mudar aqui não muda lá.</small></span></div>}
-      <div className="moeda-linha">
-        <select className="moeda-sel" value={moeda} onChange={e => setMoeda(e.target.value)} aria-label="Moeda">
-          <option value="BRL">🇧🇷 Real</option>
-          {CODIGOS.map(c => <option key={c} value={c}>{MOEDAS[c].bandeira} {MOEDAS[c].nome}</option>)}
-        </select>
-        {fora && <span className="moeda-conv">{v > 0 ? <>≈ <b>{brlReal(emR)}</b></> : <>1 {simb} = R$ {fmtTaxa(cotUsada)}</>}</span>}
+      {/* Gasto ou entrada, nas abas redondas do visual novo */}
+      <div className="az-abas lc-tipo" role="tablist" aria-label="Tipo">
+        {[["saida", "Gasto"], ["entrada", "Entrada"]].map(([x, l]) => <button key={x} type="button" role="tab" aria-selected={tipo === x} className={tipo === x ? "on" : ""} onClick={() => { if (x !== tipo) { setTipo(x); setCat(null); vibrar("toque"); } }}>{l}</button>)}
       </div>
+      {pre && pre.daFoto && <div className="voice-ok"><I.check /><span>Li a foto: {pre.tipo === "entrada" ? "entrada" : "gasto"} de {brlReal(pre.valor)}{pre.desc ? ` em ${pre.desc}` : ""}. Confira e salve.</span></div>}
+      {/* o valor num cartão: o número grande, a moeda e (no gasto novo) a foto do comprovante */}
+      <div className={"lc-valor" + (tipo === "entrada" ? " in" : "")}>
+        <small className="lc-valor-t">{tipo === "entrada" ? "Quanto entrou" : "Quanto saiu"}</small>
+        {/* o campo tem a largura do número (medida por uma cópia escondida): o "R$" fica colado nele, e os dois juntos no centro */}
+        <label className={"big-amt ps-valor" + (tipo === "entrada" ? " in" : "")} htmlFor="l-valor"><span>{simb}</span>
+          <span className="ps-valor-campo" style={{ "--n": Math.max(4, (valor || "0,00").length) }}><span className="ps-valor-medida" aria-hidden="true">{valor || "0,00"}</span>
+            <input id="l-valor" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" autoFocus={!inicial} placeholder="0,00" value={valor} onChange={e => setValor(soNumero(e.target.value))} aria-label="Valor" /></span>
+        </label>
+        {fora && <span className="lc-conv">{v > 0 ? <>≈ <b>{brlReal(emR)}</b>{iofOn ? " com IOF" : ""}</> : <>1 {simb} = R$ {fmtTaxa(cotUsada)}</>}</span>}
+        <div className="lc-valor-pe">
+          <button type="button" className={"lc-chip" + (verMoedas ? " on" : "")} onClick={() => setVerMoedas(!verMoedas)} aria-expanded={verMoedas}>
+            <span className="lc-bandeira" aria-hidden="true">{fora ? MOEDAS[moeda].bandeira : "🇧🇷"}</span>{fora ? MOEDAS[moeda].curto : "Real"}<I.chevD />
+          </button>
+          {!inicial && onFoto && <button type="button" className="lc-chip" onClick={() => fotoRef.current && fotoRef.current.click()}><I.camera />Ler comprovante</button>}
+          {!inicial && onFoto && <input ref={fotoRef} type="file" accept="image/*" hidden onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onFoto(f); }} />}
+        </div>
+        {verMoedas && (
+          <div className="lc-moedas" role="radiogroup" aria-label="Moeda">
+            {["BRL", ...CODIGOS].map(c => (
+              <button key={c} type="button" role="radio" aria-checked={moeda === c} className={"lc-moeda" + (moeda === c ? " on" : "")} onClick={() => { setMoeda(c); setVerMoedas(false); vibrar("toque"); }}>
+                <span className="lc-bandeira" aria-hidden="true">{c === "BRL" ? "🇧🇷" : MOEDAS[c].bandeira}</span><b>{c}</b><small>{c === "BRL" ? "Real" : MOEDAS[c].curto}</small>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {inicial && nomeBanco(inicial.banco) && <div className="ps-lanc-banco"><span className="ps-at-av"><MarcaLogo marca={(acharMarca(nomeBanco(inicial.banco)) || {}).id} nome={nomeBanco(inicial.banco)} className="txn-av" /></span><span><b>{nomeBanco(inicial.banco)}</b><small>Veio do banco pelo Open Finance. Mudar aqui não muda lá.</small></span></div>}
       {fora && tipo === "saida" && <Toggle on={iof} onClick={() => setIof(!iof)}>Pago no cartão (soma IOF de {String(IOF_CARTAO).replace(".", ",")}%)</Toggle>}
+      <h4 className="lc-sec">Categoria</h4>
       <div className="cats" role="radiogroup" aria-label="Categoria">
         {lista.map(c => (
           <button type="button" key={c.id} role="radio" aria-checked={cat === c.id} className={"cat" + (cat === c.id ? " on" : "")} style={catVars(c)} onClick={() => setCat(c.id)}>
