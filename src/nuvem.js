@@ -266,6 +266,14 @@ class Motor {
   }
 }
 
+// Puxar para atualizar: manda o que está pendente e busca o que mudou na nuvem agora (sem esperar o tempo real).
+// Devolve "ok", "offline" ou "sem" (conta sem nuvem).
+export async function sincronizarAgora() {
+  if (!atual) return "sem";
+  if (navigator.onLine === false) return "offline";
+  try { atual.enviar(); await atual.puxar(); return "ok"; } catch (e) { return "offline"; }
+}
+
 // Liga a sincronização no painel. Devolve { estado: "ok" | "enviando" | "offline" | "erro", pendentes }
 export function useNuvem(conta, db, setDb, aoPerfil) {
   const [status, setStatus] = useState({ estado: navigator.onLine === false ? "offline" : "ok", pendentes: 0 });

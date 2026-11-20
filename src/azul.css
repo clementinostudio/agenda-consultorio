@@ -376,3 +376,81 @@
 .menu-lat-conta .me { display: grid; place-items: center; }
 .az-saldo-main > svg { width: 24px; height: 24px; color: var(--faint); flex: none; }
 .az-saldo-main .az-saldo-t { padding-right: 36px; }
+
+/* =========================================================
+   12. As janelas viram páginas no celular (como a de Alertas): entram da direita, com o voltar em cima
+   ========================================================= */
+.sheet-topo { display: none; }
+@media (max-width: 899px) {
+  .scrim.pagina { background: transparent; }
+  .scrim.pagina::before { display: none; }
+  .scrim.pagina > .sheet { position: fixed; inset: 0; left: 0; bottom: auto; transform: none; translate: none; width: 100%; max-width: none; height: 100%; max-height: none;
+    border-radius: 0; box-shadow: none; border: 0; background: var(--bg); --sheet-bg: var(--bg);
+    padding: env(safe-area-inset-top, 0px) 20px calc(env(safe-area-inset-bottom, 0px) + 28px);
+    animation: pg-entra .38s cubic-bezier(.32, .72, 0, 1) !important; }
+  .scrim.pagina.sai > .sheet { animation: pg-sai .26s cubic-bezier(.4, 0, 1, 1) forwards !important; }
+  @keyframes pg-entra { from { transform: translate3d(100%, 0, 0); } to { transform: none; } }
+  @keyframes pg-sai { from { transform: none; } to { transform: translate3d(100%, 0, 0); } }
+  .scrim.pagina .grab, .scrim.pagina .sheet-x { display: none; }
+  .scrim.pagina .sheet-topo { display: flex; align-items: center; gap: 4px; position: sticky; top: 0; z-index: 6; height: 58px; margin: 0 -20px; padding: 0 16px 0 10px;
+    background: var(--bg); transition: box-shadow .2s ease; }
+  .sheet-voltar { width: 44px; height: 44px; flex: none; display: grid; place-items: center; color: var(--accent); border-radius: 12px; }
+  .sheet-voltar svg { width: 26px; height: 26px; }
+  .sheet-voltar:active { background: var(--hover-2); }
+  .sheet-topo-t { min-width: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    opacity: 0; transform: translateY(6px); transition: opacity .2s ease, transform .25s ease; }
+  .scrim.pagina .sheet.rolou .sheet-topo { box-shadow: 0 6px 20px rgba(16, 24, 40, .06); }
+  .scrim.pagina .sheet.rolou .sheet-topo-t { opacity: 1; transform: none; }
+  .scrim.pagina .sheet-head { position: static; margin: 2px 0 20px; padding: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none !important; touch-action: auto; }
+  .scrim.pagina .sheet-head h2 { font-size: 30px; font-weight: 700; letter-spacing: -.03em; line-height: 1.12; }
+  .scrim.pagina .sheet-head .sub { font-size: 15px; font-weight: 400; margin-top: 6px; line-height: 1.45; }
+  /* a folha que continua subindo de baixo (trocar de área) */
+  .scrim.folha > .sheet { border-radius: 28px 28px 0 0; }
+}
+
+/* =========================================================
+   13. Puxar para atualizar: uma pílula que sai de baixo da barra de cima
+   ========================================================= */
+.puxa { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + var(--cab-h, 58px) - 30px); z-index: 27; display: flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 16px 0 6px; border-radius: 999px; background: var(--surface); color: var(--fg); font-size: 13.5px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 0 0 1px var(--line), 0 8px 24px rgba(16, 24, 40, .12); pointer-events: none; opacity: 0;
+  transform: translate3d(-50%, var(--y, 0px), 0); transition: transform .35s cubic-bezier(.32, .72, 0, 1), opacity .2s ease; }
+.puxa.vendo, .puxa.pronto { opacity: 1; transition: opacity .12s ease; }
+.puxa.gira { opacity: 1; }
+.puxa-ic { position: relative; width: 28px; height: 28px; flex: none; display: grid; place-items: center; color: var(--accent); }
+.puxa-ic > svg:first-child { position: absolute; inset: 0; width: 28px; height: 28px; transform: rotate(-90deg); fill: none; stroke-width: 2.4; }
+.puxa-trilho { stroke: var(--line-forte); }
+.puxa-arco { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: calc(100 - var(--p, 0) * 100); }
+.puxa-ic > svg:last-child { width: 15px; height: 15px; transform: rotate(calc(var(--p, 0) * 180deg)); transition: transform .2s ease; }
+.puxa.pronto .puxa-ic > svg:last-child { transform: rotate(180deg); }
+.puxa.gira .puxa-ic > svg:first-child { animation: puxa-gira .8s linear infinite; }
+.puxa.gira .puxa-arco { stroke-dashoffset: 70; }
+.puxa.gira .puxa-ic > svg:last-child { opacity: 0; }
+@keyframes puxa-gira { to { transform: rotate(270deg); } }
+@media (min-width: 900px) { .puxa { display: none; } }
+
+/* =========================================================
+   14. O ☰: três linhas de tamanhos diferentes que viram um X ao abrir; e o menu entrando item por item
+   ========================================================= */
+.hamb { position: relative; display: block; width: 20px; height: 14px; }
+.hamb i { position: absolute; left: 0; height: 2px; border-radius: 2px; background: currentColor;
+  transition: top .35s cubic-bezier(.32, .72, 0, 1), transform .35s cubic-bezier(.32, .72, 0, 1), width .3s cubic-bezier(.32, .72, 0, 1), opacity .2s ease; }
+.hamb i:nth-child(1) { top: 0; width: 20px; }
+.hamb i:nth-child(2) { top: 6px; width: 13px; }
+.hamb i:nth-child(3) { top: 12px; width: 17px; }
+.cab-menu:active .hamb i:nth-child(2), .cab-menu:active .hamb i:nth-child(3) { width: 20px; }
+@media (hover: hover) { .cab-menu:hover .hamb i { width: 20px; } }
+.cab-menu.x .hamb i:nth-child(1) { top: 6px; width: 20px; transform: rotate(45deg); }
+.cab-menu.x .hamb i:nth-child(2) { opacity: 0; transform: translateX(-8px); }
+.cab-menu.x .hamb i:nth-child(3) { top: 6px; width: 20px; transform: rotate(-45deg); }
+@media (max-width: 899px) {
+  .menu-lat-in { opacity: 1 !important; transform: none !important; }
+  .menu-lat-in > :not(.menu-lat-lista), .menu-lat-lista > * { opacity: 0; transform: translate3d(-20px, 0, 0);
+    transition: opacity .25s ease, transform .3s cubic-bezier(.4, 0, 1, 1); }
+  :root.menu-aberto .menu-lat-in > :not(.menu-lat-lista), :root.menu-aberto .menu-lat-lista > * { opacity: 1; transform: none;
+    transition: opacity .4s ease, transform .55s cubic-bezier(.32, .72, 0, 1); transition-delay: calc(var(--i, 0) * 28ms + 80ms); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hamb i, .menu-lat-in > *, .menu-lat-lista > *, .puxa { transition: none !important; }
+  .scrim.pagina > .sheet, .scrim.pagina.sai > .sheet { animation: none !important; }
+}

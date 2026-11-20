@@ -11,7 +11,7 @@ import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useMemo, u
 import PORQUINHO from "./assets/porquinho.webp";
 import { acharMarca, marcaPorId, fontesLogo, fonteLembrada, lembrarFonte, monograma, normalizar } from "./marcas.js";
 import { emReais, moedaNaFala, fmtMoeda, definirServidor, atualizarCotacoes, cotacaoDe, MOEDAS } from "./cotacoes.js";
-import { NUVEM, ENDERECO_APP, cliente, useNuvem, contaDaNuvem, whatsappDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro, registrarAcesso } from "./nuvem.js";
+import { NUVEM, ENDERECO_APP, cliente, useNuvem, sincronizarAgora, contaDaNuvem, whatsappDaNuvem, enviarPerfil, sairDaNuvem, desconectar, excluirContaNuvem, traduzirErro, registrarAcesso } from "./nuvem.js";
 import { lerBoleto, acharBoleto } from "./boleto.js";
 import { lerInflacao, atualizarInflacao, useInflacao, acumulado, valorSugerido, nomeMesCurto } from "./inflacao.js";
 import { avaliarConquistas, proximaConquista, nivelDe, TRILHAS } from "./conquistas.js";
@@ -1752,7 +1752,9 @@ function Camada({ onFechar, recua, escurece, nome }) { useCamada(onFechar, { rec
 // a camada de cima é esta? (o Esc de quem fica por baixo não deve fechar junto a folha que abriu por cima)
 const camadaNoTopo = nome => { const c = [...CAMADAS].reverse().find(x => !x.voltou); return !c || c.nome === nome; };
 
-function Sheet({ title, sub, onClose, children }) {
+// No celular, abre como página inteira (o voltar em cima, como nos apps de banco); folha: continua subindo de baixo
+// (para escolhas rápidas, como trocar de área). No computador, segue a janela no meio da tela.
+function Sheet({ title, sub, onClose, children, folha }) {
   // Arrastar para baixo pela alça (ou pelo título) fecha, igual aos apps do celular.
   // Fechar pelo X, tocando fora ou com Esc também anima a saída (desce e o fundo some).
   const ref = useRef(null), scrim = useRef(null), arr = useRef(null);
@@ -1786,6 +1788,7 @@ function Sheet({ title, sub, onClose, children }) {
   const toque = useRef(null);
   const tIni = e => {
     const s = ref.current; if (!s) return;
+    if (!folha && window.matchMedia("(max-width: 899px)").matches) { toque.current = null; return; } // página: sem arrastar para fechar
     const naAlca = !!e.target.closest(".grab, .sheet-head");
     if (!naAlca && (s.scrollTop > 0 || e.target.closest("input, textarea, select, [contenteditable], .clima-horas, .chips, .cats, .abas, .vozb-chat, .transp-subs, .vz-trilho, .casa-chips"))) { toque.current = null; return; }
     toque.current = { y: e.touches[0].clientY, x: e.touches[0].clientX, vivo: naAlca };
@@ -1812,9 +1815,10 @@ function Sheet({ title, sub, onClose, children }) {
     return () => { window.removeEventListener("keydown", k); document.body.style.overflow = prev; };
   }, []);
   return (
-    <div className="scrim" ref={scrim} onClick={sair}>
+    <div className={"scrim" + (folha ? " folha" : " pagina")} ref={scrim} onClick={sair}>
       <div className="sheet" ref={ref} role="dialog" aria-modal="true" aria-label={title || "Painel"} onClick={e => e.stopPropagation()} onScroll={e => e.currentTarget.classList.toggle("rolou", e.currentTarget.scrollTop > 6)} onTouchStart={tIni} onTouchMove={tMov} onTouchEnd={tFim} onTouchCancel={tFim}>
         <div className="grab" />
+        {!folha && <div className="sheet-topo"><button className="sheet-voltar" onClick={sair} aria-label="Voltar"><I.setaL /></button><b className="sheet-topo-t">{title}</b></div>}
         {title && (
           <div className="sheet-head">
             <div><h2>{title}</h2>{sub && <div className="sub">{sub}</div>}</div>
@@ -2497,24 +2501,25 @@ function MenuLateral({ aberto, conta, modo, modos, abas, tab, act, tema, nAlerta
     { id: "cx", l: "Caixinhas", ic: I.piggy, f: () => act.abrirCaixinha() },
     { id: "ext", l: "Importar extrato", ic: I.upload, f: act.importar },
   ] : [];
+  let ordem = 0; const n = () => ({ "--i": ordem++ }); // a ordem de entrada de cada item (um depois do outro)
   const Item = ({ x, on }) => { const Ic = x.ic; return (
-    <button type="button" className={"menu-lat-i" + (on ? " on" : "")} onClick={go(x.f)}>
+    <button type="button" className={"menu-lat-i" + (on ? " on" : "")} onClick={go(x.f)} style={n()}>
       {typeof Ic === "function" ? <Ic /> : Ic}<span>{x.l}</span>{x.n > 0 && <em>{x.n > 99 ? "99+" : x.n}</em>}
     </button>
   ); };
   return (
     <aside className="menu-lat" aria-label="Menu" aria-hidden={!aberto} inert={aberto ? undefined : ""}>
       <div className="menu-lat-in">
-        <div className="menu-lat-logo"><AvinaNome /></div>
-        <button type="button" className="menu-lat-conta" onClick={go(act.openSettings)}><Avatar conta={conta} /><span><b>{conta.nome}</b><small>Ver perfil e ajustes</small></span><I.chev /></button>
-        {modos.length > 1 && <div className="menu-lat-modos" role="group" aria-label="Área">{modos.map(m => <button key={m} type="button" className={m === modo ? "on" : ""} aria-pressed={m === modo} onClick={go(() => act.setModo(m))}>{NOME_MODO[m]}</button>)}</div>}
+        <div className="menu-lat-logo" style={n()}><AvinaNome /></div>
+        <button type="button" className="menu-lat-conta" onClick={go(act.openSettings)} style={n()}><Avatar conta={conta} /><span><b>{conta.nome}</b><small>Ver perfil e ajustes</small></span><I.chev /></button>
+        {modos.length > 1 && <div className="menu-lat-modos" role="group" aria-label="Área" style={n()}>{modos.map(m => <button key={m} type="button" className={m === modo ? "on" : ""} aria-pressed={m === modo} onClick={go(() => act.setModo(m))}>{NOME_MODO[m]}</button>)}</div>}
         <nav className="menu-lat-lista">{abas.map(a => <Item key={a.id} x={{ l: a.l, ic: a.ic, n: a.n, f: () => act.setTab(a.id) }} on={tab === a.id} />)}</nav>
         {extras.length > 0 && <><div className="menu-lat-sep" /><div className="menu-lat-lista">{extras.map(x => <Item key={x.id} x={x} />)}</div></>}
         <div className="menu-lat-sep" />
         <div className="menu-lat-lista menu-lat-pe">
           <Item x={{ l: ESCONDER ? "Mostrar valores" : "Esconder valores", ic: ESCONDER ? I.eye : I.eyeOff, f: act.toggleOculto }} />
           <Item x={{ l: tema.escuro ? "Modo claro" : "Modo escuro", ic: tema.escuro ? I.sun : I.moon, f: act.trocarTema }} />
-          <a className="menu-lat-i" href={linkSuporte()} target="_blank" rel="noopener"><I.chat /><span>Fale com a gente</span></a>
+          <a className="menu-lat-i" href={linkSuporte()} target="_blank" rel="noopener" style={n()}><I.chat /><span>Fale com a gente</span></a>
           <Item x={{ l: "Sair da conta", ic: I.out, f: act.sair }} />
         </div>
       </div>
@@ -2531,7 +2536,7 @@ const AREAS_INFO = {
 function ModoFolha({ modo, modos, act, onClose }) {
   const ir = m => { vibrar("toque"); onClose(); if (m !== modo) setTimeout(() => act.setModo(m), 180); };
   return (
-    <Sheet title="Trocar de área" sub="O app muda inteiro: o Início, as abas e os atalhos." onClose={onClose}>
+    <Sheet folha title="Trocar de área" sub="O app muda inteiro: o Início, as abas e os atalhos." onClose={onClose}>
       <div className="modo-cartoes">
         {modos.map((m, k) => { const a = AREAS_INFO[m], Ic = I[a.ic]; return (
           <button key={m} type="button" className={"modo-cartao" + (m === modo ? " on" : "")} style={{ "--mc": a.cor, animationDelay: `${k * 50}ms` }} onClick={() => ir(m)} aria-pressed={m === modo}>
@@ -5066,14 +5071,19 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     recRef.current = true; setRecarregando(true); vibrar("ok");
     const espera = new Promise(r => setTimeout(r, 900));
     const cidade = perfil.cidade, y = new Date().getFullYear();
+    // os seus dados primeiro: o que mudou em outro aparelho, os pedidos e as respostas dos pacientes pelo link
+    const nuvemR = sincronizarAgora().catch(() => "offline");
     await Promise.all([
-      espera,
+      espera, nuvemR,
+      linkAg && linkAg.buscar ? Promise.resolve(linkAg.buscar()).catch(() => {}) : null,
       carregarClima(true),
       Promise.all([buscarFeriadosAPI(y), buscarFeriadosAPI(y + 1)]).then(() => setFerVer(v => v + 1)).catch(() => {}),
       "serviceWorker" in navigator ? navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {}) : null,
       Promise.resolve(sincRef.current && sincRef.current(false, true)).catch(() => {}),
     ]);
     setNow(new Date()); setRecarregando(false); recRef.current = false;
+    const r = await nuvemR;
+    notify(r === "offline" || navigator.onLine === false ? "Sem internet: mostrando o que está guardado aqui" : r === "ok" ? "Tudo atualizado" : "Atualizado");
   };
   const recarregarRef = useRef(recarregar); recarregarRef.current = recarregar;
   useEffect(() => {
@@ -5994,18 +6004,19 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       {conta.fundo && imagemFundo(conta.fundo, meusFundos) && <div className="bgimg" aria-hidden="true" style={{ backgroundImage: `url(${imagemFundo(conta.fundo, meusFundos)})`, "--veil-o": { leve: .45, medio: .75, forte: 1 }[conta.fundo.veu || "medio"] }} />}
       <BarraLateral conta={conta} tema={tema} modo={modoEf} doisModos={doisModos} abas={abas} tab={tabEf} act={act} />
 
-      <div className={"puxar" + (recarregando ? " gira" : puxar >= 70 ? " pronto" : "")} aria-hidden="true"
-        style={{ transform: `translate(-50%, ${recarregando ? 46 : puxar * .45 + 2}px) rotate(${puxar * 2}deg)`, opacity: recarregando || puxar > 6 ? 1 : 0, transition: puxar ? "opacity .15s" : undefined }}>
-        <svg viewBox="0 0 24 24"><circle className="puxar-trilho" cx="12" cy="12" r="8.5" /><circle className="puxar-arco" cx="12" cy="12" r="8.5" pathLength="100" style={{ strokeDashoffset: recarregando ? 70 : 100 - Math.min(1, puxar / 70) * 92 }} /></svg>
-      </div>
       <MenuLateral aberto={menu} conta={conta} modo={modoEf} modos={modos} abas={abas} tab={tabEf} act={act} tema={tema} nAlertas={nAlertas} onAlertas={() => setAlertas(true)} go={menuGo} />
       <div className="palco">
       {menu && <><Camada onFechar={fecharMenu} escurece={false} nome="menu" /><button type="button" className="palco-fechar" onClick={fecharMenu} aria-label="Fechar o menu" /></>}
+      {/* Puxar para atualizar: uma pílula que desce de baixo da barra de cima, com o progresso e o que vai acontecer */}
+      <div className={"puxa" + (recarregando ? " gira" : puxar >= 70 ? " pronto" : puxar > 4 ? " vendo" : "")} aria-live="polite" style={{ "--p": Math.min(1, puxar / 70), "--y": `${recarregando ? 58 : Math.min(70, puxar) * .85}px` }}>
+        <span className="puxa-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle className="puxa-trilho" cx="12" cy="12" r="9" /><circle className="puxa-arco" cx="12" cy="12" r="9" pathLength="100" /></svg><I.down /></span>
+        <span className="puxa-t">{recarregando ? "Atualizando seus dados…" : puxar >= 70 ? "Solte para atualizar" : "Puxe para atualizar"}</span>
+      </div>
       {/* Barra de cima do celular: fixa e sempre útil (logo, modo, olho e conta). No computador quem faz isso é a barra lateral */}
       <header className={"cab-app" + (rolouCab ? " rolou" : "")}>
         <div className="cab-app-in">
           <VoltarAoApp className="icon-btn cab-ic" />
-          <button className="icon-btn cab-ic cab-menu" onClick={abrirMenu} aria-label="Abrir o menu" aria-expanded={menu}><I.menu /></button>
+          <button className={"icon-btn cab-ic cab-menu" + (menu ? " x" : "")} onClick={menu ? fecharMenu : abrirMenu} aria-label={menu ? "Fechar o menu" : "Abrir o menu"} aria-expanded={menu}><span className="hamb" aria-hidden="true"><i /><i /><i /></span></button>
           <button className="cab-app-logo" onClick={() => { if (tabEf !== inicioDo(modoEf)) act.setTab(inicioDo(modoEf)); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label="Avina, início"><AvinaNome /></button>
           <div className="cab-app-a">
             {doisModos && <button type="button" className="mode-pill cab-modo" onClick={() => { vibrar("toque"); setSheet({ type: "modo" }); }} aria-label={`Área: ${NOME_MODO[modoEf]}. Trocar`}><span className="mode-dot" />{NOME_MODO[modoEf]}<I.chevD /></button>}
