@@ -4893,14 +4893,24 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const [alertas, setAlertas] = useState(false);
   // menu lateral: guarda onde a página estava, para a tela encolhida mostrar o mesmo pedaço e voltar para ele ao fechar
   const [menu, setMenu] = useState(false);
-  const menuY = useRef(0);
-  const abrirMenu = () => { menuY.current = window.scrollY; document.documentElement.style.setProperty("--menu-y", `${menuY.current}px`); vibrar("toque"); setMenu(true); };
-  const fecharMenu = () => setMenu(false);
-  const menuGo = f => () => { setMenu(false); if (typeof f === "function") setTimeout(f, 280); };
-  useLayoutEffect(() => {
-    document.documentElement.classList.toggle("menu-aberto", menu);
-    if (!menu && menuY.current) window.scrollTo(0, menuY.current);
-  }, [menu]);
+  const menuY = useRef(0), menuT = useRef(0);
+  // Abrir: primeiro a tela "congela" no lugar (fixa, mostrando o mesmo pedaço), e só no quadro seguinte encolhe:
+  // assim a animação sai do ponto certo. Fechar: volta ao tamanho cheio ainda congelada e só depois de terminar
+  // solta (e a página volta para onde estava). Sem isso, a barra de cima pulava e a tela dava cortes no meio.
+  const raiz = document.documentElement;
+  const abrirMenu = () => {
+    clearTimeout(menuT.current);
+    if (!raiz.classList.contains("menu-fixo")) { menuY.current = window.scrollY; raiz.style.setProperty("--menu-y", `${menuY.current}px`); raiz.classList.add("menu-fixo"); }
+    vibrar("toque"); setMenu(true);
+    requestAnimationFrame(() => requestAnimationFrame(() => raiz.classList.add("menu-aberto")));
+  };
+  const fecharMenu = () => {
+    setMenu(false); raiz.classList.remove("menu-aberto");
+    clearTimeout(menuT.current);
+    menuT.current = setTimeout(() => { raiz.classList.remove("menu-fixo"); window.scrollTo(0, menuY.current); }, 520);
+  };
+  const menuGo = f => () => { fecharMenu(); if (typeof f === "function") setTimeout(f, 300); };
+  useEffect(() => () => { clearTimeout(menuT.current); raiz.classList.remove("menu-aberto", "menu-fixo"); }, []);
   useEffect(() => { if (usaPessoal) import("./telas/pessoal.jsx").then(m => setConvP(() => m.conversaPessoal)).catch(() => {}); }, [usaPessoal]);
   CLIMA = clima;
   const tRef = useRef(null);

@@ -302,8 +302,8 @@
    10. Barra de cima clara no modo claro: branca, logo azul (no escuro continua grafite com o logo branco)
    ========================================================= */
 @media (max-width: 899px) {
-  .cab-app { color: var(--cab-fg); box-shadow: 0 1px 0 var(--cab-linha); }
-  .cab-app.rolou { box-shadow: 0 1px 0 var(--cab-linha), 0 8px 24px rgba(16, 24, 40, .07); }
+  .cab-app { color: var(--cab-fg); box-shadow: none; }
+  .cab-app.rolou { box-shadow: 0 6px 20px rgba(16, 24, 40, .06); }
   .cab-app-logo, .cab-app-logo .lt-nome { color: var(--cab-logo); }
   .cab-app-logo .lt-nome path { stroke: var(--cab-logo); }
   .cab-app .icon-btn.cab-ic { color: var(--cab-ic); }
@@ -324,19 +324,23 @@
 @media (max-width: 899px) {
   .cab-menu { display: grid; margin-left: -8px; }
   .cab-app-logo { margin-left: 2px; }
-  .palco { position: relative; z-index: 1; min-height: 100vh; min-height: 100dvh; background: var(--bg);
-    transition: transform .5s cubic-bezier(.32, .72, 0, 1), border-radius .5s cubic-bezier(.32, .72, 0, 1), box-shadow .5s ease; }
+  .palco { position: relative; z-index: 1; min-height: 100vh; min-height: 100dvh; background: var(--bg); }
   .shell.com-foto .palco { background: transparent; }
-  :root.menu-aberto, :root.menu-aberto body { overflow: hidden; }
-  :root.menu-aberto .palco { position: fixed; inset: 0; overflow: hidden; background: var(--bg); transform-origin: 0 50%;
-    transform: translateX(min(74vw, 300px)) scale(.86); border-radius: 34px; box-shadow: -18px 0 50px rgba(10, 20, 80, .28); }
-  :root.menu-aberto .palco > .app { margin-top: calc(var(--menu-y, 0px) * -1); }
+  :root.menu-fixo, :root.menu-fixo body { overflow: hidden; }
+  /* congelada: do tamanho da tela, mostrando o mesmo pedaço da página */
+  :root.menu-fixo .palco { position: fixed; top: 0; left: 0; width: 100%; height: 100%; min-height: 0; overflow: hidden; background: var(--bg);
+    transform-origin: 0 50%; will-change: transform, border-radius; -webkit-backface-visibility: hidden; backface-visibility: hidden;
+    transform: translate3d(0, 0, 0) scale(1); border-radius: 0; box-shadow: 0 0 0 rgba(10, 20, 80, 0);
+    transition: transform .5s cubic-bezier(.32, .72, 0, 1), border-radius .5s cubic-bezier(.32, .72, 0, 1), box-shadow .5s ease; }
+  :root.menu-fixo .palco > .app { margin-top: calc(var(--menu-y, 0px) * -1); }
+  /* encolhida, no meio da altura da tela, com as bordas bem redondas */
+  :root.menu-aberto .palco { transform: translate3d(min(74vw, 300px), 0, 0) scale(.84); border-radius: 44px; box-shadow: -20px 0 60px rgba(10, 20, 80, .3); }
   .palco-fechar { position: absolute; inset: 0; z-index: 70; background: transparent; cursor: pointer; }
   /* o menu */
-  .menu-lat { display: block; position: fixed; inset: 0; z-index: 0; overflow-y: auto; visibility: hidden; transition: visibility 0s .5s;
+  .menu-lat { display: block; position: fixed; inset: 0; z-index: 0; overflow-y: auto; visibility: hidden;
     background: radial-gradient(120% 60% at 0% 0%, #3A55FF 0%, rgba(58, 85, 255, 0) 60%), linear-gradient(165deg, #2440F2 0%, #1A33CF 60%, #142AA8 100%); color: #fff;
     padding: calc(env(safe-area-inset-top, 0px) + 22px) 0 calc(env(safe-area-inset-bottom, 0px) + 24px); }
-  :root.menu-aberto .menu-lat { visibility: visible; transition: none; }
+  :root.menu-fixo .menu-lat { visibility: visible; }
   .menu-lat-in { width: min(70vw, 280px); padding: 0 18px 0 20px; display: flex; flex-direction: column; gap: 6px;
     opacity: 0; transform: translateX(-28px); transition: opacity .3s ease, transform .5s cubic-bezier(.32, .72, 0, 1); }
   :root.menu-aberto .menu-lat-in { opacity: 1; transform: none; transition-delay: .06s; }
