@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, useDeferredValue } from "react";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
 import { ViagemAviso } from "./dinheiro.jsx";
-import { AcoesAzuis, CarrosselSaldo, SeloPro, GradeAtalhos, CartaoResumo, noPeriodo } from "../blocos.jsx";
+import { AcoesAzuis, CarrosselSaldo, GradeAtalhos, CartaoResumo, noPeriodo } from "../blocos.jsx";
 import { CartoesInicio } from "./inicio-cartoes.jsx";
 import { CatBolinha, Topo, Comparacao } from "./visual.jsx";
 import { SeloBanco, nomeBanco } from "./bancos.jsx";
@@ -372,21 +372,20 @@ function PessoalHome({ db, conta, now, act, tema, avisos }) {
   const nMes = MES_LONGO[now.getMonth()], pg = podeGastar(db);
   const guardado = soma(P.caixinhas || [], c => (c.banco && typeof c.banco.valor === "number" ? c.banco.valor : soma(c.movs || [], m => m.valor))); // sem o rendimento estimado
   const cartoes = [
-    { id: "sobrou", rotulo: r.sobra >= 0 ? `Sobrou em ${nMes}` : `Passou do que entrou em ${nMes}`, valor: Math.abs(r.sobra), neg: r.sobra < 0, ic: I.wallet,
+    { id: "sobrou", rotulo: r.sobra >= 0 ? `Sobrou em ${nMes}` : `Passou do que entrou em ${nMes}`, valor: Math.abs(r.sobra), neg: r.sobra < 0,
       sub: r.aPagar > 0 ? `${brl(r.aPagar)} em contas a pagar` : "Todas as contas do mês pagas", onClick: () => act.setTab("p-gastos") },
-    { id: "hoje", rotulo: "Hoje você pode gastar", valor: Math.max(0, pg.hoje), neg: pg.hoje < 0, ic: I.target,
+    { id: "hoje", rotulo: "Hoje você pode gastar", valor: Math.max(0, pg.hoje), neg: pg.hoje < 0,
       sub: pg.restam > 0 ? `Uns ${brl(pg.porDia)} por dia até o fim do mês` : "Último dia do mês", onClick: () => act.setTab("p-gastos") },
-    { id: "contas", rotulo: "Contas a pagar", valor: r.aPagar, ic: I.bill,
+    { id: "contas", rotulo: "Contas a pagar", valor: r.aPagar,
       sub: r.abertas.length ? `${r.abertas.length} ${r.abertas.length === 1 ? "conta aberta" : "contas abertas"} em ${nMes}` : "Nenhuma conta aberta", onClick: () => act.setTab("p-contas") },
-    { id: "saiu", rotulo: `Saiu em ${nMes}`, valor: r.saiu, ic: I.chart, sub: `Entrou ${brl(r.entrou)}`, onClick: () => act.setTab("p-gastos") },
-    ...(guardado > 0 ? [{ id: "caixinhas", rotulo: "Nas caixinhas", valor: guardado, ic: I.piggy, sub: "O que você está guardando", onClick: () => act.abrirCaixinha() }] : []),
+    { id: "saiu", rotulo: `Saiu em ${nMes}`, valor: r.saiu, sub: `Entrou ${brl(r.entrou)}`, onClick: () => act.setTab("p-gastos") },
+    ...(guardado > 0 ? [{ id: "caixinhas", rotulo: "Nas caixinhas", valor: guardado, sub: "O que você está guardando", onClick: () => act.abrirCaixinha() }] : []),
   ];
   return (
     <div className="page ini az-ini">
       <TopoInicio conta={conta} act={act} tema={tema} modo="pessoal" now={now} compacto />
       {avisos}
       <AcoesAzuis itens={acoes} />
-      {act.plano && act.plano.pro && <SeloPro onClick={() => act.openSettings("assinatura")} />}
       <CarrosselSaldo act={act} cartoes={cartoes} />
       <ViagemAviso db={db} act={act} />
       <GradeAtalhos itens={atalhos} />

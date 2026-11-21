@@ -55,13 +55,6 @@
 .c2-saldo-outra { color: var(--muted); font-size: 13px; }
 .c2-saldo .casa-acertos { border-top: 1px solid var(--line); padding-top: 10px; margin: 0; }
 
-/* ---------- atalhos ---------- */
-.c2-acoes { display: grid; grid-template-columns: 1.35fr 1fr 1fr; gap: 10px; }
-.c2-acao { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 10px; min-height: 84px; padding: 14px; border-radius: var(--r-tile); background: var(--surface); border: 1px solid var(--line); color: var(--fg); text-align: left; font-weight: 800; font-size: 14px; line-height: 1.2; transition: transform .12s, background .15s; }
-.c2-acao svg { width: 22px; height: 22px; color: var(--mode-text, var(--mode)); }
-.c2-acao.principal { background: var(--mode); border-color: transparent; color: var(--mode-ink); }
-.c2-acao.principal svg { color: currentColor; }
-.c2-acao:active { transform: scale(.96); }
 
 .c2-saldo .vz-anel-in > b { font-size: 14px; }
 
@@ -116,16 +109,22 @@
 .c2-ajustes .nota-link { width: 100%; }
 
 /* ---------- casa ainda não criada ---------- */
-.c2-criar { display: grid; gap: 14px; padding: 18px; }
-.c2-criar-topo { display: flex; align-items: center; gap: 14px; }
-.c2-criar-topo .ilustra { width: 86px; height: 86px; object-fit: contain; flex: none; }
-.c2-criar-topo b { display: block; font-family: var(--f-display); font-size: 19px; font-weight: 700; line-height: 1.25; }
-.c2-criar-topo small { display: block; margin-top: 4px; color: var(--muted); font-size: 14px; line-height: 1.4; }
-.c2-criar-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.c2-criar-lista li { display: flex; align-items: center; gap: 12px; font-size: 14px; line-height: 1.4; }
-.c2-criar-lista i { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--mode-soft); color: var(--mode-text, var(--mode)); }
-.c2-criar-lista i svg { width: 16px; height: 16px; }
-@media (min-width: 900px) { .c2-criar { max-width: 560px; } }
+/* ---------- criar a casa: o convite num cartão azul, o que ela faz e o nome ---------- */
+.c2-novo { display: flex; flex-direction: column; gap: 14px; }
+.c2-heroi { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 18px 20px 22px; border-radius: 26px;
+  background: var(--azul-cartao, var(--mode)); color: #fff; box-shadow: 0 14px 30px rgba(43, 70, 255, .26); }
+.c2-heroi::before { content: ""; position: absolute; width: 240px; height: 240px; right: -90px; top: -110px; border-radius: 50%; background: rgba(255, 255, 255, .08); }
+.c2-heroi .ilustra { width: 120px; height: 120px; object-fit: contain; }
+.c2-heroi h2 { margin: 0; font-size: 23px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
+.c2-heroi p { margin: 0; max-width: 300px; font-size: 14.5px; color: rgba(255, 255, 255, .82); line-height: 1.45; }
+.c2-beneficios { list-style: none; margin: 0; padding: 6px 16px; display: grid; border-radius: 22px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+.c2-beneficios li { display: flex; align-items: center; gap: 12px; padding: 11px 0; font-size: 14.5px; line-height: 1.4; }
+.c2-beneficios li + li { border-top: 1px solid var(--line); }
+.c2-beneficios i { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent); }
+.c2-beneficios i svg { width: 19px; height: 19px; }
+.c2-novo .fields { border-radius: 20px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.c2-novo .c2-criar-b { height: 56px; border-radius: 999px; font-size: 16.5px; }
+@media (min-width: 900px) { .c2-novo { max-width: 560px; } }
 
 /* computador: o mês ganha mais ar */
 @media (min-width: 900px) {
@@ -214,3 +213,16 @@
 /* ---------- visual calmo (src/notion.css) ---------- */
 .c2-ajuste { height: 34px; border-radius: var(--r-ctl); font-weight: 500; }
 @media (hover: hover) { .c2-ajuste:hover { background: var(--hover); color: var(--fg); } }
+
+/* ---------- a casa no visual novo: cartões brancos bem redondos, sem degradê, e o azul da marca ---------- */
+.shell .c2 .c2-mes { border: 0; border-radius: 22px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+.shell .c2 .c2-mes-nav .icon-btn { border-radius: 12px; background: var(--surface-2); }
+.shell .c2 .c2-saldo, .shell .c2 .panel { border: 0; border-radius: 22px; box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+.shell .c2 .c2-btn.forte { background: var(--accent); color: #fff; border-radius: 999px; }
+.shell .c2 .c2-btn { border-radius: 999px; }
+.shell .c2 .az-acoes.tres { margin: 0; }
+.shell .c2 .c2-ajustes { gap: 8px; }
+.shell .c2 .c2-ajuste { height: 40px; border-radius: 999px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); color: var(--fg); font-weight: 600; padding: 0 16px; }
+.shell .c2 .c2-ajuste svg { color: var(--accent); }
+.shell .c2 .c2-ajustes .btn.danger { border-radius: 999px; }
+.shell .c2 .c2-mes { padding-bottom: 16px; }

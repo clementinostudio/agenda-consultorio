@@ -28,7 +28,7 @@ import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCor
 import { lerWhatsapp, mascaraWhatsapp } from "./whatsapp.js";
 import { K_ORIGEM } from "./origem.js";
 import { useLinkAgendamento, confirmacaoDe } from "./link.js";
-import { AcoesAzuis, CarrosselSaldo, SeloPro, GradeAtalhos, CartaoNovidade, CartaoResumo, ListaAcoes, noPeriodo } from "./blocos.jsx";
+import { AcoesAzuis, CarrosselSaldo, GradeAtalhos, CartaoNovidade, CartaoResumo, ListaAcoes, noPeriodo } from "./blocos.jsx";
 import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
 import { Svg, Marca, I } from "./icones.jsx";
@@ -1516,24 +1516,9 @@ function Avatar({ conta, onClick, label = "Sua conta e ajustes" }) {
   const inner = conta.foto ? <img src={conta.foto} alt="" /> : iniciais(conta.nome);
   return onClick ? <button className="me" onClick={onClick} aria-label={label}>{inner}</button> : <span className="me" aria-hidden="true">{inner}</span>;
 }
-// Moldura de fogo (desenho animado) em volta da foto de quem assina o PRO: as chamas dançam atrás da foto.
-// Com "reduzir movimento" ligado no aparelho, ficam paradas (src/azul.css).
-const CHAMAS = [-118, -88, -58, -29, 0, 29, 58, 88, 118];
-function MolduraFogo({ children }) {
-  return (
-    <span className="pro-fogo">
-      <svg className="pro-fogo-chamas" viewBox="0 0 64 64" aria-hidden="true">
-        {CHAMAS.map((a, k) => { const alta = Math.abs(a) < 40; return (
-          <g key={a} transform={`rotate(${a} 32 32)`}>
-            <path className="fl fora" style={{ "--d": `${(k % 3) * -0.23}s` }} d={alta ? "M32 15C26 11 27 5 32 -1C37 5 38 11 32 15Z" : "M32 15C27.5 12 28 7 32 3C36 7 36.5 12 32 15Z"} />
-            <path className="fl dentro" style={{ "--d": `${(k % 3) * -0.23 - 0.1}s` }} d={alta ? "M32 15C29 12 29.5 8 32 4.5C34.5 8 35 12 32 15Z" : "M32 15C29.8 13 30 10 32 7.5C34 10 34.2 13 32 15Z"} />
-          </g>
-        ); })}
-      </svg>
-      {children}
-      <em className="pro-fogo-selo" aria-hidden="true">PRO</em>
-    </span>
-  );
+// Quem assina o PRO: um anel dourado e a etiqueta "PRO" na foto da barra de cima
+function FotoPro({ children }) {
+  return <span className="pro-foto">{children}<em className="pro-foto-selo" aria-hidden="true">PRO</em></span>;
 }
 // Lê um arquivo de imagem do aparelho
 const lerArquivo = file => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
@@ -1790,6 +1775,27 @@ let ABA_DO_APP = null;
 const voltarDaTela = voltar => { if (nativoV2 && ABA_DO_APP) chamarApp("nativo:voltar").catch(() => voltar()); else voltar(); };
 
 // A página passou do título grande? (um setState por mudança, não a cada pixel rolado)
+// Barra de cima do celular: some ao rolar para baixo e volta ao rolar para cima (no topo, sempre à vista).
+// Com o menu lateral aberto, a página não rola: não muda nada.
+function useEscondeAoRolar() {
+  const [some, setSome] = useState(false);
+  useEffect(() => {
+    let ultimo = window.scrollY, atual = false, raf = 0;
+    const f = () => {
+      raf = 0;
+      if (document.documentElement.classList.contains("menu-fixo")) return;
+      const y = window.scrollY, d = y - ultimo;
+      let v = atual;
+      if (y < 70) v = false; else if (d > 8) v = true; else if (d < -8) v = false; else return;
+      ultimo = y;
+      if (v !== atual) { atual = v; setSome(v); }
+    };
+    const agendar = () => { if (!raf) raf = requestAnimationFrame(f); };
+    window.addEventListener("scroll", agendar, { passive: true });
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", agendar); };
+  }, []);
+  return some;
+}
 function useRolouTitulo(limite = 92) {
   const [rolou, setRolou] = useState(false);
   useEffect(() => {
@@ -2115,6 +2121,22 @@ function AreaChart({ serie, cor }) {
    8. LOGIN E CADASTRO
    Com a nuvem ligada (src/nuvem.js), o login é de verdade (Supabase Auth). Sem ela, fica só no aparelho.
    ========================================================= */
+// Moldura das telas de entrar, criar conta, WhatsApp e senha nova: o topo azul com o "avina" por extenso (o mesmo da
+// barra de cima) e um cartão branco que sobe por cima dele. Estilos em src/azul.css (seção 18).
+function TelaEntrar({ topo, children, pe }) {
+  return (
+    <main className="entrar">
+      <header className="entrar-topo">
+        <i className="entrar-bola a" aria-hidden="true" /><i className="entrar-bola b" aria-hidden="true" />
+        <span className="entrar-logo"><AvinaNome /></span>
+        <p>{topo || "Agenda, pagamentos e contas num lugar só."}</p>
+      </header>
+      <section className="entrar-cartao">{children}</section>
+      {pe}
+    </main>
+  );
+}
+
 function Auth({ onLogin, emailInicial, aviso }) {
   // chegou por um convite para a casa (#casa=...): o convite fica guardado e abre depois de entrar
   const [convite] = useState(() => { try { return !!(localStorage.getItem("agenda-convite-casa") || localStorage.getItem("agenda-convite-loja")); } catch (e) { return false; } });
@@ -2178,12 +2200,17 @@ function Auth({ onLogin, emailInicial, aviso }) {
     }
   };
   return (
-    <main className="auth">
-      <div className="brand"><i><Marca /></i>Avina</div>
-      <div className="auth-h">
-        <div className="hi">{criar ? "Vamos começar!" : esqueci ? "Acontece!" : "Que bom te ver!"}</div>
-        <h1>{criar ? "Criar conta" : esqueci ? "Nova senha" : "Entrar"}</h1>
-        <p>{convite && !esqueci ? "Você foi convidado(a) para dividir as contas de uma casa no Avina." : criar ? "Leva menos de um minuto." : esqueci ? "Coloque seu e-mail e eu mando um link para criar outra senha." : aviso || "Sua agenda, seus pagamentos e suas contas num lugar só."}</p>
+    <TelaEntrar topo={criar ? "Leva menos de um minuto, e é grátis para começar." : null}
+      pe={<div className="entrar-pe"><I.lock />{NUVEM ? "Seus dados ficam protegidos: só a sua conta vê, e o app funciona até sem internet." : "Sem a nuvem ligada: tudo fica salvo só neste aparelho."}</div>}>
+      {!esqueci && (
+        <div className="az-abas entrar-abas" role="tablist" aria-label="Entrar ou criar conta">
+          <button type="button" role="tab" aria-selected={!criar} className={!criar ? "on" : ""} onClick={() => trocar("entrar")}>Entrar</button>
+          <button type="button" role="tab" aria-selected={criar} className={criar ? "on" : ""} onClick={() => trocar("criar")}>Criar conta</button>
+        </div>
+      )}
+      <div className="entrar-h">
+        <h1>{criar ? "Vamos começar!" : esqueci ? "Nova senha" : "Que bom te ver!"}</h1>
+        <p>{convite && !esqueci ? "Você foi convidado(a) para dividir as contas de uma casa no Avina." : criar ? "Crie sua conta para organizar o consultório e as suas contas." : esqueci ? "Coloque seu e-mail e eu mando um link para criar outra senha." : aviso || "Entre para ver sua agenda, seus pagamentos e suas contas."}</p>
       </div>
       <form className="stack" onSubmit={enviar} noValidate>
         <div className="fields">
@@ -2197,12 +2224,9 @@ function Auth({ onLogin, emailInicial, aviso }) {
         <button className="btn" type="submit" disabled={indo}>{indo ? "Um instante…" : criar ? "Criar minha conta" : esqueci ? "Mandar o link" : "Entrar"}</button>
         {criar && <div className="hint auth-termos">Ao criar a conta, você concorda com os <a href={`${BASE}termos/`} target="_blank" rel="noopener">Termos de uso</a> e a <a href={`${BASE}privacidade/`} target="_blank" rel="noopener">Política de privacidade</a>.</div>}
         {esqueci && <button className="btn ghost" type="button" onClick={() => trocar("entrar")}>Voltar para entrar</button>}
+        {!criar && !esqueci && NUVEM && <button type="button" className="entrar-link" onClick={() => trocar("esqueci")}>Esqueci a senha</button>}
       </form>
-      <div className="auth-foot">
-        {criar ? <>Já tem conta? <button onClick={() => trocar("entrar")}>Entrar</button></> : !esqueci && <>Primeira vez aqui? <button onClick={() => trocar("criar")}>Criar conta</button>{NUVEM && <> · <button onClick={() => trocar("esqueci")}>Esqueci a senha</button></>}</>}
-      </div>
-      <div className="demo-note">{NUVEM ? "Seus dados ficam protegidos na nuvem, só a sua conta vê, e o app funciona até sem internet." : "Sem a nuvem ligada: tudo fica salvo só neste aparelho."}</div>
-    </main>
+    </TelaEntrar>
   );
 }
 
@@ -2225,12 +2249,10 @@ function PedirWhatsapp({ conta, onPronto, onAchou, onSair }) {
     if (!r.ok) { setErro(r.erro); vibrar("erro"); return; }
     setErro(null); vibrar("ok"); onPronto(r.numero);
   };
-  if (vendo) return <main className="auth"><div className="brand"><i><Marca /></i>Avina</div></main>;
+  if (vendo) return <TelaEntrar topo="Abrindo a sua conta…"><p className="entrar-espera">Um instante…</p></TelaEntrar>;
   return (
-    <main className="auth">
-      <div className="brand"><i><Marca /></i>Avina</div>
-      <div className="auth-h">
-        <div className="hi">Falta só isso!</div>
+    <TelaEntrar topo="Falta só isso!" pe={<div className="entrar-pe"><button type="button" className="entrar-link" onClick={() => onSair()}>Sair da conta</button></div>}>
+      <div className="entrar-h">
         <h1>Seu WhatsApp</h1>
         <p>É por ele que a gente fala com você sobre a sua conta, ajuda quando precisar e conta as novidades do Avina. Seu número não vai para mais ninguém.</p>
       </div>
@@ -2242,8 +2264,7 @@ function PedirWhatsapp({ conta, onPronto, onAchou, onSair }) {
         <button className="btn" type="submit">Continuar</button>
         <div className="hint auth-termos">Você pode trocar o número no Perfil. Para não receber mensagens, é só pedir. Veja a <a href={`${BASE}privacidade/`} target="_blank" rel="noopener">Política de privacidade</a>.</div>
       </form>
-      <div className="auth-foot"><button onClick={() => onSair()}>Sair da conta</button></div>
-    </main>
+    </TelaEntrar>
   );
 }
 
@@ -2264,15 +2285,14 @@ function NovaSenha({ onPronto }) {
     } catch (x) { setErro(traduzirErro(x)); setIndo(false); }
   };
   return (
-    <main className="auth">
-      <div className="brand"><i><Marca /></i>Avina</div>
-      <div className="auth-h"><div className="hi">Quase lá!</div><h1>Senha nova</h1><p>Escolha a senha que você vai usar daqui para frente.</p></div>
+    <TelaEntrar topo="Quase lá!">
+      <div className="entrar-h"><h1>Senha nova</h1><p>Escolha a senha que você vai usar daqui para frente.</p></div>
       <form className="stack" onSubmit={enviar} noValidate>
         <div className="fields"><Field label="Senha nova" icon={<I.lock />} htmlFor="n-senha"><input id="n-senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" autoComplete="new-password" autoFocus /></Field></div>
         {erro && <div className="error" role="alert">{erro}</div>}
         <button className="btn" type="submit" disabled={indo}>{indo ? "Um instante…" : "Salvar e entrar"}</button>
       </form>
-    </main>
+    </TelaEntrar>
   );
 }
 
@@ -2458,17 +2478,16 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
   const nMes = MES_LONGO[now.getMonth()], abertas = cs.filter(c => !c.paid).length;
   const deHoje = itensDoDia(db, t), feitasMes = db.sessions.filter(s => s.status === "done" && (s.date || "").startsWith(ch));
   const cartoesSaldo = [
-    { id: "recebido", rotulo: `Recebido em ${nMes}`, valor: recebidoMes, ic: I.wallet, sub: aReceber > 0 ? `${brl(aReceber)} a receber` : "Nada a receber agora", onClick: () => act.setTab("fin") },
-    { id: "receber", rotulo: "A receber", valor: aReceber, ic: I.money, sub: abertas ? `${abertas} ${abertas === 1 ? "cobrança aberta" : "cobranças abertas"}` : "Tudo recebido", onClick: () => act.setTab("fin") },
-    { id: "hoje", rotulo: "Sessões hoje", texto: String(deHoje.length), ic: I.cal, sub: prox ? `A próxima é às ${prox.time}` : deHoje.length ? "As de hoje já passaram" : "Dia livre na agenda", onClick: () => act.setTab("agenda") },
-    { id: "mes", rotulo: `Atendido em ${nMes}`, valor: soma(feitasMes, x => x.price - (x.sublet || 0)), ic: I.chart, sub: `${feitasMes.length} ${feitasMes.length === 1 ? "sessão atendida" : "sessões atendidas"}`, onClick: () => act.setTab("fin") },
+    { id: "recebido", rotulo: `Recebido em ${nMes}`, valor: recebidoMes, sub: aReceber > 0 ? `${brl(aReceber)} a receber` : "Nada a receber agora", onClick: () => act.setTab("fin") },
+    { id: "receber", rotulo: "A receber", valor: aReceber, sub: abertas ? `${abertas} ${abertas === 1 ? "cobrança aberta" : "cobranças abertas"}` : "Tudo recebido", onClick: () => act.setTab("fin") },
+    { id: "hoje", rotulo: "Sessões hoje", texto: String(deHoje.length), sub: prox ? `A próxima é às ${prox.time}` : deHoje.length ? "As de hoje já passaram" : "Dia livre na agenda", onClick: () => act.setTab("agenda") },
+    { id: "mes", rotulo: `Atendido em ${nMes}`, valor: soma(feitasMes, x => x.price - (x.sublet || 0)), sub: `${feitasMes.length} ${feitasMes.length === 1 ? "sessão atendida" : "sessões atendidas"}`, onClick: () => act.setTab("fin") },
   ];
   return (
     <div className="page ini az-ini">
       <TopoInicio conta={conta} act={act} tema={tema} modo="consultorio" now={now} compacto />
       {avisos}
       <AcoesAzuis itens={acoes} />
-      {act.plano && act.plano.pro && <SeloPro onClick={() => act.openSettings("assinatura")} />}
       <CarrosselSaldo act={act} cartoes={cartoesSaldo} />
       <GradeAtalhos itens={atalhos} />
       {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
@@ -4638,21 +4657,27 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   const [alertas, setAlertas] = useState(false);
   // menu lateral: guarda onde a página estava, para a tela encolhida mostrar o mesmo pedaço e voltar para ele ao fechar
   const [menu, setMenu] = useState(false);
-  const menuY = useRef(0), menuT = useRef(0);
-  // Abrir: primeiro a tela "congela" no lugar (fixa, mostrando o mesmo pedaço), e só no quadro seguinte encolhe:
-  // assim a animação sai do ponto certo. Fechar: volta ao tamanho cheio ainda congelada e só depois de terminar
-  // solta (e a página volta para onde estava). Sem isso, a barra de cima pulava e a tela dava cortes no meio.
+  const menuT = useRef(0);
+  // Abrir: primeiro a tela "congela" no lugar (sem rolar, recortada no pedaço que está à vista), e só no quadro
+  // seguinte encolhe: assim a animação sai do ponto certo. Fechar: volta ao tamanho cheio e só depois solta.
+  // A rolagem da página nunca muda, então nada pula ao abrir ou fechar.
   const raiz = document.documentElement;
   const abrirMenu = () => {
     clearTimeout(menuT.current);
-    if (!raiz.classList.contains("menu-fixo")) { menuY.current = window.scrollY; raiz.style.setProperty("--menu-y", `${menuY.current}px`); raiz.classList.add("menu-fixo"); }
+    if (!raiz.classList.contains("menu-fixo")) {
+      // onde a tela está agora: a página encolhe em volta deste pedaço (src/azul.css, seção 11)
+      const y = window.scrollY, h = window.innerHeight;
+      raiz.style.setProperty("--menu-y", `${y}px`); raiz.style.setProperty("--menu-h", `${h}px`);
+      raiz.style.setProperty("--menu-b", `${Math.max(0, raiz.scrollHeight - y - h)}px`);
+      raiz.classList.add("menu-fixo");
+    }
     vibrar("toque"); setMenu(true);
     requestAnimationFrame(() => requestAnimationFrame(() => raiz.classList.add("menu-aberto")));
   };
   const fecharMenu = () => {
     setMenu(false); raiz.classList.remove("menu-aberto");
     clearTimeout(menuT.current);
-    menuT.current = setTimeout(() => { raiz.classList.remove("menu-fixo"); window.scrollTo(0, menuY.current); }, 520);
+    menuT.current = setTimeout(() => raiz.classList.remove("menu-fixo"), 520);
   };
   const menuGo = f => () => { fecharMenu(); if (typeof f === "function") setTimeout(f, 300); };
   useEffect(() => () => { clearTimeout(menuT.current); raiz.classList.remove("menu-aberto", "menu-fixo"); }, []);
@@ -5736,7 +5761,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   );
   if (!saindo) paineisCong.current = paineis;
 
-  const rolouCab = useRolouTitulo(6);
+  const rolouCab = useRolouTitulo(6), someCab = useEscondeAoRolar();
   const falasAlerta = modoEf === "consultorio" ? conversa(db, now, act, perfil) : modoEf === "pessoal" && convP ? convP(db, act) : [];
   const nAlertas = falasAlerta.filter(f => f.acao).length; // a barra de cima ganha uma sombra suave quando o conteúdo passa por baixo dela
   // o que pede atenção logo que a pessoa entra (fica abaixo da saudação)
@@ -5755,7 +5780,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
         <span className="puxa-t">{recarregando ? "Atualizando seus dados…" : puxar >= 70 ? "Solte para atualizar" : "Puxe para atualizar"}</span>
       </div>
       {/* Barra de cima do celular: fixa e sempre útil (logo, modo, olho e conta). No computador quem faz isso é a barra lateral */}
-      <header className={"cab-app" + (rolouCab ? " rolou" : "")}>
+      <header className={"cab-app" + (rolouCab ? " rolou" : "") + (someCab && !menu ? " some" : "")}>
         <div className="cab-app-in">
           <VoltarAoApp className="icon-btn cab-ic" />
           <button className={"icon-btn cab-ic cab-menu" + (menu ? " x" : "")} onClick={menu ? fecharMenu : abrirMenu} aria-label={menu ? "Fechar o menu" : "Abrir o menu"} aria-expanded={menu}><span className="hamb" aria-hidden="true"><i /><i /><i /></span></button>
@@ -5764,7 +5789,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
             {doisModos && <button type="button" className="mode-pill cab-modo" onClick={() => { vibrar("toque"); setSheet({ type: "modo" }); }} aria-label={`Área: ${NOME_MODO[modoEf]}. Trocar`}><span className="mode-dot" />{NOME_MODO[modoEf]}<I.chevD /></button>}
             {modoEf === "loja" && <button className="icon-btn cab-ic" onClick={act.toggleOculto} aria-label={oculto ? "Mostrar valores" : "Esconder valores"}>{oculto ? <I.eyeOff /> : <I.eye />}</button>}
             {modoEf !== "loja" && <button className="icon-btn cab-ic cab-sino" onClick={() => { vibrar("toque"); setAlertas(true); }} aria-label={nAlertas ? `Alertas: ${nAlertas} pedem atenção` : "Alertas"}><I.bell />{nAlertas > 0 && <i className="cab-ponto" />}</button>}
-            {souPro ? <MolduraFogo><Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes (assinante PRO)" /></MolduraFogo> : <Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes" />}
+            {souPro ? <FotoPro><Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes (assinante PRO)" /></FotoPro> : <Avatar conta={conta} onClick={act.openSettings} label="Sua conta e ajustes" />}
           </div>
         </div>
       </header>

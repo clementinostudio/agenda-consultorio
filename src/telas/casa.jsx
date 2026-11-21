@@ -10,6 +10,7 @@ import { noApp, permitirIA } from "../app-nativo.js";
 import { lerQRs } from "./ferramentas.jsx";
 import { usePrecosPerto, PrecoItem, PrecosPainel } from "./precos.jsx";
 import { Anel, CatBolinha, Linha, useContagem } from "./visual.jsx";
+import { AcoesAzuis } from "../blocos.jsx";
 // gerador de QR code (zxing, o mesmo do leitor): só carrega quando alguém pede o QR do convite
 import wasmEscritor from "zxing-wasm/writer/zxing_writer.wasm?url";
 // visual da página da casa (fica junto com esta parte do app, que carrega sob demanda)
@@ -66,22 +67,25 @@ export function CasaPagina({ casa: C, conta, pix, act, tema, foco }) {
   if (!C.casa) return (
     <div className="page casa-pg c2">
       <TopBar eyebrow="Dinheiro a dois" title="Nossa casa" act={act} tema={tema} voltar={voltar} />
-      <section className="panel casa-criar c2-criar">
-        {C.estado === "carregando" ? <p className="hint">Abrindo a casa…</p> : <>
-          <div className="c2-criar-topo"><Ilustra n="dinheiro" /><div><b>As contas da casa, sem planilha</b><small>Cada um anota o que pagou e o app mostra quem deve quanto.</small></div></div>
-          <ul className="c2-criar-lista">
-            <li><i><I.users /></i><span><b>Até 5 pessoas</b>, cada uma no próprio celular</span></li>
-            <li><i><I.check /></i><span><b>Divide igual ou pela renda</b> e faz as contas sozinho</span></li>
-            <li><i><I.receipt /></i><span><b>Contas, lista de compras</b> e notas do mercado num lugar só</span></li>
-            <li><i><I.lock /></i><span><b>Seus gastos continuam seus.</b> Só vai para a casa o que você escolher</span></li>
-            <li><i><I.star /></i><span><b>De graça para todos</b> que você convidar</span></li>
-          </ul>
-          <div className="fields"><Field label="Nome da casa" htmlFor="c-nome"><input id="c-nome" value={nomeCasa} onChange={e => setNomeCasa(e.target.value)} placeholder="Ex.: Nossa casa, Apê" maxLength={60} /></Field></div>
-          {erro && <div className="error">{erro}</div>}
-          <button className="btn mode" disabled={!!ocupado} onClick={() => faz("criar", () => C.criar(nomeCasa.trim()))}><I.check /> {ocupado ? "Criando…" : "Criar a casa"}</button>
-          {!C.nuvem && <div className="hint">Sem a nuvem, a casa fica só neste aparelho. Com a sua conta, ela fica na nuvem e cada pessoa usa o próprio celular.</div>}
-        </>}
-      </section>
+      {C.estado === "carregando" ? <p className="hint">Abrindo a casa…</p> : <div className="c2-novo">
+        {/* o convite em destaque, no cartão azul do visual novo */}
+        <section className="c2-heroi">
+          <Ilustra n="dinheiro" />
+          <h2>As contas da casa, sem planilha</h2>
+          <p>Cada um anota o que pagou e o app mostra quem deve quanto.</p>
+        </section>
+        <ul className="c2-beneficios">
+          <li><i><I.users /></i><span><b>Até 5 pessoas</b>, cada uma no próprio celular</span></li>
+          <li><i><I.check /></i><span><b>Divide igual ou pela renda</b> e faz as contas sozinho</span></li>
+          <li><i><I.receipt /></i><span><b>Contas, lista de compras</b> e notas do mercado num lugar só</span></li>
+          <li><i><I.lock /></i><span><b>Seus gastos continuam seus.</b> Só vai para a casa o que você escolher</span></li>
+          <li><i><I.star /></i><span><b>De graça para todos</b> que você convidar</span></li>
+        </ul>
+        <div className="fields"><Field label="Nome da casa" htmlFor="c-nome"><input id="c-nome" value={nomeCasa} onChange={e => setNomeCasa(e.target.value)} placeholder="Ex.: Nossa casa, Apê" maxLength={60} /></Field></div>
+        {erro && <div className="error">{erro}</div>}
+        <button className="btn mode c2-criar-b" disabled={!!ocupado} onClick={() => faz("criar", () => C.criar(nomeCasa.trim()))}><I.check /> {ocupado ? "Criando…" : "Criar a casa"}</button>
+        {!C.nuvem && <div className="hint">Sem a nuvem, a casa fica só neste aparelho. Com a sua conta, ela fica na nuvem e cada pessoa usa o próprio celular.</div>}
+      </div>}
     </div>
   );
 
@@ -142,12 +146,12 @@ ${link}`)}`, "_blank", "noopener");
           <Bloco o={1}><MesDaCasa mes={mes} ant={ant} off={off} itens={doMes} doAnt={doAnt} onMes={trocarMes} /></Bloco>
           {sozinho ? <Bloco o={2}>{pessoas}</Bloco>
             : <Bloco o={2}><CartaoSaldo C={C} mes={mes} itens={doMes} dividas={dividas} ocupado={ocupado} onAcertar={acertar} onLembrar={lembrar} /></Bloco>}
-          <Bloco o={3}>
-            <div className="c2-acoes">
-              <button className="c2-acao principal" onClick={() => act.abrirGastoCasa()}><I.plus /><span>Anotar gasto</span></button>
-              <button className="c2-acao" onClick={() => act.lerNotaCasa()}><I.receipt /><span>Ler nota</span></button>
-              <button className="c2-acao" onClick={() => act.trazerParaCasa()}><I.upload /><span>Dos meus gastos</span></button>
-            </div>
+          <Bloco o={0}>
+            <AcoesAzuis tres itens={[
+              { id: "gasto", l: "Anotar gasto", ic: I.plus, f: () => act.abrirGastoCasa() },
+              { id: "nota", l: "Ler nota", ic: I.receipt, f: () => act.lerNotaCasa() },
+              { id: "trazer", l: "Dos meus gastos", ic: I.upload, f: () => act.trazerParaCasa() },
+            ]} />
           </Bloco>
           {doMes.length > 0 && <Bloco o={4}><Categorias itens={doMes} doAnt={doAnt} ant={ant} sel={cat} onSel={c => { setCat(cat === c ? null : c); vibrar("toque"); }} /></Bloco>}
           <Bloco o={7}><GastosDoMes C={C} mes={mes} itens={doMes} cat={cat} onCat={setCat} act={act} sozinho={sozinho} /></Bloco>

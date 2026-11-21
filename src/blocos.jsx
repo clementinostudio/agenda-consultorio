@@ -15,25 +15,15 @@ export function AcoesAzuis({ itens, tres, className }) {
 }
 
 // "Saldo": o rótulo, o valor grande em azul, a setinha e o olho (esconde os valores do app todo). sub: linha embaixo
-export function CartaoSaldo({ rotulo, valor, texto, sub, onClick, neg, act, icone: Ic }) {
+export function CartaoSaldo({ rotulo, valor, texto, sub, onClick, neg, act }) {
   return (
     <div className="az-saldo">
       <button type="button" className="az-saldo-main" onClick={onClick}>
-        {Ic && <span className="az-saldo-ic" aria-hidden="true"><Ic /></span>}
         <span className="az-saldo-t"><small>{rotulo}</small><b className={"num" + (neg ? " neg" : "")}>{texto != null ? texto : <Money v={valor} />}</b>{sub && <em>{sub}</em>}</span>
         <I.chev />
       </button>
       {act && <button type="button" className="az-saldo-olho" onClick={act.toggleOculto} aria-label={ESCONDER ? "Mostrar valores" : "Esconder valores"}>{ESCONDER ? <I.eyeOff /> : <I.eye />}</button>}
     </div>
-  );
-}
-
-// Selo dos assinantes: fica em cima do cartão de saldo, no Início
-export function SeloPro({ onClick }) {
-  return (
-    <button type="button" className="az-pro" onClick={onClick} aria-label="Você é assinante Avina PRO">
-      <span className="az-pro-chama" aria-hidden="true"><I.star /></span><b>Avina</b><em>PRO</em><small>Assinante</small>
-    </button>
   );
 }
 
@@ -49,7 +39,7 @@ export function CarrosselSaldo({ cartoes, act }) {
       <div className="az-car-trilho" ref={ref} onScroll={rolou}>
         {cartoes.map((c, k) => (
           <div key={c.id} className="az-car-item" aria-hidden={k !== i ? "true" : undefined}>
-            <CartaoSaldo rotulo={c.rotulo} valor={c.valor} texto={c.texto} sub={c.sub} neg={c.neg} onClick={c.onClick} act={k === 0 ? act : null} icone={c.ic} />
+            <CartaoSaldo rotulo={c.rotulo} valor={c.valor} texto={c.texto} sub={c.sub} neg={c.neg} onClick={c.onClick} act={k === 0 ? act : null} />
           </div>
         ))}
       </div>
