@@ -16,7 +16,7 @@ export function avisarNovaVersao(fn) {
 const Ic = {
   semRede: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 4.2-2.7M10.7 5.1A15 15 0 0 1 22 8.8M5 12.6a10 10 0 0 1 3.3-2.2M16.2 10.6A10 10 0 0 1 19 12.6M8.6 16.3a5 5 0 0 1 6.8 0M12 20h.01M3 3l18 18" /></svg>,
   ok: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>,
-  novo: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" /></svg>,
+  novo: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V8M8.5 11.5 12 8l3.5 3.5" /><path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6" /><path d="M18 3v3.5h-3.5M6 21v-3.5h3.5" /></svg>,
 };
 
 export default function AvisosSistema() {
@@ -44,6 +44,7 @@ export default function AvisosSistema() {
   };
 
   return (
+    <>
     <div className="avisos-sis" aria-live="polite">
       {!online && (
         <div className="aviso-pilula offline" role="status">
@@ -55,14 +56,20 @@ export default function AvisosSistema() {
           <i><Ic.ok /></i><span>Conectado de novo</span>
         </div>
       )}
-      {versao && (
-        <div className="aviso-versao" role="alert">
-          <i><Ic.novo /></i>
-          <div><b>Nova versão disponível</b><span>Leva um segundo, sem perder nada.</span></div>
-          <button className="av-depois" onClick={() => setVersao(false)}>Depois</button>
-          <button className="av-atualizar" onClick={atualizar} disabled={atualizando}>{atualizando ? "Atualizando…" : "Atualizar"}</button>
-        </div>
-      )}
     </div>
+    {/* versão nova: um cartão que sobe de baixo (acima da barra de baixo), no visual do app, sem travar a tela */}
+    {versao && (
+      <div className="nova-cartao" role="alert">
+        <div className="nova-topo">
+          <span className="nova-ic" aria-hidden="true"><Ic.novo /></span>
+          <span className="nova-t"><b>Tem versão nova do Avina</b><small>Leva um segundo e nada do que você anotou se perde.</small></span>
+        </div>
+        <div className="nova-botoes">
+          <button className="nova-depois" onClick={() => setVersao(false)}>Agora não</button>
+          <button className="nova-atualizar" onClick={atualizar} disabled={atualizando}>{atualizando ? <><i className="nova-gira" aria-hidden="true" />Atualizando…</> : "Atualizar agora"}</button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

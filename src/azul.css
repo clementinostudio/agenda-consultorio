@@ -823,3 +823,121 @@
 .rs .btn, .rs-fim .btn { height: 54px; border-radius: 999px; font-size: 16px; }
 .rs .btn.ghost { background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
 .rs .btn.mode { box-shadow: 0 3px 10px rgba(43, 70, 255, .16); }
+
+/* =========================================================
+   20. Aviso de versão nova: cartão que sobe de baixo, no visual do app
+   ========================================================= */
+.nova-cartao { position: fixed; z-index: 76; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); margin: 0 auto; max-width: 440px;
+  display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: 24px; background: var(--surface); color: var(--fg);
+  box-shadow: 0 0 0 1px var(--line), 0 18px 50px rgba(16, 24, 40, .22); animation: nova-sobe .5s cubic-bezier(.2, 1.1, .3, 1) both; }
+@media (min-width: 900px) { .nova-cartao { left: auto; right: 24px; bottom: 24px; width: 380px; } }
+.nova-topo { display: flex; align-items: center; gap: 14px; }
+.nova-ic { flex: none; width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center; background: var(--azul-cartao); color: #fff; box-shadow: 0 6px 14px rgba(43, 70, 255, .25); }
+.nova-ic svg { width: 26px; height: 26px; }
+.nova-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nova-t b { font-size: 16.5px; font-weight: 700; letter-spacing: -.01em; }
+.nova-t small { font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+.nova-botoes { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; }
+.nova-botoes button { height: 46px; border-radius: 999px; font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: transform .12s ease; }
+.nova-botoes button:active { transform: scale(.97); }
+.nova-depois { background: var(--surface-2); color: var(--fg); }
+.nova-atualizar { background: var(--azul); color: #fff; box-shadow: 0 3px 10px rgba(43, 70, 255, .18); }
+.nova-atualizar:disabled { opacity: .85; }
+.nova-gira { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .4); border-top-color: #fff; animation: nova-gira .8s linear infinite; }
+@keyframes nova-sobe { from { opacity: 0; transform: translateY(30px) scale(.97); } }
+@keyframes nova-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .nova-cartao { animation: none; } }
+
+/* Esperando pagamento (Início do consultório): quem ainda não pagou, com o lembrete pelo WhatsApp */
+.az-espera { display: flex; flex-direction: column; padding: 18px 16px 8px; border-radius: 22px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+.az-espera-cab { display: flex; flex-direction: column; gap: 1px; padding: 0 2px 6px; }
+.az-espera-cab b { font-size: 18px; font-weight: 700; letter-spacing: -.015em; }
+.az-espera-cab small { font-size: 13.5px; color: var(--muted); }
+.az-espera-l { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 8px 0; }
+.az-espera-l + .az-espera-l { border-top: 1px solid var(--line); }
+.az-espera-p { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; color: var(--fg); }
+.az-espera-p .txn-av { flex: none; width: 42px; height: 42px; background: color-mix(in srgb, var(--pc, var(--accent)) 16%, var(--surface)); color: color-mix(in srgb, var(--pc, var(--accent)) 75%, var(--fg)); font-weight: 700; }
+.az-espera-p > span:last-child { min-width: 0; display: flex; flex-direction: column; }
+.az-espera-p b { font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.az-espera-p small { font-size: 13px; color: var(--muted); }
+.az-espera-a { flex: none; display: flex; align-items: center; gap: 6px; }
+.az-espera-pago { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: #12A150; }
+.az-espera-pago svg { width: 18px; height: 18px; }
+.az-espera-lembrar { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; text-decoration: none; }
+.az-espera-lembrar svg { width: 16px; height: 16px; }
+.az-espera-mais { align-self: center; padding: 10px; color: var(--accent); font-size: 14px; font-weight: 600; }
+
+/* =========================================================
+   21. Alertas no visual novo: cada grupo num cartão, ícone num quadradinho e a ação em pílula
+   ========================================================= */
+.al-sub { margin: -6px 0 6px; font-size: 15px; color: var(--muted); }
+.al-grupo { margin: 22px 2px 10px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.al-cartao { border-radius: 22px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--card-shadow); padding: 0 16px; animation: modal-item .38s cubic-bezier(.2, .8, .2, 1) both; }
+.al-cartao .al-linha { border-bottom: 0; padding: 16px 0; }
+.al-cartao .al-linha + .al-linha { border-top: 1px solid var(--line); }
+.al-cartao .al-ic { width: 42px; height: 42px; border-radius: 14px; background: var(--surface-2); color: var(--muted); }
+.al-cartao .al-ic.forte { background: var(--azul-cartao); color: #fff; }
+.al-cartao .al-tx p { color: var(--fg); font-size: 15px; }
+.al-cartao .al-acao { gap: 4px; height: 36px; margin-top: 10px; padding: 0 12px 0 14px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 14px; font-weight: 600; }
+.al-cartao .al-acao svg { width: 16px; height: 16px; }
+
+/* =========================================================
+   22. Modo escuro com a cara do Avina: cinzas levemente azulados, o azul mais claro para ler bem
+   ========================================================= */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-app-theme="light"]) {
+    --bg: #0E1016; --bg-glow: #0E1016; --surface: #171A22; --card: #171A22; --surface-2: #1F232D; --surface-3: #2A2F3B;
+    --line: rgba(255, 255, 255, .07); --line-forte: rgba(255, 255, 255, .13);
+    --fg: #EEF0F5; --muted: #9AA2B4; --faint: #6B7385;
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, .3); --accent: #6178FF; --accent-hi: #6178FF; --accent-soft: rgba(97, 120, 255, .16); --accent-ink: #8A9BFF;
+    --side-bg: #12141B; --nav-bg: #12141B; --topo-nevoa: #12141B; --cab-bg: #12141B; --cab-pill: #1F232D;
+  }
+}
+:root[data-theme="dark"]:not([data-app-theme="light"]), :root[data-app-theme="dark"] {
+  --bg: #0E1016; --bg-glow: #0E1016; --surface: #171A22; --card: #171A22; --surface-2: #1F232D; --surface-3: #2A2F3B;
+  --line: rgba(255, 255, 255, .07); --line-forte: rgba(255, 255, 255, .13);
+  --fg: #EEF0F5; --muted: #9AA2B4; --faint: #6B7385;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, .3); --accent: #6178FF; --accent-hi: #6178FF; --accent-soft: rgba(97, 120, 255, .16); --accent-ink: #8A9BFF;
+  --side-bg: #12141B; --nav-bg: #12141B; --topo-nevoa: #12141B; --cab-bg: #12141B; --cab-pill: #1F232D;
+}
+/* no escuro, os botões azuis não brilham em volta (só uma sombra discreta) */
+:root[data-theme="dark"] .az-acao, :root[data-app-theme="dark"] .az-acao { box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-app-theme="light"]) .az-acao { box-shadow: 0 4px 12px rgba(0, 0, 0, .35); } }
+
+/* =========================================================
+   23. Tour de boas-vindas no visual novo: balão branco bem redondo, botões em pílula e o azul da marca
+   ========================================================= */
+.tour-luz { border-radius: 24px; box-shadow: 0 0 0 200vmax rgba(10, 16, 48, .6); outline-color: rgba(255, 255, 255, .9); }
+.tour-bal { padding: 18px 18px 16px; border-radius: 24px; box-shadow: 0 0 0 1px var(--line), 0 20px 50px rgba(10, 16, 48, .35); }
+.tour-cab { gap: 12px; }
+.tour-marca { width: 36px; height: 36px; border-radius: 11px; overflow: hidden; }
+.tour-marca .lt-a { width: 36px; height: 36px; border-radius: 11px; }
+.tour-cab b { font-size: 17.5px; font-weight: 700; letter-spacing: -.01em; }
+.tour-bal p { margin: 10px 0 16px; font-size: 15px; line-height: 1.5; }
+.tour-pontos i { background: var(--surface-3); }
+.tour-pontos i.on { background: var(--azul); }
+.tour-pular { height: 42px; padding: 0 14px; border-radius: 999px; font-weight: 600; }
+.tour-prox { height: 42px; padding: 0 20px; border-radius: 999px; background: var(--azul); color: #fff; font-weight: 600; box-shadow: 0 3px 10px rgba(43, 70, 255, .18); }
+
+/* =========================================================
+   24. Loja no visual novo: o mesmo azul, cartão azul para abrir a loja e os cartões brancos redondos
+   ========================================================= */
+.shell[data-mode="loja"] { --mode: var(--azul); --mode-ink: #fff; --mode-soft: var(--accent-soft); --mode-text: var(--accent); }
+.lj-novo { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
+.lj-heroi { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 18px 20px 22px; border-radius: 26px;
+  background: var(--azul-cartao); color: #fff; box-shadow: 0 14px 30px rgba(43, 70, 255, .22); }
+.lj-heroi::before { content: ""; position: absolute; width: 240px; height: 240px; right: -90px; top: -110px; border-radius: 50%; background: rgba(255, 255, 255, .08); }
+.lj-heroi .ilustra { width: 110px; height: 110px; object-fit: contain; }
+.lj-heroi h2 { margin: 0; font-size: 23px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
+.lj-heroi p { margin: 0; font-size: 14.5px; color: rgba(255, 255, 255, .82); }
+.lj-beneficios { list-style: none; margin: 0; padding: 6px 16px; border-radius: 22px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+.lj-beneficios li { display: flex; align-items: center; gap: 12px; padding: 11px 0; font-size: 14.5px; line-height: 1.4; }
+.lj-beneficios li + li { border-top: 1px solid var(--line); }
+.lj-beneficios i { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent); }
+.lj-beneficios i svg { width: 19px; height: 19px; }
+.lj-novo .fields { border-radius: 20px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.lj-novo .lj-abrir { height: 56px; border-radius: 999px; font-size: 16.5px; }
+.shell .lj-pg .az-acoes.tres { margin: 0 0 14px !important; }
+.shell .lj-pg .panel, .shell .lj-pg .bal { border-radius: 22px; border-color: transparent; box-shadow: 0 0 0 1px var(--line), var(--card-shadow); }
+.shell .lj-prod { border-radius: 18px; }
+.shell .lj-pagar .btn { border-radius: 999px; }

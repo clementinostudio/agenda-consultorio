@@ -432,7 +432,7 @@ body::before { background: var(--bg); background-image: none; }
 .alerta p { font-weight: 400; font-size: 14px; }
 .alerta-btn { height: 40px; border-radius: var(--r-ctl); font-weight: 600; font-size: 14.5px; }
 .alerta-ic { width: 44px; height: 44px; border-radius: var(--r-tile); }
-.aviso-pilula, .aviso-versao { border-radius: var(--r-tile); }
+.aviso-pilula { border-radius: var(--r-tile); }
 .aviso-linha { padding: 10px 40px 10px 12px; background: var(--surface); }
 .aviso-linha > i { width: 32px; height: 32px; border-radius: var(--r-ctl); }
 .aviso-linha b { font-weight: 600; }

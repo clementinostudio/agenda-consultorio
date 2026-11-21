@@ -6,13 +6,13 @@ import { AvinaA, vibrar } from "../App.jsx";
 // Cada passo: um ou mais jeitos de mostrar (celular e computador). Vale o primeiro cujo lugar está visível na tela
 const PASSOS = {
   consultorio: ({ termo, doisModos }) => [
-    { sel: [".acts.narrow-only .act", ".lt-split", ".lt-mais"], t: `Comece pelo primeiro ${termo.s}`, d: "Cadastre com o dia e o horário, e ele já entra na agenda toda semana." },
+    { sel: [".az-acoes .az-acao", ".acts.narrow-only .act", ".lt-split", ".lt-mais"], t: `Comece pelo primeiro ${termo.s}`, d: "Cadastre com o dia e o horário, e ele já entra na agenda toda semana." },
     { sel: [".hoje"], t: "O seu dia num cartão", d: "Quantas sessões, quanto entra hoje e a próxima, com o botão de entrar na sala quando for online." },
     { sel: [".lt-lista", ".nav-in"], t: "Tudo à mão", d: `Agenda, ${termo.p} e finanças ficam aqui. O número em cima mostra o que está esperando você.` },
     fotoEModos(doisModos),
   ],
   pessoal: ({ doisModos }) => [
-    { sel: [".ini-car .ini-g", ".c3-saldo"], t: "Seu mês num olhar", d: "Quanto entrou, quanto saiu e quanto ainda sobra até o fim do mês." },
+    { sel: [".az-car .az-saldo", ".ini-car .ini-g", ".c3-saldo"], t: "Seu mês num olhar", d: "Quanto entrou, quanto saiu e quanto ainda sobra até o fim do mês." },
     { sel: [".lt-lista", ".nav-in"], t: "Gastos, contas e carro", d: "Ficam aqui. Eu aviso um dia antes de cada conta vencer." },
     fotoEModos(doisModos),
   ],

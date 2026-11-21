@@ -87,9 +87,10 @@ export function AlertasTela({ falas, onClose }) {
       <div className="tela-cheia-in">
         <button className="tela-voltar" onClick={onClose} aria-label="Voltar"><I.setaL /></button>
         <h1 className="tela-t">Alertas</h1>
+        {falas.length > 0 && <p className="al-sub">{acao.length ? `${acao.length} ${acao.length === 1 ? "coisa pede" : "coisas pedem"} a sua atenção` : "Nada urgente por aqui"}</p>}
         {!falas.length && <div className="al-vazio"><Ilustra n="cafe" /><b>Tudo em dia</b><span>Quando algo pedir a sua atenção, aparece aqui.</span></div>}
-        {acao.length > 0 && <><h2 className="al-grupo">Pede atenção</h2>{acao.map((f, i) => <Linha key={"a" + i} f={f} />)}</>}
-        {info.length > 0 && <><h2 className="al-grupo">Para saber</h2>{info.map((f, i) => <Linha key={"i" + i} f={f} />)}</>}
+        {acao.length > 0 && <><h2 className="al-grupo">Pede atenção</h2><section className="al-cartao">{acao.map((f, i) => <Linha key={"a" + i} f={f} />)}</section></>}
+        {info.length > 0 && <><h2 className="al-grupo">Para saber</h2><section className="al-cartao">{info.map((f, i) => <Linha key={"i" + i} f={f} />)}</section></>}
       </div>
     </div>, document.body);
 }

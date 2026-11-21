@@ -296,6 +296,52 @@ function mensagem(db, c, nomeProf) {
   return t;
 }
 
+// Lembrete gentil de um pagamento que ficou para trás (o cartão "Esperando pagamento" do Início)
+function lembretePagamento(db, c, nomeProf) {
+  const p = db.patients.find(x => x.id === c.patientId);
+  const ss = c.sessionIds.map(id => db.sessions.find(s => s.id === id)).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
+  const datas = ss.map(s => dm(s.date)), lista = datas.length > 1 ? datas.slice(0, -1).join(", ") + " e " + datas[datas.length - 1] : datas[0];
+  let t = `Oi, ${p ? primeiro(p.name) : ""}! Tudo bem?\n\nPassando só para lembrar do pagamento de ${brlReal(c.amount)}${lista ? ` (${ss.length > 1 ? "sessões de" : "sessão de"} ${lista})` : ""}.\n`;
+  if (db.settings.pix) t += `Pix: ${db.settings.pix}\n`;
+  t += `\nSe já fez, pode desconsiderar. Obrigado(a)!`;
+  if (nomeProf) t += `\n${nomeProf}`;
+  return t;
+}
+const linkWhats = (fone, txt) => { const d = String(fone || "").replace(/\D/g, ""); return `https://wa.me/${d.length >= 10 && d.length <= 11 ? "55" + d : d}?text=${encodeURIComponent(txt)}`; };
+
+// Cobranças esperando: abertas há mais de 3 dias e não lembradas nos últimos 5. Um toque abre o WhatsApp com o lembrete.
+function EsperandoPagamento({ db, conta, act }) {
+  const t = todayISO(), limite = addDays(t, -3), pausa = addDays(t, -5);
+  const lista = db.charges.filter(c => !c.hidden && !c.paid && (c.createdAt || t) <= limite && !(c.lembradoEm && c.lembradoEm > pausa))
+    .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+  if (!lista.length) return null;
+  const nomeProf = ((conta.perfil || {}).doc || {}).nome || conta.nome;
+  return (
+    <section className="az-espera" aria-label="Esperando pagamento">
+      <div className="az-espera-cab"><b>Esperando pagamento</b><small>{lista.length === 1 ? "1 cobrança" : `${lista.length} cobranças`} · {brl(soma(lista, c => c.amount))}</small></div>
+      {lista.slice(0, 3).map(c => {
+        const p = db.patients.find(x => x.id === c.patientId) || { name: "Removido" };
+        const dias = diffDias(c.createdAt || t, t);
+        return (
+          <div key={c.id} className="az-espera-l">
+            <button type="button" className="az-espera-p" onClick={() => act.openCharge(c.id)}>
+              <span className="txn-av" style={corVars(p)}>{iniciais(p.name)}</span>
+              <span><b>{p.name}</b><small>{brlReal(c.amount)} · {dias} {dias === 1 ? "dia" : "dias"}{c.lembradoEm ? " · lembrado" : ""}</small></span>
+            </button>
+            <span className="az-espera-a">
+              <button type="button" className="az-espera-pago" onClick={() => act.setPago(c.id, true)} aria-label={`${p.name} pagou`}><I.check /></button>
+              {p.phone
+                ? <a className="az-espera-lembrar" href={linkWhats(p.phone, lembretePagamento(db, c, nomeProf))} target="_blank" rel="noopener noreferrer" onClick={() => act.lembrouCobranca(c.id)}><I.send />Lembrar</a>
+                : <button type="button" className="az-espera-lembrar" onClick={() => { copiarTexto(lembretePagamento(db, c, nomeProf), act, "Lembrete copiado"); act.lembrouCobranca(c.id); }}><I.copy />Copiar</button>}
+            </span>
+          </div>
+        );
+      })}
+      {lista.length > 3 && <button type="button" className="az-espera-mais" onClick={() => act.setTab("fin")}>Ver as {lista.length} em Finanças</button>}
+    </section>
+  );
+}
+
 // Líquido do consultório num dia ou num mês (usado também no modo Pessoal)
 const liquidoDia = (db, iso) => soma(db.sessions.filter(s => contaDinheiro(s) && s.date === iso), s => s.price - s.sublet);
 const liquidoMes = (db, chave) => soma(db.sessions.filter(s => contaDinheiro(s) && s.date.startsWith(chave)), s => s.price - s.sublet);
@@ -2512,6 +2558,7 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
       ]} />
       <GradeAtalhos itens={atalhos} />
       {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
+      <EsperandoPagamento db={db} conta={conta} act={act} />
       <HojeConsultorio db={db} now={now} act={act} clima={<WeatherChip cidade={pf.cidade} act={act} sessao={prox} />} />
       {!temLink ? <CartaoNovidade icone={I.share} titulo="Seu link de agendamento" texto="Coloque na bio do Instagram: quem chega vê a sua página e já pede um horário." onClick={() => act.openSettings("link")} />
         : !temCal ? <CartaoNovidade icone={I.cal} titulo="Sessões no Google Agenda" texto="Veja a agenda do Avina junto com o resto do seu dia, no Google ou no iPhone." onClick={() => act.openSettings("calendario")} />
@@ -4728,9 +4775,15 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
   useEffect(() => gravar(K.oculto, oculto), [oculto]);
   useEffect(() => { const i = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(i); }, []);
   useEffect(() => { if (pronto) notify(`Tudo pronto, ${conta.nome}! Vamos começar.`); else if (novo) notify(`Boas-vindas, ${conta.nome}!`); }, []);
-  // Atalhos por link: ...#gasto abre o gasto por voz, #agora o "Só o agora", #fechar o "Fechar o dia", #livres os horários livres
+  // Atalhos por link (e do ícone do app instalado): #gasto anota um gasto, #paciente abre o novo paciente, #hoje a agenda
+  // de hoje, #agora o "Só o agora", #fechar o "Fechar o dia", #livres os horários livres
   useEffect(() => {
     const h = (location.hash || "").slice(1);
+    if (["gasto", "paciente", "hoje"].includes(h)) history.replaceState(null, "", location.pathname + location.search); // não repete ao recarregar
+    if (h === "paciente" || h === "hoje") {
+      if (modos.includes("consultorio")) act.setModo("consultorio");
+      setTimeout(() => (h === "paciente" ? act.novoPaciente() : act.setTab("agenda")), 300);
+    }
     if (h === "gasto" && usaPessoal) { act.setModo("pessoal"); setTimeout(() => IA_CONVERSA && vozApi.current.comecar ? vozApi.current.comecar() : act.novoLanc("saida"), 400); }
     else if (h === "agora") setFoco(true);
     else if (h === "fechar") setSheet({ type: "fechar" });
@@ -5117,6 +5170,7 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
     salvarWhatsapp: whatsapp => onAtualizar({ whatsapp }),
     contaAtual: () => conta,
     marcarRecibo: ids => { const s = new Set(ids), h = todayISO(); setDb(d => ({ ...d, charges: d.charges.map(c => s.has(c.id) ? { ...c, reciboEm: h } : c) })); },
+    lembrouCobranca: cid => setDb(d => ({ ...d, charges: d.charges.map(c => c.id === cid ? { ...c, lembradoEm: todayISO() } : c) })),
     marcarReceitaSaude: cid => { vibrar("toque"); setDb(d => ({ ...d, charges: d.charges.map(c => c.id === cid ? { ...c, rsaude: !c.rsaude } : c) })); },
     salvarCofre: cofre => setDb(d => ({ ...d, cofre })),
     trocarCofre: (cofre, notas) => { setDb(d => { const n = { ...d, notas }; if (cofre) n.cofre = cofre; else delete n.cofre; return n; }); notify(cofre ? "Senha trocada" : "Anotações apagadas. Crie uma senha nova."); },

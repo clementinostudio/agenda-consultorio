@@ -1,6 +1,7 @@
 // Parte do app carregada sob demanda: o modo Loja (caixa do dia, gastos, o que falta, resumo e equipe)
 import React, { useEffect, useState } from "react";
-import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, vibrar, Ilustra, ConfirmButton, iniciais, catVars, CatIcon, TopBar, HelloRow, Toggle, CORES, diaCurto } from "../App.jsx";
+import { AcoesAzuis } from "../blocos.jsx";
+import { I, Sheet, Field, Seg, Money, brl, brlReal, num, soNumero, fmtNum, todayISO, addDays, MES_LONGO, pad, dm, vibrar, Ilustra, ConfirmButton, iniciais, catVars, CatIcon, TopBar, Toggle, CORES, diaCurto } from "../App.jsx";
 import { PAGAMENTOS, pagDe, CATS_LOJA, catLoja, CEDULAS, CORES_PRODUTO, MAX_AJUDANTES, totaisDia, gaveta, maisVendidos, totaisPeriodo, porDia, pixCopiaECola, somaV, lojaTravada, PRODUTOS_SUGERIDOS } from "../loja.js";
 import { lerItem, nomeLoja } from "../nota.js";
 import { LIMITE_GRATIS } from "../plano.js";
@@ -33,31 +34,31 @@ function SemLoja({ L, conta, act, tema }) {
   const criar = async () => { setOcupado(true); setErro(""); try { await L.criar(nome.trim() || "Minha loja"); vibrar("ok"); act.toast("Loja aberta! Agora cadastre o que você vende."); } catch (e) { setErro(erroDe(e)); vibrar("erro"); } setOcupado(false); };
   return (
     <div className="page lj-pg">
-      <HelloRow conta={conta} act={act} tema={tema} modo="loja" />
-      <h1 className="hello-t">Vamos tirar o caixa<br />do <b>papel</b>?</h1>
-      <div className="cols"><div className="col">
-        <section className="panel casa-criar">
-          {L.estado === "carregando" ? <p className="hint">Abrindo a loja…</p>
-            : L.estado === "indisponivel" ? <p className="hint">A loja ainda está sendo ligada na nuvem. Daqui a pouco ela aparece aqui.</p>
-            : L.estado === "erro" ? <><p className="hint">Não consegui abrir a loja agora. Confira a internet.</p><button className="btn ghost" onClick={L.recarregar}>Tentar de novo</button></>
-            : <>
-              <div className="casa-intro">
-                <Ilustra n="dinheiro" />
-                <ul>
-                  <li><b>Cada venda em um toque</b>: cadastre os produtos e toque neles na hora de vender.</li>
-                  <li><b>Fechar o caixa</b>: o app diz quanto deveria ter na gaveta. Você conta e vê se bateu.</li>
-                  <li><b>Gastos da loja</b> separados do seu dinheiro: insumos, embalagem, gás, ajudante…</li>
-                  <li><b>A lista do que falta</b> e o resumo do dia, da semana e do mês.</li>
-                  <li><b>Quem ajuda anota junto</b>, cada um no seu celular{act.lojaPro || noApp ? "" : " (no Pro Loja)"}.</li>
-                </ul>
-              </div>
-              <div className="fields"><Field label="Nome da loja" htmlFor="lj-nome"><input id="lj-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Doces da Ana, Sorveteria Gelato" maxLength={60} /></Field></div>
-              {erro && <div className="error">{erro}</div>}
-              <button className="btn mode" disabled={ocupado} onClick={criar}><I.check /> {ocupado ? "Abrindo…" : "Abrir minha loja"}</button>
-              <div className="hint">Vai ajudar na loja de alguém? Peça o link de convite para quem cuida dela.</div>
-            </>}
-        </section>
-      </div></div>
+      <TopBar eyebrow="Loja" title="Sua loja" act={act} tema={tema} />
+      <div className="lj-novo">
+        {L.estado === "carregando" ? <p className="hint">Abrindo a loja…</p>
+          : L.estado === "indisponivel" ? <p className="hint">A loja ainda está sendo ligada na nuvem. Daqui a pouco ela aparece aqui.</p>
+          : L.estado === "erro" ? <><p className="hint">Não consegui abrir a loja agora. Confira a internet.</p><button className="btn ghost" onClick={L.recarregar}>Tentar de novo</button></>
+          : <>
+            {/* o convite em destaque, no cartão azul do visual novo */}
+            <section className="lj-heroi">
+              <Ilustra n="dinheiro" />
+              <h2>Vamos tirar o caixa do papel?</h2>
+              <p>Vendas, gastos e o caixa do dia, tudo no celular.</p>
+            </section>
+            <ul className="lj-beneficios">
+              <li><i><I.check /></i><span><b>Cada venda em um toque</b>: cadastre os produtos e toque neles na hora de vender.</span></li>
+              <li><i><I.wallet /></i><span><b>Fechar o caixa</b>: o app diz quanto deveria ter na gaveta. Você conta e vê se bateu.</span></li>
+              <li><i><I.receipt /></i><span><b>Gastos da loja</b> separados do seu dinheiro: insumos, embalagem, gás, ajudante…</span></li>
+              <li><i><I.cart /></i><span><b>A lista do que falta</b> e o resumo do dia, da semana e do mês.</span></li>
+              <li><i><I.users /></i><span><b>Quem ajuda anota junto</b>, cada um no seu celular{act.lojaPro || noApp ? "" : " (no Pro Loja)"}.</span></li>
+            </ul>
+            <div className="fields"><Field label="Nome da loja" htmlFor="lj-nome"><input id="lj-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Doces da Ana, Sorveteria Gelato" maxLength={60} /></Field></div>
+            {erro && <div className="error">{erro}</div>}
+            <button className="btn mode lj-abrir" disabled={ocupado} onClick={criar}><I.check /> {ocupado ? "Abrindo…" : "Abrir minha loja"}</button>
+            <div className="hint">Vai ajudar na loja de alguém? Peça o link de convite para quem cuida dela.</div>
+          </>}
+      </div>
     </div>
   );
 }
@@ -110,11 +111,13 @@ export function LojaCaixa({ loja: L, conta, act, tema }) {
 
   return (
     <div className="page lj-pg">
-      <HelloRow conta={conta} act={act} tema={tema} modo="loja" />
-      <header className="lj-topo">
-        <div><div className="eyebrow">{diaCurto(hoje)}{L.membros.length > 1 ? ` · ${L.membros.length} pessoas` : ""}</div><h1>{L.loja.nome}</h1></div>
-        <button className="icon-btn" onClick={() => act.abrirLoja("ajustes")} aria-label="Ajustes e equipe da loja"><I.gear /></button>
-      </header>
+      <TopBar eyebrow={`${diaCurto(hoje)}${L.membros.length > 1 ? ` · ${L.membros.length} pessoas` : ""}`} title={L.loja.nome} act={act} tema={tema}
+        extra={<button className="icon-btn" onClick={() => act.abrirLoja("ajustes")} aria-label="Ajustes e equipe da loja"><I.gear /></button>} />
+      <AcoesAzuis tres itens={[
+        { id: "gasto", l: "Anotar gasto", ic: I.minus, f: () => act.abrirLoja("gasto", {}) },
+        { id: "mov", l: "Tirar ou pôr", ic: I.repeat, f: () => act.abrirLoja("mov", {}) },
+        { id: "fechar", l: G.fechado ? "Caixa fechado" : "Fechar caixa", ic: I.wallet, f: () => act.abrirLoja("fechar", {}) },
+      ]} />
       <AvisoEquipe L={L} act={act} />
       {/* disse no cadastro que tem ajuda: lembra de chamar a equipe */}
       {L.souDona && L.membros.length < 2 && L.nuvem && conta.perfil && conta.perfil.lojaEquipe && <button className="casa-convite lj-chamar" onClick={() => act.abrirLoja("ajustes")}>
@@ -172,11 +175,6 @@ export function LojaCaixa({ loja: L, conta, act, tema }) {
             </section>
           )}
 
-          <div className="lj-acoes">
-            <button className="act" onClick={() => act.abrirLoja("gasto", {})}><i><I.minus /></i>Gasto</button>
-            <button className="act" onClick={() => act.abrirLoja("mov", {})}><i><I.repeat /></i>Tirar ou pôr</button>
-            <button className="act" onClick={() => act.abrirLoja("fechar", {})}><i><I.wallet /></i>{G.fechado ? "Caixa fechado" : "Fechar caixa"}</button>
-          </div>
         </div>
 
         <div className="col">

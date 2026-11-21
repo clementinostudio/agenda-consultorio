@@ -1200,16 +1200,6 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .aviso-pilula b { font-weight: 800; }
 .aviso-pilula.offline i { background: rgba(255, 182, 72, .18); color: #FFB648; }
 .aviso-pilula.online i { background: rgba(70, 224, 164, .18); color: #46E0A4; }
-.aviso-versao { width: min(100%, 460px); display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; border-radius: 22px; color: #F4F4F5; background: rgba(26, 26, 29, .95); border: 1px solid rgba(255, 255, 255, .1); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: 0 16px 40px rgba(0, 0, 0, .35); }
-.aviso-versao > i { width: 36px; height: 36px; border-radius: 12px; flex: none; display: grid; place-items: center; color: #fff; background: linear-gradient(#06CFFF, #1167F6 70%, #2B2CF0); }
-.aviso-versao > i svg { width: 18px; height: 18px; }
-.aviso-versao > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.aviso-versao b { font-size: 14.5px; font-weight: 800; }
-.aviso-versao span { font-size: 12.5px; color: #9AA1B0; }
-.aviso-versao button { flex: none; height: 36px; padding: 0 14px; border-radius: 999px; font-weight: 800; font-size: 13.5px; }
-.av-depois { color: #9AA1B0; background: none; padding: 0 8px !important; }
-.av-atualizar { color: #fff; background: #1167F6; }
-.av-atualizar:disabled { opacity: .7; }
 @keyframes aviso-desce { from { opacity: 0; transform: translateY(-16px) scale(.96); } }
 @media (min-width: 900px) { .avisos-sis { top: 20px; left: var(--lado); } }
 @media (prefers-reduced-motion: reduce) { .avisos-sis > * { animation: none; } }
