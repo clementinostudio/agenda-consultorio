@@ -1579,6 +1579,15 @@ const vivas = () => CAMADAS.filter(c => !c.voltou).length;
 const porGuarda = () => { if (guarda) return; try { history.pushState({ alvenaGuarda: 1 }, ""); guarda = true; } catch (e) {} };
 // a cor da névoa, lida uma vez por tema: ler o estilo a cada painel que abre forçava recalcular a página inteira
 let NEVOA = null;
+// Qual azul está no topo da tela agora (ou null): a barra de status do celular pega a mesma cor
+function topoAzul() {
+  if (document.documentElement.classList.contains("menu-aberto")) return [43, 70, 255];
+  const el = document.querySelector(".perfil-top.azul, .pf-hero, .entrar-topo");
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  if (r.top > 2 || r.bottom <= 0) return null;
+  return el.classList.contains("entrar-topo") ? [43, 70, 255] : [31, 59, 239];
+}
 function corDaBarra(temaMudou) {
   try {
     // a barra de status fica sempre escura, na cor da névoa do topo (combina com ela nos dois temas)
@@ -1588,7 +1597,9 @@ function corDaBarra(temaMudou) {
       if (m.length < 3) return;
       NEVOA = m;
     }
-    const m = NEVOA, k = CAMADAS.some(c => c.escurece) ? .42 : 1;
+    // com o topo azul à vista (perfil e as páginas dele, entrar/criar conta, menu lateral aberto), a barra fica azul junto
+    const azul = topoAzul();
+    const m = azul || NEVOA, k = CAMADAS.some(c => c.escurece) ? .42 : 1;
     const hex = "#" + m.map(x => Math.round(x * k).toString(16).padStart(2, "0")).join("");
     document.querySelectorAll('meta[name="theme-color"]').forEach(el => { el.setAttribute("content", hex); el.removeAttribute("media"); });
   } catch (e) {}
@@ -1597,7 +1608,7 @@ function mudouCamadas() {
   const raiz = document.documentElement, recua = CAMADAS.some(c => c.recua);
   if (recua && !raiz.classList.contains("com-camada")) raiz.style.setProperty("--recuo-y", `${Math.round(window.scrollY + window.innerHeight / 2)}px`);
   raiz.classList.toggle("com-camada", recua);
-  corDaBarra();
+  corDaBarra(); setTimeout(corDaBarra, 80); // de novo depois que a tela nova desenhou (o topo azul pode ter acabado de aparecer)
   clearTimeout(tVolta);
   if (vivas()) porGuarda();
   // tudo fechou pelo app (X, arrastar, salvar): tira a guarda, mas só se nada abrir logo em seguida
@@ -2124,6 +2135,7 @@ function AreaChart({ serie, cor }) {
 // Moldura das telas de entrar, criar conta, WhatsApp e senha nova: o topo azul com o "avina" por extenso (o mesmo da
 // barra de cima) e um cartão branco que sobe por cima dele. Estilos em src/azul.css (seção 18).
 function TelaEntrar({ topo, children, pe }) {
+  useEffect(() => { corDaBarra(); return () => setTimeout(corDaBarra, 0); }, []);
   return (
     <main className="entrar">
       <header className="entrar-topo">
@@ -2214,7 +2226,7 @@ function Auth({ onLogin, emailInicial, aviso }) {
       </div>
       <form className="stack" onSubmit={enviar} noValidate>
         <div className="fields">
-          {criar && <Field label="Como quer ser chamado(a)" icon={<I.user />} htmlFor="a-nome"><input id="a-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Camila" autoComplete="given-name" /></Field>}
+          {criar && <Field label="Como quer ser chamado(a)" icon={<I.user />} htmlFor="a-nome"><input id="a-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Felipe" autoComplete="given-name" /></Field>}
           <Field label="E-mail" icon={<I.mail />} htmlFor="a-email"><input id="a-email" type="email" inputMode="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="voce@email.com" autoComplete={criar ? "email" : "username"} /></Field>
           {!esqueci && <Field label="Senha" icon={<I.lock />} htmlFor="a-senha"><input id="a-senha" type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••••" autoComplete={criar ? "new-password" : "current-password"} /></Field>}
         </div>
@@ -4672,10 +4684,10 @@ function Painel({ conta, novo, pronto, tema, onSair, onAtualizar, onPerfilNuvem 
       raiz.classList.add("menu-fixo");
     }
     vibrar("toque"); setMenu(true);
-    requestAnimationFrame(() => requestAnimationFrame(() => raiz.classList.add("menu-aberto")));
+    requestAnimationFrame(() => requestAnimationFrame(() => { raiz.classList.add("menu-aberto"); corDaBarra(); }));
   };
   const fecharMenu = () => {
-    setMenu(false); raiz.classList.remove("menu-aberto");
+    setMenu(false); raiz.classList.remove("menu-aberto"); corDaBarra();
     clearTimeout(menuT.current);
     menuT.current = setTimeout(() => raiz.classList.remove("menu-fixo"), 520);
   };
