@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, useDeferredValue } from "react";
 import { useCotacoes, MOEDAS, CODIGOS, emReais, fmtMoeda, fmtTaxa, IOF_CARTAO } from "../cotacoes.js";
 import { ViagemAviso } from "./dinheiro.jsx";
-import { AcoesAzuis, CarrosselSaldo, GradeAtalhos, CartaoResumo, noPeriodo } from "../blocos.jsx";
+import { AcoesAzuis, CarrosselSaldo, PrimeirosPassos, GradeAtalhos, CartaoResumo, noPeriodo } from "../blocos.jsx";
 import { CartoesInicio } from "./inicio-cartoes.jsx";
 import { CatBolinha, Topo, Comparacao } from "./visual.jsx";
 import { SeloBanco, nomeBanco } from "./bancos.jsx";
@@ -387,6 +387,12 @@ function PessoalHome({ db, conta, now, act, tema, avisos }) {
       {avisos}
       <AcoesAzuis itens={acoes} />
       <CarrosselSaldo act={act} cartoes={cartoes} />
+      <PrimeirosPassos chave={`${conta.email}:pessoal`} passos={[
+        { id: "gasto", l: "Anote seu primeiro gasto", d: "Leva 5 segundos: valor e categoria", feito: P.lanc.some(l => l.tipo === "saida"), f: () => act.novoLanc("saida") },
+        { id: "conta", l: "Coloque uma conta fixa", d: "Aluguel, luz, internet: eu aviso antes de vencer", feito: P.contas.length > 0, f: () => act.novaConta() },
+        { id: "extrato", l: "Traga o extrato do banco", d: "Os gastos do mês entram de uma vez", feito: P.lanc.some(l => l.importId || l.banco), f: act.importar },
+        { id: "teto", l: "Defina um teto para o mês", d: "Eu aviso quando chegar perto", feito: Object.values(P.limites || {}).some(v => v > 0), f: () => act.abrirTeto() },
+      ]} />
       <ViagemAviso db={db} act={act} />
       <GradeAtalhos itens={atalhos} />
       <CasaCartao casa={act.casa} onAbrir={act.abrirCasa} />

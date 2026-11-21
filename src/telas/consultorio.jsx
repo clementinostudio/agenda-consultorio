@@ -1,6 +1,6 @@
 // Parte do app carregada sob demanda: recibo em PDF, declaração e contrato, relatório para o imposto e anotações de sessão trancadas.
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { I, Sheet, Field, Toggle, Seg, ConfirmButton, brl, brlReal, todayISO, addDays, MES_LONGO, DIA_LONGO, pad, dm, fromISO, mins, hhmm, num, fmtNum, PERFIL, termoDe, vibrar, Ilustra } from "../App.jsx";
+import { I, Sheet, Field, Toggle, Seg, ConfirmButton, brl, brlReal, todayISO, addDays, MES_LONGO, DIA_LONGO, pad, dm, fromISO, mins, hhmm, num, fmtNum, PERFIL, termoDe, vibrar, Ilustra, copiarTexto } from "../App.jsx";
 import { aberto, criarCofre, destrancar, trancar, abrirTexto, fecharCofre, mexeu, trocarSenha, novoCodigo, comRecuperacao, senhaDoCodigo } from "../cofre.js";
 import { porExtenso, fmtCPF, cpfValido, dataLonga, novoPDF, pdfRecibo, pdfProntuario, pdfDeclaracao, textoDeclaracao, pdfContrato } from "../documentos-pdf.js";
 export { porExtenso, fmtCPF, cpfValido, pdfRecibo };
@@ -397,6 +397,58 @@ export async function pdfImposto(db, conta, ano) {
   return doc.output("blob");
 }
 
+// Lançar no Receita Saúde, um pagamento por vez: cada dado que o app da Receita pede, com o botão de copiar ao lado.
+// "Lancei" marca o pagamento e já mostra o próximo. Nada sai do aparelho: é só para copiar e colar.
+function LancarReceitaSaude({ db, conta, pend, act, onFim }) {
+  const [inicial] = useState(pend.length);
+  const [pulados, setPulados] = useState(() => new Set());
+  const c = pend.find(x => !pulados.has(x.id));
+  const feitos = inicial - pend.length;
+  if (!c) return (
+    <div className="rs-fim">
+      <span className="rs-fim-ic"><I.check /></span>
+      <b>{pend.length ? "Você passou por todos" : "Tudo lançado!"}</b>
+      <small>{pend.length ? `${pend.length} ${pend.length === 1 ? "ficou" : "ficaram"} para depois (sem marcar).` : `${feitos} ${feitos === 1 ? "recibo lançado" : "recibos lançados"} no Receita Saúde.`}</small>
+      <button className="btn mode" onClick={onFim}>Voltar para o resumo</button>
+    </div>
+  );
+  const l = linhaImposto(db, c), mesma = l.pagador === l.nome;
+  const prof = ((conta.perfil || {}).profissao || "Psicologia").toLowerCase();
+  const datas = l.sessoes ? l.sessoes.split(" ") : [];
+  const desc = `Atendimento em ${prof}${datas.length ? ` (${datas.length === 1 ? "sessão de" : "sessões de"} ${datas.join(", ")})` : ""}`;
+  const copiar = (v, o) => { vibrar("toque"); copiarTexto(v, act, `${o} copiado`); };
+  const Dado = ({ rotulo, valor, copia, falta }) => (
+    <div className={"rs-dado" + (falta ? " falta" : "")}>
+      <span><small>{rotulo}</small><b>{valor}</b></span>
+      {!falta && <button type="button" className="rs-copiar" onClick={() => copiar(copia, rotulo)} aria-label={`Copiar ${rotulo}`}><I.copy />Copiar</button>}
+      {falta && <button type="button" className="rs-copiar" onClick={() => act.editPatient(c.patientId)}><I.pencil />Colocar</button>}
+    </div>
+  );
+  return (
+    <div className="rs">
+      <div className="rs-topo">
+        <span>Recibo {feitos + 1} de {inicial}</span>
+        <span className="rs-barra" aria-hidden="true"><i style={{ width: `${(feitos / Math.max(1, inicial)) * 100}%` }} /></span>
+      </div>
+      <div className="rs-cartao-pag">
+        <small>Pagamento de {dataBR(l.data)}</small>
+        <b>{mesma ? l.nome : `${l.nome}, pago por ${l.pagador}`}</b>
+      </div>
+      <div className="rs-dados">
+        <Dado rotulo="CPF de quem pagou" valor={l.cpfPag ? fmtCPF(l.cpfPag) : "Falta o CPF"} copia={l.cpfPag} falta={!l.cpfPag} />
+        {mesma ? <div className="rs-dado"><span><small>Quem foi atendido</small><b>A mesma pessoa que pagou</b></span></div>
+          : <Dado rotulo="CPF de quem foi atendido" valor={l.cpf ? fmtCPF(l.cpf) : "Falta o CPF"} copia={l.cpf} falta={!l.cpf} />}
+        <Dado rotulo="Valor" valor={brlReal(l.valor)} copia={l.valor.toFixed(2).replace(".", ",")} />
+        <Dado rotulo="Data do pagamento" valor={dataBR(l.data)} copia={dataBR(l.data)} />
+        <Dado rotulo="Descrição" valor={desc} copia={desc} />
+      </div>
+      <button className="btn mode" onClick={() => { vibrar("ok"); act.marcarReceitaSaude(c.id); }}><I.check /> Lancei · próximo</button>
+      <button className="btn ghost" onClick={() => setPulados(new Set([...pulados, c.id]))}>Pular este por agora</button>
+      <p className="hint">Abra o app <b>Receita Saúde</b> (da Receita Federal) ao lado, emita o recibo com estes dados e volte aqui para marcar.</p>
+    </div>
+  );
+}
+
 export function ImpostoSheet({ db, conta, onClose, act }) {
   const todos = pagos(db);
   const anos = [...new Set([todayISO().slice(0, 4), ...todos.map(c => c.paidAt.slice(0, 4))])].sort().reverse();
@@ -408,6 +460,9 @@ export function ImpostoSheet({ db, conta, onClose, act }) {
   const feitos = doAno.filter(c => c.rsaude).length;
   const T = termoDe(PERFIL.termo || "Paciente");
   const linha = c => linhaImposto(db, c);
+  // os que faltam lançar no Receita Saúde neste ano, do mais antigo ao mais novo
+  const pend = doAno.filter(c => !c.rsaude).slice().reverse();
+  const [lancar, setLancar] = useState(false);
 
   const csv = () => new Blob([csvImposto(db, ano)], { type: "text/csv;charset=utf-8" });
   const pdf = () => pdfImposto(db, conta, ano);
@@ -419,7 +474,18 @@ export function ImpostoSheet({ db, conta, onClose, act }) {
   };
 
   return (
+    lancar ? <Sheet title="Lançar no Receita Saúde" onClose={() => setLancar(false)}>
+      <LancarReceitaSaude db={db} conta={conta} pend={pend} act={act} onFim={() => setLancar(false)} />
+    </Sheet> :
     <Sheet title="Imposto de Renda" sub="O que você recebeu, mês a mês" onClose={onClose}>
+      {pend.length > 0 && (
+        <button type="button" className="rs-chamada" onClick={() => { vibrar("toque"); setLancar(true); }}>
+          <span className="rs-chamada-ic"><I.receipt /></span>
+          <span className="rs-chamada-t"><b>{pend.length} {pend.length === 1 ? "recibo para lançar" : "recibos para lançar"}</b><small>No Receita Saúde, um por vez, copiando cada dado</small></span>
+          <em>Lançar</em>
+        </button>
+      )}
+      {doAno.length > 0 && pend.length === 0 && <div className="rs-ok"><I.check /><span>Todos os recibos de {ano} estão no Receita Saúde.</span></div>}
       <div className="seg-anos" role="tablist">{anos.map(a => <button key={a} role="tab" aria-selected={a === ano} className={"fchip" + (a === ano ? " on" : "")} onClick={() => setAno(a)}>{a}</button>)}</div>
       <div className="kv">
         <div><span>Recebido em {ano}</span><b className="num">{brl(total)}</b></div>

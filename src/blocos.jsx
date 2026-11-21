@@ -52,6 +52,35 @@ export function CarrosselSaldo({ cartoes, act }) {
   );
 }
 
+// Primeiros passos: as tarefas para começar, com a barrinha de quanto já foi feito. Some quando tudo estiver feito
+// ou quando a pessoa tocar em "Esconder" (guardado só neste aparelho). passos: [{ id, l, d, feito, f }]
+export function PrimeirosPassos({ passos, chave }) {
+  const k = "avina-passos-escondido:" + chave;
+  const [escondido, setEscondido] = useState(() => { try { return localStorage.getItem(k) === "1"; } catch (e) { return false; } });
+  const feitos = passos.filter(x => x.feito).length;
+  if (escondido || feitos === passos.length) return null;
+  const esconder = () => { try { localStorage.setItem(k, "1"); } catch (e) {} setEscondido(true); };
+  const proximo = passos.find(x => !x.feito);
+  return (
+    <section className="az-passos" aria-label="Primeiros passos">
+      <div className="az-passos-cab">
+        <span><b>Primeiros passos</b><small>{feitos} de {passos.length} feitos</small></span>
+        <button type="button" className="az-passos-x" onClick={esconder}>Esconder</button>
+      </div>
+      <span className="az-passos-barra" aria-hidden="true"><i style={{ width: `${(feitos / passos.length) * 100}%` }} /></span>
+      <div className="az-passos-lista">
+        {passos.map(x => (
+          <button key={x.id} type="button" className={"az-passo" + (x.feito ? " feito" : "") + (x === proximo ? " agora" : "")} onClick={x.f} disabled={x.feito}>
+            <span className="az-passo-ok" aria-hidden="true">{x.feito && <I.check />}</span>
+            <span className="az-passo-t"><b>{x.l}</b>{!x.feito && x.d && <small>{x.d}</small>}</span>
+            {!x.feito && <I.chev />}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // Grade de atalhos: quadrados brancos com o ícone azul e o nome embaixo. itens: [{ id, l, ic, f, n? }]
 export function GradeAtalhos({ titulo, itens }) {
   return (

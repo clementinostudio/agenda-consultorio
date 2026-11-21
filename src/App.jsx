@@ -28,7 +28,7 @@ import { LIMITE_GRATIS, LANCAMENTO_ATE, liberadoDe, ehPro, produtoDoUso, faseCor
 import { lerWhatsapp, mascaraWhatsapp } from "./whatsapp.js";
 import { K_ORIGEM } from "./origem.js";
 import { useLinkAgendamento, confirmacaoDe } from "./link.js";
-import { AcoesAzuis, CarrosselSaldo, GradeAtalhos, CartaoNovidade, CartaoResumo, ListaAcoes, noPeriodo } from "./blocos.jsx";
+import { AcoesAzuis, CarrosselSaldo, PrimeirosPassos, GradeAtalhos, CartaoNovidade, CartaoResumo, ListaAcoes, noPeriodo } from "./blocos.jsx";
 import { noApp, nativoV2, chamarApp, permitirIA, registrarNativo, enviarEstado } from "./app-nativo.js";
 import { createPortal, flushSync } from "react-dom";
 import { Svg, Marca, I } from "./icones.jsx";
@@ -2457,6 +2457,9 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
   const recebidoMes = soma(cs.filter(c => c.paid && (c.paidAt || "").startsWith(ch)), c => c.amount);
   const aReceber = soma(cs.filter(c => !c.paid), c => c.amount);
   const amanha = addDays(t, 1), nPedidos = (db.pedidos || []).length;
+  // pagamentos deste mês e do anterior que ainda não foram lançados no Receita Saúde (a bolinha no atalho "Imposto")
+  const iniRS = (() => { const d = new Date(now.getFullYear(), now.getMonth() - 1, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`; })();
+  const paraReceitaSaude = cs.filter(c => c.paid && !c.rsaude && (c.paidAt || "") >= iniRS).length;
   const acoes = [
     { id: "pac", l: `Novo ${TERMO.s}`, ic: I.plus, f: act.novoPaciente },
     { id: "cobrar", l: "Cobrar", ic: I.send, f: () => act.setTab("fin") },
@@ -2472,7 +2475,7 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
     { id: "fechar", l: "Fechar o dia", ic: I.moon, f: act.fecharDia },
     { id: "agora", l: "Só o agora", ic: I.target, f: act.agora },
     { id: "revisao", l: "Revisão", ic: I.chart, f: act.revisao },
-    { id: "imposto", l: "Imposto", ic: I.receipt, f: act.abrirImposto },
+    { id: "imposto", l: "Imposto", ic: I.receipt, f: act.abrirImposto, n: paraReceitaSaude },
   ];
   const linhas = per => {
     const f = noPeriodo(per), limite = addDays(t, -7);
@@ -2501,6 +2504,12 @@ function HomeTab({ db, conta, now, act, tema, avisos }) {
       {avisos}
       <AcoesAzuis itens={acoes} />
       <CarrosselSaldo act={act} cartoes={cartoesSaldo} />
+      <PrimeirosPassos chave={`${conta.email}:consultorio`} passos={[
+        { id: "pac", l: `Cadastre seu primeiro ${TERMO.s}`, d: "Nome, telefone e o valor da sessão", feito: db.patients.length > 0, f: act.novoPaciente },
+        { id: "pix", l: "Coloque sua chave Pix", d: "Ela entra sozinha nas cobranças", feito: !!db.settings.pix, f: () => act.openSettings("pix") },
+        { id: "docs", l: "Seus dados para os recibos", d: `Nome completo, CPF e registro no conselho`, feito: !!(pf.doc && pf.doc.nome && pf.doc.registro && pf.doc.cpf), f: () => act.openSettings("docs") },
+        { id: "link", l: "Ligue o link de agendamento", d: "Quem chega pelo Instagram já pede um horário", feito: temLink, f: () => act.openSettings("link") },
+      ]} />
       <GradeAtalhos itens={atalhos} />
       {atrasados.map(p => <PendingCard key={p.id} p={p} act={act} />)}
       <HojeConsultorio db={db} now={now} act={act} clima={<WeatherChip cidade={pf.cidade} act={act} sessao={prox} />} />
