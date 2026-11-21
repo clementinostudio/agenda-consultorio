@@ -882,24 +882,12 @@
 .al-cartao .al-acao svg { width: 16px; height: 16px; }
 
 /* =========================================================
-   22. Modo escuro com a cara do Avina: cinzas levemente azulados, o azul mais claro para ler bem
+   22. Modo escuro: os cinzas de antes, só o azul mais claro para ler bem no fundo escuro
    ========================================================= */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-app-theme="light"]) {
-    --bg: #0E1016; --bg-glow: #0E1016; --surface: #171A22; --card: #171A22; --surface-2: #1F232D; --surface-3: #2A2F3B;
-    --line: rgba(255, 255, 255, .07); --line-forte: rgba(255, 255, 255, .13);
-    --fg: #EEF0F5; --muted: #9AA2B4; --faint: #6B7385;
-    --card-shadow: 0 1px 2px rgba(0, 0, 0, .3); --accent: #6178FF; --accent-hi: #6178FF; --accent-soft: rgba(97, 120, 255, .16); --accent-ink: #8A9BFF;
-    --side-bg: #12141B; --nav-bg: #12141B; --topo-nevoa: #12141B; --cab-bg: #12141B; --cab-pill: #1F232D;
-  }
+  :root:not([data-theme="light"]):not([data-app-theme="light"]) { --accent: #6178FF; --accent-hi: #6178FF; --accent-soft: rgba(97, 120, 255, .16); --accent-ink: #8A9BFF; }
 }
-:root[data-theme="dark"]:not([data-app-theme="light"]), :root[data-app-theme="dark"] {
-  --bg: #0E1016; --bg-glow: #0E1016; --surface: #171A22; --card: #171A22; --surface-2: #1F232D; --surface-3: #2A2F3B;
-  --line: rgba(255, 255, 255, .07); --line-forte: rgba(255, 255, 255, .13);
-  --fg: #EEF0F5; --muted: #9AA2B4; --faint: #6B7385;
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, .3); --accent: #6178FF; --accent-hi: #6178FF; --accent-soft: rgba(97, 120, 255, .16); --accent-ink: #8A9BFF;
-  --side-bg: #12141B; --nav-bg: #12141B; --topo-nevoa: #12141B; --cab-bg: #12141B; --cab-pill: #1F232D;
-}
+:root[data-theme="dark"]:not([data-app-theme="light"]), :root[data-app-theme="dark"] { --accent: #6178FF; --accent-hi: #6178FF; --accent-soft: rgba(97, 120, 255, .16); --accent-ink: #8A9BFF; }
 /* no escuro, os botões azuis não brilham em volta (só uma sombra discreta) */
 :root[data-theme="dark"] .az-acao, :root[data-app-theme="dark"] .az-acao { box-shadow: 0 4px 12px rgba(0, 0, 0, .35); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-app-theme="light"]) .az-acao { box-shadow: 0 4px 12px rgba(0, 0, 0, .35); } }
