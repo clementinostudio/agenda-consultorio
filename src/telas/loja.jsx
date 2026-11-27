@@ -573,8 +573,10 @@ function MovSheet({ L, inicial, onClose, act }) {
 
 /* ---------- fechar o caixa: o que deveria ter, o que tem, e o troco para amanhã ---------- */
 function FecharSheet({ L, conta, onClose, act }) {
-  const hoje = todayISO();
-  const [dia, setDia] = useState(hoje);
+  const hoje = todayISO(), ontem = addDays(hoje, -1);
+  // fechou depois da meia-noite: o caixa que falta fechar é o de ontem (não o dia novo, que acabou de começar)
+  const madrugada = new Date().getHours() < 5 && !gaveta(L, ontem).fechado && !gaveta(L, hoje).fechado && totaisDia(L, hoje).vendas === 0 && totaisDia(L, ontem).vendas > 0;
+  const [dia, setDia] = useState(madrugada ? ontem : hoje);
   const G = gaveta(L, dia), T = totaisDia(L, dia);
   const f = G.fechado;
   const [troco, setTroco] = useState(() => fmtNum(G.troco));
@@ -605,6 +607,7 @@ function FecharSheet({ L, conta, onClose, act }) {
   const Linha = ({ l, v, sinal }) => <div className="lj-conta"><span>{l}</span><b className="num">{sinal}{brlReal(v)}</b></div>;
   return (
     <Sheet title={f ? "Caixa fechado" : "Fechar o caixa"} sub={dia === hoje ? "Hoje" : diaCurto(dia)} onClose={onClose}>
+      {madrugada && dia === ontem && <div className="hint">Já passou da meia-noite: este é o caixa de ontem. As vendas de agora ficam no dia de hoje.</div>}
       <div className="fields"><Field label="Dia" htmlFor="lf-d"><input id="lf-d" type="date" value={dia} max={hoje} onChange={e => e.target.value && setDia(e.target.value)} /></Field></div>
       <div className="lj-contas">
         <div className="lj-conta edit"><label htmlFor="lf-t">Troco do começo</label><input id="lf-t" inputMode="decimal" value={troco} onChange={e => setTroco(soNumero(e.target.value))} aria-label="Troco que tinha na gaveta no começo do dia" /></div>
@@ -641,6 +644,7 @@ function FecharSheet({ L, conta, onClose, act }) {
       {temContado && <div className="fields"><Field label="Fica de troco para amanhã" htmlFor="lf-x"><input id="lf-x" inputMode="decimal" value={deixou} onChange={e => setDeixou(soNumero(e.target.value))} placeholder={fmtNum(Math.min(contadoN, trocoN || contadoN))} /></Field></div>}
       <button className="btn mode" disabled={!temContado} onClick={salvar}><I.check /> {f ? "Salvar de novo" : "Fechar o caixa"}</button>
       <button className="btn ghost" onClick={mandar}><I.share /> Mandar o resumo do dia</button>
+      {f && <ConfirmButton label="Apagar este fechamento" titulo={`Apagar o fechamento de ${dia === hoje ? "hoje" : dm(dia)}?`} texto="O caixa desse dia volta a ficar aberto. As vendas, gastos e o dinheiro tirado ou posto continuam anotados." acao="Apagar" onConfirm={async () => { await L.apagar("caixa", dia); onClose(); act.toast("Fechamento apagado"); }} />}
     </Sheet>
   );
 }
